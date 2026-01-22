@@ -23,7 +23,7 @@ import org.springframework.stereotype.Service;
  * 핵심 클레임(특히 {@code email})을 이용해 애플리케이션 사용자 레코드를 동기화(upsert)한다.
  * </p>
  * <p>
- * 또한 로그인한 사용자의 애플리케이션 권한({@link com.ssafy.s14p11a707.user.entity.UserRole})을
+ * 또한 로그인한 사용자의 애플리케이션 권한({@link User.UserRole})을
  * {@code ROLE_*} 권한으로 매핑하여 {@link OidcUser#getAuthorities()}에 포함시킨다.
  * </p>
  * <p><b>예외</b></p>
