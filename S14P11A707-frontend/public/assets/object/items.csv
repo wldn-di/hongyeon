@@ -1,0 +1,311 @@
+object_name,item_type,room,placement
+object1,clock,basement,top wall
+object2,arcade,basement,top wall
+object3,arcade,basement,top wall
+object4,fireplace,basement,top wall
+object5,fireplace,basement,top wall
+object6,arcade,basement,top wall
+object7,pool,basement,center
+object8,pool,basement,center
+object9,rack,basement,top wall
+object10,dartboard,basement,top wall
+object11,arcade,basement,top wall
+object12,pool,basement,center
+object13,pool,basement,center
+object14,bar,basement,top wall
+object15,shower,bathroom,top wall
+object16,shower,bathroom,top wall
+object17,toilet,bathroom,top wall
+object18,sink,bathroom,top wall
+object19,bathtub,bathroom,top wall
+object20,toilet,bathroom,anywhere
+object21,toilet,bathroom,anywhere
+object22,sink,bathroom,anywhere
+object23,toilet,bathroom,anywhere
+object24,toilet,bathroom,anywhere
+object25,toilet,bathroom,anywhere
+object26,toilet,bathroom,anywhere
+object27,sink,bathroom,top wall
+object32,sink,bathroom,top wall
+object33,sink,bathroom,top wall
+object34,mat,bathroom,floor
+object35,mat,bathroom,floor
+object36,mirror,bathroom,top wall
+object37,toilet,bathroom,anywhere
+object38,mat,bathroom,floor
+object39,medicine,bathroom,top wall
+object40,medicine,bathroom,top wall
+object43,medicine,bathroom,top wall
+object44,toilet,bathroom,anywhere
+object45,sink,bathroom,top wall
+object46,mirror,bathroom,top wall
+object47,mirror,bathroom,top wall
+object48,bed,bedroom,top wall
+object49,bed,bedroom,top wall
+object50,bed,bedroom,top wall
+object51,bed,bedroom,top wall
+object52,bed,bedroom,top wall
+object53,bed,bedroom,top wall
+object54,bed,bedroom,top wall
+object55,bed,bedroom,top wall
+object56,bed,bedroom,top wall
+object57,bed,bedroom,top wall
+object58,bed,bedroom,top wall
+object59,bed,bedroom,top wall
+object60,bed,bedroom,top wall
+object61,bed,bedroom,top wall
+object62,bed,bedroom,top wall
+object63,bed,bedroom,top wall
+object64,bed,bedroom,top wall
+object65,bed,bedroom,top wall
+object66,bed,bedroom,top wall
+object67,bed,bedroom,top wall
+object68,bed,bedroom,top wall
+object69,bed,bedroom,top wall
+object70,bed,bedroom,top wall
+object71,bed,bedroom,top wall
+object72,bed,bedroom,top wall
+object73,bed,bedroom,top wall
+object74,bed,bedroom,top wall
+object75,bed,bedroom,top wall
+object76,bed,bedroom,top wall
+object77,bed,bedroom,top wall
+object78,bed,bedroom,top wall
+object79,bed,bedroom,top wall
+object80,bed,bedroom,top wall
+object81,bed,bedroom,top wall
+object82,bed,bedroom,top wall
+object83,bed,bedroom,top wall
+object84,crib,bedroom,top wall
+object85,crib,bedroom,top wall
+object86,crib,bedroom,top wall
+object87,stool,any,anywhere
+object88,stool,any,anywhere
+object89,stool,any,anywhere
+object90,stool,any,anywhere
+object91,stool,any,anywhere
+object92,stool,any,anywhere
+object93,stool,any,anywhere
+object94,chair,any,anywhere
+object95,chair,any,anywhere
+object96,chair,any,anywhere
+object97,chair,any,anywhere
+object98,chair,any,anywhere
+object99,chair,any,anywhere
+object100,chair,any,anywhere
+object101,chair,any,anywhere
+object102,chair,any,anywhere
+object103,chair,any,anywhere
+object104,chair,any,anywhere
+object105,chair,any,anywhere
+object106,bookcase,any,top wall
+object107,bookcase,any,top wall
+object108,cabinet,any,top wall
+object109,cabinet,any,top wall
+object110,cabinet,any,top wall
+object111,cabinet,any,top wall
+object112,display,any,top wall
+object113,cabinet,any,top wall
+object114,bookcase,any,top wall
+object115,wardrobe,bedroom,top wall
+object116,cabinet,any,top wall
+object117,cabinet,any,top wall
+object118,cabinet,any,top wall
+object119,cabinet,any,top wall
+object120,shelf,any,corner
+object121,wardrobe,bedroom,top wall
+object122,wardrobe,bedroom,top wall
+object123,wardrobe,bedroom,top wall
+object124,bookcase,any,top wall
+object125,wardrobe,bedroom,top wall
+object126,wardrobe,bedroom,top wall
+object127,display,any,top wall
+object129,refrigerator,kitchen,top wall
+object132,stove,kitchen,top wall
+object133,stove,kitchen,top wall
+object134,stove,kitchen,top wall
+object135,stove,kitchen,top wall
+object136,cabinet,kitchen,top wall
+object137,cabinet,kitchen,top wall
+object138,oven,kitchen,top wall
+object139,cabinet,kitchen,top wall
+object140,cabinet,kitchen,top wall
+object141,cabinet,kitchen,top wall
+object142,cabinet,kitchen,top wall
+object143,oven,kitchen,top wall
+object154,lamp,any,floor
+object155,lamp,any,floor
+object156,lamp,any,floor
+object157,lamp,any,floor
+object158,lamp,any,floor
+object159,lamp,any,floor
+object160,lamp,any,floor
+object161,lamp,any,floor
+object162,lamp,any,floor
+object163,lamp,any,floor
+object164,table,any,anywhere
+object165,table,any,anywhere
+object166,table,any,anywhere
+object167,table,any,anywhere
+object168,table,any,anywhere
+object169,table,any,anywhere
+object170,table,any,anywhere
+object171,table,any,anywhere
+object172,table,any,anywhere
+object173,table,any,anywhere
+object174,table,any,anywhere
+object175,table,any,anywhere
+object176,table,any,anywhere
+object177,table,any,anywhere
+object178,table,any,anywhere
+object179,table,any,anywhere
+object180,table,any,anywhere
+object181,table,any,anywhere
+object182,table,any,anywhere
+object183,table,any,anywhere
+object184,table,any,anywhere
+object185,table,any,anywhere
+object186,table,any,anywhere
+object187,table,any,anywhere
+object188,table,any,anywhere
+object189,table,any,anywhere
+object190,table,any,anywhere
+object191,table,any,anywhere
+object192,table,any,anywhere
+object193,sofa,living room,top wall
+object194,sofa,living room,top wall
+object195,sofa,living room,top wall
+object196,sofa,living room,top wall
+object197,sofa,living room,top wall
+object198,sofa,living room,top wall
+object199,sofa,living room,top wall
+object200,sofa,living room,top wall
+object201,sofa,living room,top wall
+object202,sofa,living room,top wall
+object203,sofa,living room,top wall
+object204,sofa,living room,top wall
+object205,sofa,living room,top wall
+object206,sofa,living room,top wall
+object207,chair,living room,anywhere
+object208,chair,living room,anywhere
+object209,sofa,living room,top wall
+object210,sofa,living room,top wall
+object211,sofa,living room,top wall
+object212,sofa,living room,top wall
+object213,sofa,living room,top wall
+object214,chair,living room,anywhere
+object215,sofa,living room,top wall
+object216,sofa,living room,top wall
+object217,sofa,living room,top wall
+object218,sofa,living room,top wall
+object219,chair,living room,anywhere
+object220,chair,living room,anywhere
+object221,chair,living room,anywhere
+object222,chair,living room,anywhere
+object223,chair,living room,anywhere
+object224,sofa,living room,top wall
+object225,chair,living room,anywhere
+object226,sofa,living room,top wall
+object227,chair,living room,anywhere
+object228,chair,living room,anywhere
+object229,sofa,living room,top wall
+object230,sofa,living room,top wall
+object231,sofa,living room,top wall
+object232,sofa,living room,top wall
+object233,sofa,living room,top wall
+object234,sofa,living room,top wall
+object235,sofa,living room,top wall
+object236,sofa,living room,top wall
+object237,sofa,living room,top wall
+object238,sofa,living room,top wall
+object239,chair,living room,anywhere
+object240,chair,living room,anywhere
+object241,chair,living room,anywhere
+object242,chair,living room,anywhere
+object243,chair,living room,anywhere
+object244,chair,living room,anywhere
+object245,chair,living room,anywhere
+object246,chair,living room,anywhere
+object247,chair,living room,anywhere
+object248,chair,living room,anywhere
+object249,chair,living room,anywhere
+object250,chair,living room,anywhere
+object251,chair,living room,anywhere
+object252,chair,living room,anywhere
+object253,chair,living room,anywhere
+object254,chair,living room,anywhere
+object255,sofa,living room,top wall
+object256,chair,living room,anywhere
+object257,chair,living room,anywhere
+object258,chair,living room,anywhere
+object259,chair,living room,anywhere
+object260,sofa,living room,top wall
+object261,chair,living room,anywhere
+object262,chair,living room,anywhere
+object263,chair,living room,anywhere
+object264,chair,living room,anywhere
+object265,chair,living room,anywhere
+object266,chair,living room,anywhere
+object267,chair,living room,anywhere
+object268,chair,living room,anywhere
+object269,chair,living room,anywhere
+object270,chair,living room,anywhere
+object271,chair,living room,anywhere
+object272,chair,living room,anywhere
+object273,chair,living room,anywhere
+object274,chair,living room,anywhere
+object275,chair,living room,anywhere
+object276,chair,living room,anywhere
+object277,chair,living room,anywhere
+object278,chair,living room,anywhere
+object279,chair,living room,anywhere
+object280,chair,living room,anywhere
+object281,chair,living room,anywhere
+object282,chair,living room,anywhere
+object283,chair,living room,anywhere
+object284,chair,living room,anywhere
+object285,chair,living room,anywhere
+object286,sofa,living room,top wall
+object287,sofa,living room,top wall
+object288,sofa,living room,top wall
+object289,chair,living room,anywhere
+object296,sofa,living room,top wall
+object297,sofa,living room,top wall
+object298,sofa,living room,top wall
+object299,sofa,living room,top wall
+object300,sofa,living room,top wall
+object301,sofa,living room,top wall
+object302,sofa,living room,top wall
+object303,sofa,living room,top wall
+object304,sofa,living room,top wall
+object305,sofa,living room,top wall
+object306,sofa,living room,top wall
+object307,sofa,living room,top wall
+object308,sofa,living room,top wall
+object309,sofa,living room,top wall
+object310,chair,living room,anywhere
+object311,chair,living room,anywhere
+object312,chair,living room,anywhere
+object313,chair,living room,anywhere
+object314,sofa,living room,top wall
+object315,sofa,living room,top wall
+object316,sofa,living room,top wall
+object317,sofa,living room,top wall
+object318,sofa,living room,top wall
+object319,chair,living room,anywhere
+object320,chair,living room,anywhere
+object321,sofa,living room,top wall
+object322,table,any,anywhere
+object323,table,any,anywhere
+object324,table,any,anywhere
+object325,table,any,anywhere
+object326,table,any,anywhere
+object327,table,any,anywhere
+object328,table,any,anywhere
+object329,table,any,anywhere
+object330,table,any,anywhere
+object331,table,any,anywhere
+object332,table,any,anywhere
+object333,table,any,anywhere
+object334,table,any,anywhere
+object335,table,any,anywhere

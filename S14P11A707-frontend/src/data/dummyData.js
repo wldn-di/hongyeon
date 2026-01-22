@@ -1,0 +1,310 @@
+export const scenarios = [
+  {
+    id: 1,
+    title: "살인의 추억",
+    synopsis: "1986년 화성, 연쇄 살인 사건의 진실을 파헤쳐라. 증거는 희미하고, 목격자의 기억은 흐릿하다.",
+    difficulty: "hard",
+    estimatedTime: 90,
+    playCount: 1234,
+    rating: 450,
+    thumbnail: "/images/img1.png"
+  },
+  {
+    id: 2,
+    title: "밀실의 비밀",
+    synopsis: "완벽하게 잠긴 방에서 발견된 시신. 불가능한 범죄의 트릭을 밝혀내라.",
+    difficulty: "medium",
+    estimatedTime: 60,
+    playCount: 892,
+    rating: 420,
+    thumbnail: "/images/img2.png"
+  },
+  {
+    id: 3,
+    title: "사라진 상속녀",
+    synopsis: "재벌 2세가 실종됐다. 유산을 노린 범행인가, 아니면 그녀의 계획인가?",
+    difficulty: "easy",
+    estimatedTime: 45,
+    playCount: 2156,
+    rating: 380,
+    thumbnail: "/images/img3.png"
+  },
+  {
+    id: 4,
+    title: "열차 안의 살인",
+    synopsis: "서울행 KTX에서 벌어진 살인. 용의자는 12명의 승객 중 한 명이다.",
+    difficulty: "medium",
+    estimatedTime: 75,
+    playCount: 567,
+    rating: 410,
+    thumbnail: "/images/img4.png"
+  },
+  {
+    id: 5,
+    title: "고택의 유령",
+    synopsis: "100년 된 저택에서 들리는 비명. 초자연적 현상인가, 인간의 음모인가?",
+    difficulty: "hard",
+    estimatedTime: 120,
+    playCount: 423,
+    rating: 470,
+    thumbnail: "/images/img5.png"
+  }
+];
+
+export const completedScenarios = [
+  {
+    id: 1,
+    scenarioId: 2,
+    title: "밀실의 비밀",
+    synopsis: "완벽하게 잠긴 방에서 발견된 시신. 불가능한 범죄의 트릭을 밝혀내라.",
+    completedAt: "2024-01-15",
+    grade: "S",
+    playTime: 52,
+    thumbnail: "/images/img2.png"
+  },
+  {
+    id: 2,
+    scenarioId: 3,
+    title: "사라진 상속녀",
+    synopsis: "재벌 2세가 실종됐다. 유산을 노린 범행인가, 아니면 그녀의 계획인가?",
+    completedAt: "2024-01-10",
+    grade: "A",
+    playTime: 38,
+    thumbnail: "/images/img3.png"
+  },
+  {
+    id: 3,
+    scenarioId: 4,
+    title: "열차 안의 살인",
+    synopsis: "서울행 KTX에서 벌어진 살인. 용의자는 12명의 승객 중 한 명이다.",
+    completedAt: "2024-01-08",
+    grade: "B",
+    playTime: 71,
+    thumbnail: "/images/img4.png"
+  },
+  {
+    id: 4,
+    scenarioId: 5,
+    title: "고택의 유령",
+    synopsis: "100년 된 저택에서 들리는 비명. 초자연적 현상인가, 인간의 음모인가?",
+    completedAt: "2024-01-05",
+    grade: "A",
+    playTime: 95,
+    thumbnail: "/images/img5.png"
+  },
+  {
+    id: 5,
+    scenarioId: 1,
+    title: "살인의 추억",
+    synopsis: "1986년 화성, 연쇄 살인 사건의 진실을 파헤쳐라.",
+    completedAt: "2024-01-02",
+    grade: "S",
+    playTime: 85,
+    thumbnail: "/images/img1.png"
+  }
+];
+
+export const failedScenarios = [
+  {
+    id: 1,
+    scenarioId: 1,
+    title: "살인의 추억",
+    synopsis: "1986년 화성, 연쇄 살인 사건의 진실을 파헤쳐라.",
+    attemptedAt: "2024-01-20",
+    progress: 72,
+    thumbnail: "/images/img1.png"
+  },
+  {
+    id: 2,
+    scenarioId: 5,
+    title: "고택의 유령",
+    synopsis: "100년 된 저택에서 들리는 비명. 초자연적 현상인가, 인간의 음모인가?",
+    attemptedAt: "2024-01-03",
+    progress: 45,
+    thumbnail: "/images/img5.png"
+  },
+  {
+    id: 3,
+    scenarioId: 4,
+    title: "열차 안의 살인",
+    synopsis: "서울행 KTX에서 벌어진 살인. 용의자는 12명의 승객 중 한 명이다.",
+    attemptedAt: "2024-01-01",
+    progress: 23,
+    thumbnail: "/images/img4.png"
+  },
+  {
+    id: 4,
+    scenarioId: 2,
+    title: "밀실의 비밀",
+    synopsis: "완벽하게 잠긴 방에서 발견된 시신.",
+    attemptedAt: "2023-12-28",
+    progress: 58,
+    thumbnail: "/images/img2.png"
+  }
+];
+
+export const rankings = [
+  { rank: 1, name: "탐정왕", score: 9850, solved: 42, avgTime: "45분" },
+  { rank: 2, name: "셜록홈즈", score: 9320, solved: 38, avgTime: "52분" },
+  { rank: 3, name: "명탐정코난", score: 8990, solved: 35, avgTime: "48분" },
+  { rank: 4, name: "박해일", score: 8750, solved: 33, avgTime: "55분" },
+  { rank: 5, name: "추리마스터", score: 8420, solved: 31, avgTime: "50분" },
+  { rank: 6, name: "미스테리헌터", score: 8100, solved: 29, avgTime: "58분" },
+  { rank: 7, name: "사건해결사", score: 7850, solved: 27, avgTime: "53분" },
+  { rank: 8, name: "진실추구자", score: 7620, solved: 25, avgTime: "49분" },
+  { rank: 9, name: "증거수집가", score: 7380, solved: 24, avgTime: "56분" },
+  { rank: 10, name: "논리왕", score: 7150, solved: 22, avgTime: "51분" }
+];
+
+export const initialBoardItems = [
+  { 
+    id: 1, 
+    type: "evidence", 
+    name: "범죄 현장", 
+    x: 100, 
+    y: 80, 
+    image: "/images/evidence/crime-scene-01.png",
+    note: "창고 내부\n1994.10.26"
+  },
+  { 
+    id: 2, 
+    type: "evidence", 
+    name: "피 묻은 장갑", 
+    x: 350, 
+    y: 80, 
+    image: "/images/evidence/bloody-glove.png",
+    note: "증거물 #001\n현장 발견"
+  },
+  { 
+    id: 3, 
+    type: "suspect", 
+    name: "용의자 김철수", 
+    x: 600, 
+    y: 80, 
+    image: "/images/evidence/suspect-mugshot-01.png",
+    note: "BK-94-1285\n알리바이 불명확"
+  },
+  { 
+    id: 4, 
+    type: "evidence", 
+    name: "지문 카드", 
+    x: 100, 
+    y: 350, 
+    image: "/images/evidence/fingerprint-card.png",
+    note: "Case 93-456B\n일치 확인"
+  },
+  { 
+    id: 5, 
+    type: "evidence", 
+    name: "목격자 진술서", 
+    x: 350, 
+    y: 350, 
+    image: "/images/evidence/witness-statement.png",
+    note: "Case 93-1245\n진술 모순 발견"
+  },
+  { 
+    id: 6, 
+    type: "note", 
+    name: "추리 메모", 
+    x: 600, 
+    y: 350, 
+    note: "범행 시각: 22:00\n목격자: 없음\n동기: 불명"
+  }
+];
+
+export const initialConnections = [
+  { from: 1, to: 2, type: "confirmed", label: "발견" },
+  { from: 2, to: 3, type: "confirmed", label: "지문 일치" },
+  { from: 3, to: 4, type: "confirmed", label: "증거" },
+  { from: 4, to: 5, type: "suspected", label: "검증 필요" },
+  { from: 1, to: 6, type: "suspected", label: "분석" },
+  { from: 3, to: 6, type: "contradiction", label: "모순" }
+];
+
+// 시나리오별 용의자 데이터 (한마디 포함)
+export const scenarioSuspects = {
+  1: [
+    { id: 1, name: "김철수", role: "피해자의 동업자", mbti: "ENTJ", image: "/images/evidence/suspect-mugshot-01.png", quote: "그날 밤? 난 집에 있었어. 아내가 증인이지." },
+    { id: 2, name: "이영희", role: "피해자의 아내", mbti: "ISFJ", image: "/images/suspect2.png", quote: "남편과 사이가 나빴다고? 그건 오해예요..." },
+    { id: 3, name: "박민수", role: "경비원", mbti: "ISTP", image: "/images/suspect3.png", quote: "이상한 건 못 봤습니다. 전 항상 제 할 일만 해요." },
+    { id: 4, name: "최지연", role: "비서", mbti: "ENFP", image: "/images/suspect4.png", quote: "사장님은 적이 많았어요. 누군가 노리고 있었죠." },
+  ],
+  2: [
+    { id: 1, name: "장도현", role: "호텔 매니저", mbti: "ISTJ", image: "/images/suspect1.png", quote: "밀실? 우리 호텔에서 그런 일이 일어나다니..." },
+    { id: 2, name: "윤서아", role: "투숙객", mbti: "INFP", image: "/images/suspect2.png", quote: "무서워서 방에만 있었어요. 아무것도 몰라요." },
+    { id: 3, name: "한기철", role: "청소부", mbti: "ESTP", image: "/images/suspect3.png", quote: "마스터키? 난 절대 남용 안 해요." },
+  ],
+  3: [
+    { id: 1, name: "김재원", role: "실종자의 약혼자", mbti: "ENFJ", image: "/images/suspect1.png", quote: "그녀를 찾아주세요. 제발..." },
+    { id: 2, name: "박소영", role: "친구", mbti: "ESFP", image: "/images/suspect2.png", quote: "유산 때문이라고? 그녀는 돈에 관심 없었어요." },
+    { id: 3, name: "이준혁", role: "경호원", mbti: "INTJ", image: "/images/suspect3.png", quote: "제 눈을 피해 사라진 건 처음입니다." },
+  ],
+  4: [
+    { id: 1, name: "조승우", role: "사업가", mbti: "ENTJ", image: "/images/suspect1.png", quote: "1등석에서 2등석으로? 갈 이유가 없죠." },
+    { id: 2, name: "김민지", role: "승무원", mbti: "ESFJ", image: "/images/suspect2.png", quote: "모든 승객을 기억해요. 그 시간 이상한 건 없었어요." },
+    { id: 3, name: "박영호", role: "교수", mbti: "INTP", image: "/images/suspect3.png", quote: "논문 검토하느라 바빴습니다." },
+  ],
+  5: [
+    { id: 1, name: "유정민", role: "저택 관리인", mbti: "ISFP", image: "/images/suspect1.png", quote: "유령이요? 그건 바람 소리일 뿐이에요." },
+    { id: 2, name: "서윤아", role: "상속녀", mbti: "INFJ", image: "/images/suspect2.png", quote: "이 집엔 오래된 비밀이 있어요..." },
+    { id: 3, name: "강태호", role: "변호사", mbti: "ESTJ", image: "/images/suspect3.png", quote: "유언장은 명확합니다. 논쟁의 여지가 없어요." },
+  ],
+};
+
+// 시나리오별 사용자 리뷰
+export const scenarioReviews = {
+  1: [
+    { id: 1, nickname: "탐정왕", rating: 5, review: "역대급 시나리오! 마지막 반전에 소름돋았어요.", date: "2024-01-15" },
+    { id: 2, nickname: "추리고수", rating: 4, review: "증거 수집하는 맛이 있네요. 난이도 적절함.", date: "2024-01-12" },
+    { id: 3, nickname: "미스테리팬", rating: 5, review: "실제 미제사건 모티브라 더 몰입됐습니다.", date: "2024-01-10" },
+  ],
+  2: [
+    { id: 1, nickname: "밀실매니아", rating: 5, review: "트릭 풀었을 때 쾌감이 장난 아님!", date: "2024-01-14" },
+    { id: 2, nickname: "셜록홈즈", rating: 4, review: "고전 밀실 트릭의 정석. 추천합니다.", date: "2024-01-11" },
+    { id: 3, nickname: "퍼즐러", rating: 3, review: "힌트 없이는 좀 어려웠어요.", date: "2024-01-09" },
+  ],
+  3: [
+    { id: 1, nickname: "사건해결사", rating: 4, review: "가벼운 마음으로 즐기기 좋아요.", date: "2024-01-16" },
+    { id: 2, nickname: "초보탐정", rating: 5, review: "입문용으로 최고! 재밌게 풀었습니다.", date: "2024-01-13" },
+    { id: 3, nickname: "논리왕", rating: 4, review: "스토리가 탄탄하고 반전도 있어요.", date: "2024-01-08" },
+  ],
+  4: [
+    { id: 1, nickname: "열차여행자", rating: 5, review: "오리엔트 특급 살인 느낌! 분위기 최고.", date: "2024-01-17" },
+    { id: 2, nickname: "미스테리헌터", rating: 4, review: "용의자 심문이 재밌었어요.", date: "2024-01-14" },
+    { id: 3, nickname: "추리마스터", rating: 5, review: "시간 가는 줄 모르고 풀었습니다.", date: "2024-01-11" },
+  ],
+  5: [
+    { id: 1, nickname: "공포게이머", rating: 5, review: "으스스한 분위기와 추리의 조화가 완벽!", date: "2024-01-18" },
+    { id: 2, nickname: "진실추구자", rating: 4, review: "오래된 비밀을 파헤치는 재미가 쏠쏠.", date: "2024-01-15" },
+    { id: 3, nickname: "탐정왕", rating: 5, review: "난이도 높지만 그만큼 성취감도 큽니다.", date: "2024-01-12" },
+  ],
+};
+
+// 시나리오별 Top3 랭킹 (클리어 시간 기준)
+export const scenarioTop3 = {
+  1: [
+    { rank: 1, uuid: "a1b2c3d4", nickname: "탐정왕", clearTime: "42:15", completedAt: "2024-01-15" },
+    { rank: 2, uuid: "e5f6g7h8", nickname: "셜록홈즈", clearTime: "48:32", completedAt: "2024-01-12" },
+    { rank: 3, uuid: "i9j0k1l2", nickname: "명탐정코난", clearTime: "52:08", completedAt: "2024-01-10" },
+  ],
+  2: [
+    { rank: 1, uuid: "m3n4o5p6", nickname: "추리마스터", clearTime: "35:22", completedAt: "2024-01-14" },
+    { rank: 2, uuid: "q7r8s9t0", nickname: "미스테리헌터", clearTime: "39:45", completedAt: "2024-01-11" },
+    { rank: 3, uuid: "u1v2w3x4", nickname: "진실추구자", clearTime: "44:10", completedAt: "2024-01-09" },
+  ],
+  3: [
+    { rank: 1, uuid: "y5z6a7b8", nickname: "사건해결사", clearTime: "28:15", completedAt: "2024-01-16" },
+    { rank: 2, uuid: "c9d0e1f2", nickname: "증거수집가", clearTime: "32:40", completedAt: "2024-01-13" },
+    { rank: 3, uuid: "g3h4i5j6", nickname: "논리왕", clearTime: "36:55", completedAt: "2024-01-08" },
+  ],
+  4: [
+    { rank: 1, uuid: "k7l8m9n0", nickname: "탐정왕", clearTime: "45:30", completedAt: "2024-01-17" },
+    { rank: 2, uuid: "o1p2q3r4", nickname: "추리고수", clearTime: "51:20", completedAt: "2024-01-14" },
+    { rank: 3, uuid: "s5t6u7v8", nickname: "범인추적자", clearTime: "58:45", completedAt: "2024-01-11" },
+  ],
+  5: [
+    { rank: 1, uuid: "w9x0y1z2", nickname: "미스테리헌터", clearTime: "68:22", completedAt: "2024-01-18" },
+    { rank: 2, uuid: "a3b4c5d6", nickname: "셜록홈즈", clearTime: "75:10", completedAt: "2024-01-15" },
+    { rank: 3, uuid: "e7f8g9h0", nickname: "진실추구자", clearTime: "82:35", completedAt: "2024-01-12" },
+  ],
+};

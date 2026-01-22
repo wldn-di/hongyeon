@@ -1,0 +1,158 @@
+import React, { createContext, useContext, useEffect, useMemo, useReducer } from "react"
+
+const AuthContext = createContext(null)
+
+const initialState = {
+  user: null,
+  loading: true,
+}
+
+function reducer(state, action) {
+  switch (action.type) {
+    case "SET_USER":
+      return { ...state, user: action.user, loading: false }
+    case "CLEAR_USER":
+      return { ...state, user: null, loading: false }
+    case "SET_LOADING":
+      return { ...state, loading: action.loading }
+    case "UPDATE_USER":
+      return {
+        ...state,
+        user: state.user ? { ...state.user, ...action.patch } : state.user,
+        loading: false,
+      }
+    default:
+      return state
+  }
+}
+
+export function AuthProvider({ children }) {
+  const [state, dispatch] = useReducer(reducer, initialState)
+
+  const rawBase = import.meta.env.VITE_API_BASE_URL
+  const base = rawBase ? rawBase.replace(/\/$/, "") : "" // 끝 슬래시 제거로 통일
+  const useMock = import.meta.env.VITE_USE_MOCK_AUTH === "true"
+
+  // 디버깅용
+  console.log("[AUTH] mode:", import.meta.env.MODE)
+  console.log("[AUTH] base:", base)
+  console.log("[AUTH] useMock:", useMock)
+
+  // 앱 시작 시: 로그인 여부 확인(mock이면 스킵)
+  useEffect(() => {
+    if (useMock || !base) {
+      dispatch({ type: "CLEAR_USER" })
+      return
+    }
+
+    let alive = true
+    ;(async () => {
+      try {
+        const res = await fetch(`${base}/api/v1/auth/me`, { credentials: "include" })
+        if (!alive) return
+        if (res.ok) dispatch({ type: "SET_USER", user: await res.json() })
+        else dispatch({ type: "CLEAR_USER" })
+      } catch {
+        if (alive) dispatch({ type: "CLEAR_USER" })
+      }
+    })()
+
+    return () => {
+      alive = false
+    }
+  }, [useMock, base])
+
+  const actions = useMemo(
+    () => ({
+      // 1) 로그인
+      login() {
+        if (useMock || !base) {
+          dispatch({
+            type: "SET_USER",
+            user: {
+              user_id: 1,
+              email: "test@gmail.com",
+              nickname: "셜록홈즈",
+              picture: "/images/suspects/suspect1.png",
+              created_at: "2026-01-14",
+              updated_at: "2026-01-14",
+            },
+          })
+          return
+        }
+
+        const url = `${base}/api/v1/auth/login`
+        console.log("LOGIN URL:", url)
+        window.location.href = url
+      },
+
+      // 2) 로그아웃
+      async logout() {
+        if (useMock || !base) {
+          dispatch({ type: "CLEAR_USER" })
+          return
+        }
+        // TODO: 백엔드 logout 엔드포인트 확인 후 연결
+        dispatch({ type: "CLEAR_USER" })
+      },
+
+      // 3) 수동 재조회
+      async refreshMe() {
+        if (useMock || !base) {
+          dispatch({ type: "SET_LOADING", loading: false })
+          return
+        }
+
+        dispatch({ type: "SET_LOADING", loading: true })
+        try {
+          const res = await fetch(`${base}/api/v1/auth/me`, { credentials: "include" })
+          if (res.ok) dispatch({ type: "SET_USER", user: await res.json() })
+          else dispatch({ type: "CLEAR_USER" })
+        } catch {
+          dispatch({ type: "CLEAR_USER" })
+        }
+      },
+
+      // 4) 회원탈퇴 (서버 엔드포인트 준비되면 활성화)
+      async deleteAccount() {
+        if (useMock || !base) {
+          dispatch({ type: "CLEAR_USER" })
+          return
+        }
+
+        alert("회원탈퇴 기능은 서버 준비 중입니다.")
+        console.warn("[AUTH] deleteAccount not implemented yet. Waiting backend endpoint.")
+        return
+
+        // 백엔드 준비되면 아래 주석 해제
+        // const res = await fetch(`${base}/api/v1/auth/me`, {
+        //   method: "DELETE",
+        //   credentials: "include",
+        // })
+        // if (!res.ok) {
+        //   const text = await res.text().catch(() => "")
+        //   throw new Error(`delete failed: ${res.status} ${text}`)
+        // }
+        // dispatch({ type: "CLEAR_USER" })
+      },
+
+      // 5) 프로필 수정 (프론트 로컬 상태만 변경)
+      updateProfile(patch) {
+        dispatch({
+          type: "UPDATE_USER",
+          patch: { ...patch, updated_at: new Date().toISOString().slice(0, 10) },
+        })
+      },
+    }),
+    [base, useMock]
+  )
+
+  const value = useMemo(() => ({ state, actions }), [state, actions])
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
+}
+
+export function useAuth() {
+  const ctx = useContext(AuthContext)
+  if (!ctx) throw new Error("useAuth must be used within <AuthProvider>")
+  return ctx
+}

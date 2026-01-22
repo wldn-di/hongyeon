@@ -1,0 +1,154 @@
+import React, { useMemo, useState } from "react"
+import { Search, Plus, Users, MapPin, X } from "lucide-react"
+import { cn } from "@/lib/utils"
+
+// 왼쪽 패널 (증거 목록)
+export default function LeftEvidencePanel({
+  isOpen,
+  onToggle,
+  evidence = [],
+  suspects = [],
+  rooms = [],
+  onItemClick,
+  onDragStart,
+  onAddToBoard,
+}) {
+  const [activeTab, setActiveTab] = useState("evidence") // 'evidence' | 'suspect' | 'location'
+
+  const tabs = useMemo(() => ([
+    { key: "evidence", label: "증거", icon: Search },
+    { key: "suspect", label: "용의자", icon: Users },
+    { key: "location", label: "장소", icon: MapPin },
+  ]), [])
+
+  const itemsByTab = useMemo(() => ({
+    evidence: evidence ?? [],
+    suspect: suspects ?? [],
+    location: rooms ?? [],
+  }), [evidence, suspects, rooms])
+
+  const currentItems = itemsByTab[activeTab] ?? []
+
+  const handleItemClick = (item, type) => {
+    onItemClick?.(item, type)
+  }
+
+  const handleAddToBoard = (item, type) => {
+    onAddToBoard?.(item, type)
+  }
+
+  return (
+    <>
+      <div
+        className={cn(
+          "fixed top-16 left-0 h-[calc(100%-64px)] bg-card/95 backdrop-blur border-r border-border transition-all duration-300 z-40 w-72 flex flex-col",
+          isOpen ? "translate-x-0" : "-translate-x-full"
+        )}
+      >
+        <div className="p-4 border-b border-border flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-bold flex items-center gap-2">
+              <Search className="w-5 h-5 text-primary" />
+              조사 팔레트
+              <span className="text-xs text-muted-foreground">({currentItems.length})</span>
+            </h3>
+            <div className="mt-3 flex gap-2">
+              {tabs.map((tab) => {
+                const Icon = tab.icon
+                const isActive = activeTab === tab.key
+                return (
+                  <button
+                    key={tab.key}
+                    onClick={() => setActiveTab(tab.key)}
+                    className={cn(
+                      "flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold border transition-colors",
+                      isActive
+                        ? "bg-primary/20 border-primary/40 text-primary"
+                        : "bg-muted/30 border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {tab.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+          <button onClick={onToggle} className="p-1 hover:bg-muted rounded">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 p-3 space-y-2 overflow-y-auto">
+          {currentItems.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              {activeTab === "evidence" && (
+                <>
+                  아직 발견한 증거가 없습니다.<br />
+                  현장을 탐색해보세요!
+                </>
+              )}
+              {activeTab === "suspect" && "표시할 용의자가 없습니다."}
+              {activeTab === "location" && "표시할 장소가 없습니다."}
+            </p>
+          ) : (
+            currentItems.map((item) => (
+              <div
+                key={item.id}
+                draggable
+                onDragStart={(e) => onDragStart?.(e, item, activeTab)}
+                className="bg-muted/30 border border-border rounded-lg p-3 transition-all relative cursor-grab active:cursor-grabbing"
+              >
+                <div
+                  onClick={() => handleItemClick(item, activeTab)}
+                  className="flex items-start gap-3 cursor-pointer hover:opacity-80"
+                >
+                  <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {item.image ? (
+                      <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <Search className="w-5 h-5 text-muted-foreground" />
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-sm">{item.name}</p>
+                    {activeTab === "evidence" && (
+                      <p className="text-xs text-muted-foreground">{item.location}</p>
+                    )}
+                    {activeTab === "suspect" && item.role && (
+                      <p className="text-xs text-muted-foreground">{item.role}</p>
+                    )}
+                    {activeTab === "location" && (
+                      <p className="text-xs text-muted-foreground">사건 장소</p>
+                    )}
+                    {activeTab === "evidence" && item.storyHint && (
+                      <p className="text-xs text-primary mt-1 italic">💡 {item.storyHint}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="mt-2 pt-2 border-t border-border/50">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleAddToBoard(item, activeTab) }}
+                    className="text-xs bg-primary/20 text-primary px-2 py-1 rounded hover:bg-primary/30 transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="w-3 h-3" /> 보드에 추가
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {!isOpen && (
+        <button
+          onClick={onToggle}
+          className="fixed top-1/2 -translate-y-1/2 left-0 z-40 w-10 h-24 bg-card border border-border border-l-0 rounded-r-lg flex items-center justify-center hover:bg-muted/50"
+        >
+          <Search className="w-5 h-5" />
+        </button>
+      )}
+    </>
+  )
+}

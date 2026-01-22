@@ -1,0 +1,49 @@
+# Rules moved from `S14P11A707-backend/.gitignore`
+S14P11A707-backend/HELP.md
+S14P11A707-backend/.gradle/
+S14P11A707-backend/**/build/
+!S14P11A707-backend/gradle/wrapper/gradle-wrapper.jar
+!S14P11A707-backend/**/src/main/**/build/
+!S14P11A707-backend/**/src/test/**/build/
+
+### STS ###
+S14P11A707-backend/**/.apt_generated
+S14P11A707-backend/**/.classpath
+S14P11A707-backend/**/.factorypath
+S14P11A707-backend/**/.project
+S14P11A707-backend/**/.settings/
+S14P11A707-backend/**/.springBeans
+S14P11A707-backend/**/.sts4-cache/
+S14P11A707-backend/**/bin/
+!S14P11A707-backend/**/src/main/**/bin/
+!S14P11A707-backend/**/src/test/**/bin/
+
+### IntelliJ IDEA ###
+S14P11A707-backend/**/.idea/
+S14P11A707-backend/**/*.iws
+S14P11A707-backend/**/*.iml
+S14P11A707-backend/**/*.ipr
+S14P11A707-backend/**/out/
+!S14P11A707-backend/**/src/main/**/out/
+!S14P11A707-backend/**/src/test/**/out/
+
+### NetBeans ###
+S14P11A707-backend/nbproject/private/
+S14P11A707-backend/nbbuild/
+S14P11A707-backend/dist/
+S14P11A707-backend/nbdist/
+S14P11A707-backend/.nb-gradle/
+
+### VS Code ###
+S14P11A707-backend/**/.vscode/
+
+### Env files ###
+S14P11A707-backend/.env
+S14P11A707-backend/.env.*
+!S14P11A707-backend/.env.example
+
+### Docs ###
+S14P11A707-backend/document/
+
+### Windows metadata ###
+*:Zone.Identifier
