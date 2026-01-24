@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.auth.api.v1;
+package com.ssafy.s14p11a707.auth.api;
 
 import com.ssafy.s14p11a707.auth.dto.AuthMeResponse;
 import com.ssafy.s14p11a707.auth.service.AuthService;
@@ -19,7 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/auth")
+@RequestMapping("/api/auth")
 public class AuthApi implements AuthApiDoc {
 
     private final AuthService authService;

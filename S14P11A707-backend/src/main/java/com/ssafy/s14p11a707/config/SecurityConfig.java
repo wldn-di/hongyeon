@@ -66,7 +66,7 @@ public class SecurityConfig {
             "/actuator/info",
             "/oauth2/**",
             "/login/oauth2/**",
-            "/api/v1/auth/login"
+            "/api/auth/login"
     };
 
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
@@ -118,6 +118,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(SWAGGER_WHITELIST).permitAll()
                         .requestMatchers(PUBLIC_WHITELIST).permitAll()
+                        .requestMatchers("/api/v1/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptionHandling -> exceptionHandling
@@ -126,7 +127,7 @@ public class SecurityConfig {
                 );
 
         http.logout(logout -> logout
-                .logoutRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/v1/auth/logout"))
+                .logoutRequestMatcher(PathPatternRequestMatcher.withDefaults().matcher(HttpMethod.POST, "/api/auth/logout"))
                 .deleteCookies("SESSION", "JSESSIONID")
                 .logoutSuccessHandler((request, response, authentication) -> response.setStatus(204))
         );

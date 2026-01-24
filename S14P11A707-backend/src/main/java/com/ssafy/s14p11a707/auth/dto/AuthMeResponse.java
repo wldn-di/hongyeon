@@ -1,10 +1,9 @@
 package com.ssafy.s14p11a707.auth.dto;
 
 import com.ssafy.s14p11a707.user.entity.User;
-import java.util.UUID;
 
 public record AuthMeResponse(
-        UUID userId,
+        long userId,
         String email,
         String nickname,
         User.UserRole role

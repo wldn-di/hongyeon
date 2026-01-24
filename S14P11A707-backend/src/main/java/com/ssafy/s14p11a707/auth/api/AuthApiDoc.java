@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.auth.api.v1;
+package com.ssafy.s14p11a707.auth.api;
 
 import com.ssafy.s14p11a707.auth.dto.AuthMeResponse;
 import com.ssafy.s14p11a707.exception.ErrorResponse;
@@ -29,7 +29,12 @@ public interface AuthApiDoc {
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "302", description = "Cognito 인가 엔드포인트로 리다이렉트")
+            @ApiResponse(responseCode = "302", description = "Cognito 인가 엔드포인트로 리다이렉트"),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
     })
     ResponseEntity<Void> login(
             @Parameter(description = "로그인 완료 후 이동 경로/URL", required = false, example = "/swagger-ui/index.html")
@@ -47,6 +52,11 @@ public interface AuthApiDoc {
             @ApiResponse(
                     responseCode = "401",
                     description = "미인증",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
@@ -69,6 +79,11 @@ public interface AuthApiDoc {
                     responseCode = "401",
                     description = "미인증/갱신 실패",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     ResponseEntity<Void> refresh(
@@ -83,6 +98,11 @@ public interface AuthApiDoc {
             @ApiResponse(
                     responseCode = "401",
                     description = "미인증",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })

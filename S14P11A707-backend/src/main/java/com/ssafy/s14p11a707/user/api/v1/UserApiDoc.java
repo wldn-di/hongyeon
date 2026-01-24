@@ -32,6 +32,11 @@ public interface UserApiDoc {
                     responseCode = "401",
                     description = "미인증",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
     ResponseEntity<AuthMeResponse> updateMyNickname(
