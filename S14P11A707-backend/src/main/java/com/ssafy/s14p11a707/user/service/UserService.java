@@ -4,8 +4,10 @@ import com.ssafy.s14p11a707.exception.BaseException;
 import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.user.entity.User;
 import com.ssafy.s14p11a707.user.repository.UserRepository;
+import java.util.Locale;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -14,7 +16,7 @@ import org.springframework.util.StringUtils;
  * 사용자({@link User}) upsert 애플리케이션 서비스
  * <p>
  * Cognito OIDC 로그인 과정에서 전달받은 {@code email}을 기준으로 사용자를 조회하고,
- * 없으면 생성하거나 소프트 삭제된 레코드를 복구한 뒤 반환한다.
+ * 없으면 생성한 뒤 반환한다.
  * </p>
  * <p><b>트랜잭션</b></p>
  * <ul>
@@ -26,10 +28,6 @@ import org.springframework.util.StringUtils;
  *   <li>이메일이 비어 있으면 {@link BaseException}({@link ErrorCode#INVALID_INPUT_VALUE})을 발생시킨다.</li>
  * </ul>
  * <p><b>설계 메모</b></p>
- * <ul>
- *   <li>이메일은 {@link User#normalizeEmail(String)}로 정규화하여 저장/조회한다.</li>
- *   <li>동시성으로 인해 insert가 충돌하면 {@link DataIntegrityViolationException}을 기반으로 복구/재조회한다.</li>
- * </ul>
  *
  * @see UserRepository
  * @see com.ssafy.s14p11a707.security.oidc.CognitoOidcUserService
@@ -46,7 +44,7 @@ public class UserService {
      * <p>
      * 입력 이메일을 정규화한 뒤 {@link UserRepository#findByEmail(String)}로 조회하고,
      * 존재하지 않으면 새 {@link User}를 저장한다.
-     * 저장 시 유니크 제약 등으로 충돌하면 소프트 삭제 복구({@link UserRepository#restoreByEmail(String)})를 시도한 뒤 재조회한다.
+     * 저장 시 유니크 제약 등으로 충돌하면 재조회로 복구한다.
      * </p>
      * <p>
      * 본 메서드는 트랜잭션 범위 내에서 실행되며, 예외 발생 시 롤백된다.
@@ -58,20 +56,47 @@ public class UserService {
      */
     @Transactional
     public User upsertByEmail(String rawEmail) {
-        String email = User.normalizeEmail(rawEmail);
+        String email = rawEmail == null ? null : rawEmail.trim().toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(email)) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
         return userRepository.findByEmail(email)
-                .orElseGet(() -> createOrRestore(email));
+                .orElseGet(() -> createOrGet(email));
     }
 
-    private User createOrRestore(String email) {
+    @Transactional
+    public User changeNickname(String rawEmail, String rawNickname) {
+        String email = rawEmail == null ? null : rawEmail.trim().toLowerCase(Locale.ROOT);
+        if (!StringUtils.hasText(email)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        String nickname = rawNickname == null ? null : rawNickname.trim();
+        if (!StringUtils.hasText(nickname) || nickname.length() > 30) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        User user = userRepository.findByEmail(email)
+                .orElseGet(() -> createOrGet(email));
+        user.changeNickname(nickname);
+        return user;
+    }
+
+    @Transactional
+    public User changeMyNickname(OidcUser oidcUser, String rawNickname) {
+        String email = oidcUser == null ? null : oidcUser.getEmail();
+        if (!StringUtils.hasText(email)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+
+        return changeNickname(email, rawNickname);
+    }
+
+    private User createOrGet(String email) {
         try {
             return userRepository.save(new User(email));
         } catch (DataIntegrityViolationException e) {
-            userRepository.restoreByEmail(email);
             return userRepository.findByEmail(email)
                     .orElseThrow(() -> e);
         }

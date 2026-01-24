@@ -9,8 +9,8 @@ import java.util.Locale;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
 
 /**
  * 로그인 리다이렉트 경로 세션 관리 서비스
@@ -35,14 +35,11 @@ public class AuthRedirectService {
 
     private static final String LOGIN_REDIRECT_SESSION_KEY = AuthRedirectService.class.getName() + ".loginRedirect";
 
-    private record Origin(String scheme, String host, int port) {
-    }
+    private record Origin(String scheme, String host, int port) {}
 
     private final Set<Origin> allowedRedirectOrigins;
 
-    public AuthRedirectService(
-            @Value("${app.auth.allowed-redirect-origins:}") String allowedRedirectOriginsCsv
-    ) {
+    public AuthRedirectService(@Value("${app.auth.allowed-redirect-origins:}") String allowedRedirectOriginsCsv) {
         this.allowedRedirectOrigins = parseAllowedOrigins(allowedRedirectOriginsCsv);
     }
 
@@ -74,7 +71,6 @@ public class AuthRedirectService {
         HttpSession session = request.getSession(false);
         if (session == null) return null;
 
-
         Object value = session.getAttribute(LOGIN_REDIRECT_SESSION_KEY);
         session.removeAttribute(LOGIN_REDIRECT_SESSION_KEY);
         return value instanceof String s ? s : null;
@@ -98,8 +94,8 @@ public class AuthRedirectService {
      * 오픈 리다이렉트 방지를 위한 상대 경로 검증
      */
     public boolean isSafeRelativeRedirect(String redirect) {
-        if (redirect == null || redirect.isBlank()) return false;
-        String trimmed = redirect.trim();
+        String trimmed = normalizeInput(redirect);
+        if (trimmed == null) return false;
         if (!trimmed.startsWith("/")) return false;
         if (trimmed.startsWith("//")) return false;
         if (trimmed.contains("\\")) return false;
@@ -108,35 +104,56 @@ public class AuthRedirectService {
     }
 
     private boolean isSafeAbsoluteRedirect(String redirect) {
-        if (redirect == null || redirect.isBlank()) return false;
         if (allowedRedirectOrigins.isEmpty()) return false;
 
-        String trimmed = redirect.trim();
+        String trimmed = normalizeInput(redirect);
+        if (trimmed == null) return false;
         if (containsHeaderBreakingChars(trimmed)) return false;
+
+        Origin origin = tryParseHttpOrigin(trimmed);
+        return origin != null && allowedRedirectOrigins.contains(origin);
+    }
+
+    private static String normalizeInput(String value) {
+        if (value == null || value.isBlank()) return null;
+        return value.trim();
+    }
+
+    private static Origin tryParseHttpOrigin(String value) {
+        String trimmed = normalizeInput(value);
+        if (trimmed == null) return null;
 
         URI uri;
         try {
             uri = URI.create(trimmed);
         } catch (IllegalArgumentException e) {
-            return false;
+            return null;
         }
+        return tryParseHttpOrigin(uri);
+    }
 
-        if (!uri.isAbsolute()) return false;
-        if (uri.getUserInfo() != null) return false;
+    private static Origin tryParseHttpOrigin(URI uri) {
+        if (!uri.isAbsolute()) return null;
+        if (uri.getUserInfo() != null) return null;
 
-        String scheme = uri.getScheme();
-        if (scheme == null) return false;
-        scheme = scheme.toLowerCase(Locale.ROOT);
-        if (!scheme.equals("http") && !scheme.equals("https")) return false;
+        String scheme = normalizeHttpScheme(uri.getScheme());
+        if (scheme == null) return null;
 
         String host = uri.getHost();
-        if (host == null || host.isBlank()) return false;
+        if (host == null || host.isBlank()) return null;
 
         int port = effectivePort(uri);
-        if (port < 0) return false;
+        if (port < 0) return null;
 
-        Origin origin = new Origin(scheme, host.toLowerCase(Locale.ROOT), port);
-        return allowedRedirectOrigins.contains(origin);
+        return new Origin(scheme, host.toLowerCase(Locale.ROOT), port);
+    }
+
+    private static String normalizeHttpScheme(String scheme) {
+        if (scheme == null) return null;
+
+        String normalized = scheme.toLowerCase(Locale.ROOT);
+        if (!normalized.equals("http") && !normalized.equals("https")) return null;
+        return normalized;
     }
 
     private static int effectivePort(URI uri) {
@@ -155,40 +172,12 @@ public class AuthRedirectService {
     }
 
     private static Set<Origin> parseAllowedOrigins(String csv) {
-        if (csv == null || csv.isBlank()) {
-            return Set.of();
-        }
+        String normalized = normalizeInput(csv);
+        if (normalized == null) return Set.of();
 
-        return Arrays.stream(csv.split(","))
-                .map(String::trim)
-                .filter(s -> !s.isBlank())
-                .map(AuthRedirectService::parseOrigin)
+        return Arrays.stream(normalized.split(","))
+                .map(AuthRedirectService::tryParseHttpOrigin)
                 .filter(Objects::nonNull)
                 .collect(Collectors.toUnmodifiableSet());
-    }
-
-    private static Origin parseOrigin(String value) {
-        URI uri;
-        try {
-            uri = URI.create(value);
-        } catch (IllegalArgumentException e) {
-            return null;
-        }
-
-        if (!uri.isAbsolute()) return null;
-        if (uri.getUserInfo() != null) return null;
-
-        String scheme = uri.getScheme();
-        if (scheme == null) return null;
-        scheme = scheme.toLowerCase(Locale.ROOT);
-        if (!scheme.equals("http") && !scheme.equals("https")) return null;
-
-        String host = uri.getHost();
-        if (host == null || host.isBlank()) return null;
-
-        int port = effectivePort(uri);
-        if (port < 0) return null;
-
-        return new Origin(scheme, host.toLowerCase(Locale.ROOT), port);
     }
 }
