@@ -20,7 +20,7 @@ import org.springframework.util.StringUtils;
 /**
  * Cognito OAuth2 로그인 BFF 애플리케이션 서비스
  * <p>
- * {@link com.ssafy.s14p11a707.auth.api.v1.AuthApi}에서 호출되며,
+ * {@link com.ssafy.s14p11a707.auth.api.AuthApi}에서 호출되며,
  * 로그인 시작(인가 엔드포인트로 리다이렉트), 현재 사용자 조회, (선택) 토큰 갱신을 담당한다.
  * </p>
  * <p><b>설계 메모</b></p>

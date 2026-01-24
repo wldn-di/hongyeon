@@ -8,30 +8,34 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.Id;
 import jakarta.persistence.Index;
+import jakarta.persistence.GenerationType;
 import jakarta.persistence.Table;
-import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
+import lombok.Builder;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.UuidGenerator;
 
 @Getter
 @Entity
 @Table(
         name = "users",
         indexes = {
-                @Index(name = "uk_users_email", columnList = "email", unique = true)
+                @Index(name = "uk_users_google_id", columnList = "google_id", unique = true),
+                @Index(name = "uk_users_email", columnList = "email", unique = true),
+                @Index(name = "uk_users_nickname", columnList = "nickname", unique = true)
         }
 )
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class User extends BaseEntity {
 
     @Id
-    @GeneratedValue
-    @UuidGenerator
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(nullable = false, updatable = false)
-    private UUID id;
+    private long id;
+
+    @Column(length = 255)
+    private String googleId;
 
     @Column(nullable = false, length = 320)
     private String email;
@@ -39,14 +43,41 @@ public class User extends BaseEntity {
     @Column(nullable = false, length = 30)
     private String nickname;
 
+    @Column(nullable = false)
+    private long totalPlayTime;
+
+    @Column(nullable = false)
+    private int totalScore;
+
+    @Column(nullable = false)
+    private int totalClears;
+
+    @Column(nullable = false)
+    private int totalAttempts;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
     private UserRole role;
 
-    public User(String email) {
+    @Builder
+    public User(
+            String googleId,
+            String email,
+            String nickname,
+            long totalPlayTime,
+            int totalScore,
+            int totalClears,
+            int totalAttempts,
+            UserRole role
+    ) {
+        this.googleId = googleId;
         this.email = email;
-        this.nickname = defaultNickname();
-        this.role = UserRole.GENERAL;
+        this.nickname = (nickname == null || nickname.isBlank()) ? defaultNickname() : nickname;
+        this.totalPlayTime = totalPlayTime;
+        this.totalScore = totalScore;
+        this.totalClears = totalClears;
+        this.totalAttempts = totalAttempts;
+        this.role = role == null ? UserRole.GENERAL : role;
     }
 
     private static String defaultNickname() {

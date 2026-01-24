@@ -95,7 +95,7 @@ public class UserService {
 
     private User createOrGet(String email) {
         try {
-            return userRepository.save(new User(email));
+            return userRepository.save(User.builder().email(email).build());
         } catch (DataIntegrityViolationException e) {
             return userRepository.findByEmail(email)
                     .orElseThrow(() -> e);
