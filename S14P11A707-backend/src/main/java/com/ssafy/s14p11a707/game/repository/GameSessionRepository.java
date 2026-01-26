@@ -10,10 +10,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface GameSessionRepository extends JpaRepository<GameSession, Long> {
 
-    // 유저별 특정 상태들 세션 조회 (통합 책장 조회용, 페이징)
     Page<GameSession> findByUserAndStatusIn(User user, List<Status> statuses, Pageable pageable);
 
-    // 유저별 세션 개수 (S랭크 카운트용)
     int countByUserAndRankGrade(User user, GameSession.RankGrade rankGrade);
-}
 
+    boolean existsByScenarioIdAndUserIdAndStatus(long scenarioId, long userId, Status status);
+}

@@ -1,7 +1,7 @@
 package com.ssafy.s14p11a707.mock;
 
-import com.ssafy.s14p11a707.game.dto.BoardConnection;
-import com.ssafy.s14p11a707.game.dto.BoardNode;
+import com.ssafy.s14p11a707.game.dto.BoardConnectionDto;
+import com.ssafy.s14p11a707.game.dto.BoardNodeDto;
 import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
 import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
 import java.time.Instant;
@@ -116,8 +116,8 @@ public class MockSessionStore {
         private final Map<Long, Instant> discoveredClues = new HashMap<>();
         private final List<EventLogListResponse.Log> logs = new ArrayList<>();
 
-        private final List<BoardNode> boardNodes = new ArrayList<>();
-        private final List<BoardConnection> boardConnections = new ArrayList<>();
+        private final List<BoardNodeDto> boardNodes = new ArrayList<>();
+        private final List<BoardConnectionDto> boardConnections = new ArrayList<>();
 
         private SessionState(long sessionId, long scenarioId, long userId, Instant startedAt) {
             this.sessionId = sessionId;
@@ -140,7 +140,7 @@ public class MockSessionStore {
                 Instant now
         ) {
             SessionState state = new SessionState(sessionId, scenarioId, userId, now);
-            state.boardNodes.add(new BoardNode(victimNodeId, "VICTIM", MockFixtures.scenario(scenarioId).victim().id(), null, 120, 80));
+            state.boardNodes.add(new BoardNodeDto(victimNodeId, "VICTIM", MockFixtures.scenario(scenarioId).victim().id(), null, 120, 80));
             state.logs.add(new EventLogListResponse.Log("SYSTEM", "SESSION", "사건 파일이 열렸습니다.", now));
             return state;
         }
@@ -217,11 +217,11 @@ public class MockSessionStore {
             return List.copyOf(logs);
         }
 
-        public synchronized List<BoardNode> boardNodes() {
+        public synchronized List<BoardNodeDto> boardNodes() {
             return List.copyOf(boardNodes);
         }
 
-        public synchronized List<BoardConnection> boardConnections() {
+        public synchronized List<BoardConnectionDto> boardConnections() {
             return List.copyOf(boardConnections);
         }
 
@@ -279,7 +279,7 @@ public class MockSessionStore {
             this.expiresAt = this.lastSavedAt.plusSeconds(60L * 60L * 3L);
         }
 
-        public synchronized BoardNode addBoardNode(BoardNode node) {
+        public synchronized BoardNodeDto addBoardNode(BoardNodeDto node) {
             boardNodes.add(node);
             logs.add(new EventLogListResponse.Log("GAME", "BOARD", "보드에 노드를 추가했다.", Instant.now()));
             return node;
@@ -287,9 +287,9 @@ public class MockSessionStore {
 
         public synchronized void moveBoardNode(long nodeId, int x, int y) {
             for (int i = 0; i < boardNodes.size(); i++) {
-                BoardNode n = boardNodes.get(i);
+                BoardNodeDto n = boardNodes.get(i);
                 if (n.nodeId() == nodeId) {
-                    boardNodes.set(i, new BoardNode(n.nodeId(), n.type(), n.targetId(), n.memoContent(), x, y));
+                    boardNodes.set(i, new BoardNodeDto(n.nodeId(), n.type(), n.targetId(), n.memoContent(), x, y));
                     logs.add(new EventLogListResponse.Log("GAME", "BOARD", "보드 노드 위치를 이동했다.", Instant.now()));
                     return;
                 }
@@ -298,16 +298,16 @@ public class MockSessionStore {
 
         public synchronized void updateBoardMemo(long nodeId, String memoContent) {
             for (int i = 0; i < boardNodes.size(); i++) {
-                BoardNode n = boardNodes.get(i);
+                BoardNodeDto n = boardNodes.get(i);
                 if (n.nodeId() == nodeId) {
-                    boardNodes.set(i, new BoardNode(n.nodeId(), n.type(), n.targetId(), memoContent, n.x(), n.y()));
+                    boardNodes.set(i, new BoardNodeDto(n.nodeId(), n.type(), n.targetId(), memoContent, n.x(), n.y()));
                     logs.add(new EventLogListResponse.Log("GAME", "BOARD", "보드 메모를 수정했다.", Instant.now()));
                     return;
                 }
             }
         }
 
-        public synchronized Optional<BoardConnection> addBoardConnection(BoardConnection connection) {
+        public synchronized Optional<BoardConnectionDto> addBoardConnection(BoardConnectionDto connection) {
             boardConnections.add(connection);
             logs.add(new EventLogListResponse.Log("GAME", "BOARD", "보드에 연결선을 추가했다.", Instant.now()));
             return Optional.of(connection);
@@ -344,7 +344,7 @@ public class MockSessionStore {
 
         public synchronized int redConnectionCount() {
             int count = 0;
-            for (BoardConnection c : boardConnections) {
+            for (BoardConnectionDto c : boardConnections) {
                 if ("RED".equalsIgnoreCase(c.type())) {
                     count++;
                 }
@@ -356,11 +356,11 @@ public class MockSessionStore {
             if (boardConnections.isEmpty()) return false;
 
             Map<Long, String> nodeTypeById = new HashMap<>();
-            for (BoardNode node : boardNodes) {
+            for (BoardNodeDto node : boardNodes) {
                 nodeTypeById.put(node.nodeId(), node.type());
             }
 
-            for (BoardConnection c : boardConnections) {
+            for (BoardConnectionDto c : boardConnections) {
                 if (!"RED".equalsIgnoreCase(c.type())) continue;
                 String fromType = nodeTypeById.get(c.fromNodeId());
                 String toType = nodeTypeById.get(c.toNodeId());

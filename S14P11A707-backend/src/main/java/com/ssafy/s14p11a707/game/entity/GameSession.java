@@ -61,11 +61,6 @@ public class GameSession extends BaseEntity {
     @Column(name = "is_first_play")
     private Boolean firstPlay;
 
-    /*
-    @Enumerated(EnumType.STRING)
-    private String status;
-     */
-
     private Integer finalScore;
 
     @Enumerated(EnumType.STRING)
@@ -133,6 +128,32 @@ public class GameSession extends BaseEntity {
         this.playTime = playTime;
         this.lastSavedAt = lastSavedAt;
         this.expiresAt = expiresAt;
+    }
+
+    public void updateProgress(int currentFloor, JsonNode visitedFloorsJson, int health, long playTime) {
+        this.currentFloor = currentFloor;
+        this.visitedFloorsJson = visitedFloorsJson;
+        this.health = health;
+        this.playTime = playTime;
+        this.lastSavedAt = Instant.now();
+        this.expiresAt = this.lastSavedAt.plusSeconds(7 * 24 * 60 * 60); // 7일 후 만료
+    }
+
+    public void moveFloor(int floor, JsonNode visitedFloorsJson) {
+        this.currentFloor = floor;
+        this.visitedFloorsJson = visitedFloorsJson;
+    }
+
+    public void endGame(Status status, boolean success, int finalScore, RankGrade rankGrade) {
+        this.status = status;
+        this.finalScore = finalScore;
+        this.rankGrade = rankGrade;
+        this.completedAt = Instant.now();
+    }
+
+    public void markSaved() {
+        this.lastSavedAt = Instant.now();
+        this.expiresAt = this.lastSavedAt.plusSeconds(7 * 24 * 60 * 60); // 7일 후 만료
     }
 
     public enum Status {

@@ -1,12 +1,12 @@
-package com.ssafy.s14p11a707.game.service.impl;
+package com.ssafy.s14p11a707.game.service.v1;
 
-import com.ssafy.s14p11a707.game.dto.BoardConnection;
 import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
+import com.ssafy.s14p11a707.game.dto.BoardConnectionDto;
 import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
 import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
 import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
-import com.ssafy.s14p11a707.game.dto.BoardNode;
 import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
+import com.ssafy.s14p11a707.game.dto.BoardNodeDto;
 import com.ssafy.s14p11a707.game.dto.BoardResponse;
 import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
 import com.ssafy.s14p11a707.game.dto.ClueListResponse;
@@ -25,7 +25,6 @@ import com.ssafy.s14p11a707.game.dto.SubmitValidateResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectInterrogationStateResponse;
-import com.ssafy.s14p11a707.game.service.GameSessionService;
 import com.ssafy.s14p11a707.mock.MockFixtures;
 import com.ssafy.s14p11a707.mock.MockSessionStore;
 import java.util.ArrayList;
@@ -34,8 +33,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Optional;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
@@ -59,10 +57,13 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         MockFixtures.RoomFixture room = MockFixtures.findRoomByFloor(scenario.id(), 1)
                 .orElse(scenario.rooms().getFirst());
 
-        List<GameStartResponse.EventLog> eventLogs = session.logs().stream()
-                .limit(3)
-                .map(l -> new GameStartResponse.EventLog(l.type(), l.message(), l.createdAt()))
-                .toList();
+        GameStartResponse.EventLog startLog = session.logs().isEmpty()
+                ? new GameStartResponse.EventLog("GAME_START", "사건 파일이 열렸습니다.", session.startedAt())
+                : new GameStartResponse.EventLog(
+                        session.logs().getFirst().type(),
+                        session.logs().getFirst().message(),
+                        session.logs().getFirst().createdAt()
+                );
 
         return new GameStartResponse(
                 session.sessionId(),
@@ -87,9 +88,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
                         room.roomType(),
                         room.objects()
                 ),
-                eventLogs.isEmpty()
-                        ? List.of(new GameStartResponse.EventLog("SYSTEM", "사건 파일이 열렸습니다.", session.startedAt()))
-                        : eventLogs
+                startLog
         );
     }
 
@@ -238,6 +237,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
                         c.floorNumber(),
                         c.name(),
                         c.importance(),
+                        c.detailImageUrl(),
                         discovered.containsKey(c.id()),
                         discovered.get(c.id())
                 ))
@@ -292,6 +292,10 @@ public class GameSessionServiceMockImpl implements GameSessionService {
                 })
                 .toList();
 
+        List<GameResumeResponse.EventLogDto> eventLogs = session.logs().stream()
+                .map(l -> new GameResumeResponse.EventLogDto(l.type(), l.message(), l.createdAt()))
+                .toList();
+
         return new GameResumeResponse(
                 sessionId,
                 scenarioId,
@@ -309,7 +313,8 @@ public class GameSessionServiceMockImpl implements GameSessionService {
                         session.boardNodes(),
                         session.boardConnections(),
                         session.redConnectionCount()
-                )
+                ),
+                eventLogs
         );
     }
 
@@ -328,17 +333,15 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         MockFixtures.RoomFixture room = MockFixtures.findRoomByFloor(scenarioId, nextFloor)
                 .orElse(MockFixtures.scenario(scenarioId).rooms().getFirst());
 
-        List<FloorMoveResponse.EventLog> eventLogs = session.logs().stream()
-                .sorted(Comparator.comparing(EventLogListResponse.Log::createdAt).reversed())
-                .limit(3)
-                .map(l -> new FloorMoveResponse.EventLog(l.type(), l.message(), l.createdAt()))
-                .toList();
+        FloorMoveResponse.EventLog eventLog = isFirstVisit
+                ? new FloorMoveResponse.EventLog("FLOOR_MOVED", nextFloor + "층으로 이동했습니다.", now)
+                : null;
 
         return new FloorMoveResponse(
                 sessionId,
                 nextFloor,
                 isFirstVisit,
-                new FloorMoveResponse.Room(
+                new FloorMoveResponse.RoomDto(
                         room.id(),
                         room.floorNumber(),
                         room.roomName(),
@@ -347,7 +350,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
                         isFirstVisit ? room.assistantComment() : null,
                         room.objects()
                 ),
-                eventLogs
+                eventLog
         );
     }
 
@@ -374,7 +377,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         int x = request == null ? 160 : request.x();
         int y = request == null ? 120 : request.y();
 
-        BoardNode node = new BoardNode(sessionStore.nextNodeId(), type, targetId, memoContent, x, y);
+        BoardNodeDto node = new BoardNodeDto(sessionStore.nextNodeId(), type, targetId, memoContent, x, y);
         session.addBoardNode(node);
 
         return getBoard(sessionId);
@@ -415,7 +418,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         }
 
         String type = request.type() == null ? "RED" : request.type().trim().toUpperCase(Locale.ROOT);
-        session.addBoardConnection(new BoardConnection(sessionStore.nextConnectionId(), fromNodeId, toNodeId, type));
+        session.addBoardConnection(new BoardConnectionDto(sessionStore.nextConnectionId(), fromNodeId, toNodeId, type));
         return getBoard(sessionId);
     }
 

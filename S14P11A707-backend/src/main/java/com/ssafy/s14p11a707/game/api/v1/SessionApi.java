@@ -22,7 +22,7 @@ import com.ssafy.s14p11a707.game.dto.SubmitValidateResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectInterrogationStateResponse;
-import com.ssafy.s14p11a707.game.service.GameSessionService;
+import com.ssafy.s14p11a707.game.service.v1.GameSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;

@@ -65,6 +65,15 @@ public class BoardNode extends BaseEntity {
         this.positionY = positionY;
     }
 
+    public void updatePosition(int x, int y) {
+        this.positionX = x;
+        this.positionY = y;
+    }
+
+    public void updateMemoContent(String memoContent) {
+        this.memoContent = memoContent;
+    }
+
     public enum ItemType {
         VICTIM,
         SUSPECT,

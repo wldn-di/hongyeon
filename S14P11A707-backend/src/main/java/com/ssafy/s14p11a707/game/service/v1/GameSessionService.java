@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.game.service;
+package com.ssafy.s14p11a707.game.service.v1;
 
 import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
