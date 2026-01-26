@@ -1,7 +1,7 @@
 package com.ssafy.s14p11a707.ranking.api.v1;
 
 import com.ssafy.s14p11a707.ranking.dto.GlobalRankingResponse;
-import com.ssafy.s14p11a707.ranking.service.RankingService;
+import com.ssafy.s14p11a707.ranking.service.v1.RankingService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;

@@ -1,8 +1,7 @@
-package com.ssafy.s14p11a707.ranking.service.impl;
+package com.ssafy.s14p11a707.ranking.service.v1;
 
 import com.ssafy.s14p11a707.mock.MockFixtures;
 import com.ssafy.s14p11a707.ranking.dto.GlobalRankingResponse;
-import com.ssafy.s14p11a707.ranking.service.RankingService;
 import org.springframework.stereotype.Service;
 
 @Service
