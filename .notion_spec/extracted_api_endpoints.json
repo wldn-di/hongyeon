@@ -1,0 +1,587 @@
+{
+  "schema": {
+    "=Aca": {
+      "name": "Request DTO",
+      "type": "text"
+    },
+    "GGmA": {
+      "name": "Auth",
+      "type": "select"
+    },
+    "LzL[": {
+      "name": "Endpoint",
+      "type": "text"
+    },
+    "NXZq": {
+      "name": "Index",
+      "type": "select"
+    },
+    "[CHU": {
+      "name": "Response DTO",
+      "type": "text"
+    },
+    "[v}Q": {
+      "name": "진행도",
+      "type": "select"
+    },
+    "`t[\\": {
+      "name": "Method",
+      "type": "select"
+    },
+    "title": {
+      "name": "이름",
+      "type": "title"
+    }
+  },
+  "endpoints": [
+    {
+      "id": "2f143ea2-73fc-8163-864c-fae80359cf62",
+      "role": "read_and_write",
+      "name": "내 시나리오 조회(작성)",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/users/me/scenarios",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f343ea2-73fc-80db-9d1f-d351120772c9"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8196-8585-c1da2008ebfe",
+      "role": "read_and_write",
+      "name": "시나리오 상세 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/scenarios/{scenarioId}",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-812c-89e7-cca1e61dfbf2"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-819d-a918-f31fdb5a2df8",
+      "role": "read_and_write",
+      "name": "시나리오 생성 상태 조회(삭제 - 상태관리 안하기로 했던듯",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/scenarios/{scenarioId}/status",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8112-a88e-e2ff96433bad"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81c2-a043-f05430e18de4",
+      "role": "read_and_write",
+      "name": "시나리오 생성 요청",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/scenarios",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-8163-a739-e78830f80f46"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81bd-8778-c7a2fd1c5e5a"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81ed-8660-ed8b1a43c3bb",
+      "role": "read_and_write",
+      "name": "피해자 정보 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/scenarios/{scenarioId}/victim",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-811e-881f-ceba5c141e50"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-810a-9a9b-c3b5d539c599",
+      "role": "read_and_write",
+      "name": "용의자 목록 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/scenarios/{scenarioId}/suspects",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8103-8128-d68a9904feab"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-815e-8de5-d6988c40b8df",
+      "role": "read_and_write",
+      "name": "시나리오 목록 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/scenarios",
+      "Auth": "Public",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f343ea2-73fc-80db-9d1f-d351120772c9"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8156-96c1-e759c22d2287",
+      "role": "read_and_write",
+      "name": "게임 상태 저장(삭제 -Spring Event 대체)",
+      "Auth": "Bearer",
+      "Request DTO": " ",
+      "Index": "Game-Session",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8163-b07b-f2e899e24499",
+      "role": "read_and_write",
+      "name": "이어하기 (세션 복원)",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/resume",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8194-9dde-f055dd71c93a"
+      ],
+      "Index": "Game-Session",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8135-a8ae-f73f37ea58a7",
+      "role": "read_and_write",
+      "name": "게임 시작",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/scenarios/{scenarioId}/sessions",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-813e-958b-fea95603693e"
+      ],
+      "Index": "Game-Session",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8122-b04b-f6c5e52ab498",
+      "role": "read_and_write",
+      "name": "보드 삭제(노드/연결선)",
+      "Method": "DELETE",
+      "Endpoint": "DELETE /api/v1/sessions/{sessionId}/board",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-8196-a615-f714a3f1d662"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8126-a3ab-e763549a4a14"
+      ],
+      "Index": "Board",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81c8-a050-c0b0d3ac7377",
+      "role": "read_and_write",
+      "name": "보드 노드 추가",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/sessions/{sessionId}/board/nodes",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-814c-9dd1-d4c924e2484b"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8126-a3ab-e763549a4a14"
+      ],
+      "Index": "Board",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81cc-ae36-ed115439aba8",
+      "role": "read_and_write",
+      "name": "보드 노드 위치 이동",
+      "Method": "PATCH",
+      "Endpoint": "PATCH /api/v1/sessions/{sessionId}/board/nodes/position",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-8121-a6ac-d520441508b8"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8126-a3ab-e763549a4a14"
+      ],
+      "Index": "Board",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8107-a004-e925cc221beb",
+      "role": "read_and_write",
+      "name": "연결선 추가",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/sessions/{sessionId}/board/connections",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-816d-abb6-c02c55da618a"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8126-a3ab-e763549a4a14"
+      ],
+      "Index": "Board",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81a9-bb05-d48829ef5296",
+      "role": "read_and_write",
+      "name": "추리보드 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/board",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8126-a3ab-e763549a4a14"
+      ],
+      "Index": "Board",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f343ea2-73fc-8001-aafd-c5b48d7a6d97",
+      "role": "read_and_write",
+      "name": "메모 수정",
+      "Method": "PATCH",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/board/nodes/{nodeId}",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f343ea2-73fc-80be-b063-e815321ac534"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8126-a3ab-e763549a4a14"
+      ],
+      "Index": "Board"
+    },
+    {
+      "id": "2f143ea2-73fc-810b-a676-efdbca91fd5f",
+      "role": "read_and_write",
+      "name": "수사보고서 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/report",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81af-a80c-e752bbfaeb34"
+      ],
+      "Index": "Ranking",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-814d-b9eb-feee29e38873",
+      "role": "read_and_write",
+      "name": "내 랭킹 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/users/me/rankings",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-811f-94cf-d61c5ca7c578"
+      ],
+      "Index": "Ranking",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8197-b456-df3d6c67298a",
+      "role": "read_and_write",
+      "name": "전체 랭킹 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/rankings",
+      "Auth": "Public",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-811f-94cf-d61c5ca7c578"
+      ],
+      "Index": "Ranking",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81b9-a14b-f97d01489254",
+      "role": "read_and_write",
+      "name": "시나리오 랭킹 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/scenarios/{scenarioId}/rankings",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81c8-af34-c58021810e59"
+      ],
+      "Index": "Ranking",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-811f-9d37-c98a19ccb2d8",
+      "role": "read_and_write",
+      "name": "단서 획득",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/sessions/{sessionId}/clues/{clueId}",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8111-a6a7-e1a556cc5ad8"
+      ],
+      "Index": "Game-play",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8147-8f3f-f867bad1187e",
+      "role": "read_and_write",
+      "name": "단서 목록 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/clues",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8191-9344-ca440e25258e"
+      ],
+      "Index": "Game-play",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81c1-9cc4-d6449cb759b7",
+      "role": "read_and_write",
+      "name": "층 이동",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/sessions/{sessionId}/move-floor",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81ee-ac35-cc2e9ede241e"
+      ],
+      "Index": "Game-play",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81e9-b32a-e3cd9bc00563",
+      "role": "read_and_write",
+      "name": "수사 로그 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/logs",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8182-8bf3-d2d7fab99610"
+      ],
+      "Index": "Game-play",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8169-88b5-d3a0fbd7b2ba",
+      "role": "read_and_write",
+      "name": "채팅 내역 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/suspects/{suspectId}/chats",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-819c-a70e-f45313563d98"
+      ],
+      "Index": "Game-play",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8119-9e7d-e2fe29a9e25e",
+      "role": "read_and_write",
+      "name": "제출 가능 여부 확인",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/submit/validate",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81cc-bdc2-e0e8b134fec8"
+      ],
+      "Index": "Submit",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8156-bb16-ee3f03343201",
+      "role": "read_and_write",
+      "name": "최종 제출(채점)",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/sessions/{sessionId}/submit",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-818f-9233-eeec6d4a609c"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8165-963a-d79db64ed0c7"
+      ],
+      "Index": "Submit",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f343ea2-73fc-80b4-8da2-f4c99beb8f0e",
+      "role": "read_and_write",
+      "name": "수사보고서 생성(추가 필요해보임)",
+      "Auth": "Bearer",
+      "Index": "Submit"
+    },
+    {
+      "id": "2f143ea2-73fc-8149-a3e8-fe5096e95b6e",
+      "role": "read_and_write",
+      "name": "내 책장 통계 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/users/me/bookshelf/stats",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-8188-9392-e8169ceaf02a"
+      ],
+      "Index": "My-Bookshelf",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8183-8099-e3f1d4fd574c",
+      "role": "read_and_write",
+      "name": "내 책장 완료/미완/미제 기록  통합 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/users/me/bookshelf/sessions",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f343ea2-73fc-807f-83ff-e5c2f65c5a45"
+      ],
+      "Index": "My-Bookshelf",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-810f-a5d7-f39a4070d49c",
+      "role": "read_and_write",
+      "name": "리뷰 목록 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/scenarios/{scenarioId}/reviews",
+      "Auth": "Public",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81b3-8ddc-d17d47a9518e"
+      ],
+      "Index": "Review",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8167-ac84-fab947f56383",
+      "role": "read_and_write",
+      "name": "리뷰 삭제(소프트)",
+      "Method": "DELETE",
+      "Endpoint": "DELETE /api/v1/reviews/{reviewId}",
+      "Auth": "Bearer",
+      "Response DTO": "204(No content)",
+      "Index": "Review",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81b5-96b8-e470b34cc280",
+      "role": "read_and_write",
+      "name": "리뷰 작성",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/scenarios/{scenarioId}/reviews",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-81d7-85d3-ed0bb1277845"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81a2-8060-d1748e0d4447"
+      ],
+      "Index": "Review",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-81df-98dd-fbe13e9f28a1",
+      "role": "read_and_write",
+      "name": "리뷰 수정",
+      "Method": "PATCH",
+      "Endpoint": "PATCH /api/v1/reviews/{reviewId}",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f343ea2-73fc-80da-be8b-e5e4daf89e9f"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-81a2-8060-d1748e0d4447"
+      ],
+      "Index": "Review",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f143ea2-73fc-8173-b5a3-c38c81388745",
+      "role": "read_and_write",
+      "name": "용의자 심문(채팅)",
+      "Method": "POST",
+      "Endpoint": "POST /api/v1/sessions/{sessionId}/suspects/{suspectId}/chat",
+      "Auth": "Bearer",
+      "Request DTO": "‣ ",
+      "Request DTO_pageIds": [
+        "2f143ea2-73fc-8107-9e81-dfc2472709c8"
+      ],
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f143ea2-73fc-810b-8d3a-c223bbb1cd1b"
+      ],
+      "Index": "AI",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f343ea2-73fc-80da-acf2-e19d2dbb8fe0",
+      "role": "read_and_write",
+      "name": "이미지 생성(나노바나나) (추가 필요한듯…?)",
+      "Auth": "Bearer",
+      "Index": "AI"
+    },
+    {
+      "id": "2f343ea2-73fc-810c-a438-cba7bda10efd",
+      "role": "read_and_write",
+      "name": "용의자 심문 진행도 조회",
+      "Method": "GET",
+      "Endpoint": "GET /api/v1/sessions/{sessionId}/suspects/{suspectId}/state",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f343ea2-73fc-81df-b584-ded5feeb7af1"
+      ],
+      "Index": "AI",
+      "진행도": "시작 전"
+    },
+    {
+      "id": "2f343ea2-73fc-8043-a309-e8f8159660ce",
+      "role": "read_and_write",
+      "name": "시나리오 상세 조회 - 수사보고서 열람",
+      "Method": "GET",
+      "Endpoint": "GET /api/vi/scenarios/{scenarioId}/rankings/{userId}/report",
+      "Auth": "Bearer",
+      "Response DTO": "‣ ",
+      "Response DTO_pageIds": [
+        "2f343ea2-73fc-808d-b3ef-e3a7b049c504"
+      ],
+      "Index": "Scenario",
+      "진행도": "시작 전"
+    }
+  ]
+}

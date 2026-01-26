@@ -5,8 +5,7 @@ import java.time.Instant;
 public record DiscoveredClueResponse(
         long sessionId,
         Clue clue,
-        Instant discoveredAt,
-        int health
+        Instant discoveredAt
 ) {
 
     public record Clue(

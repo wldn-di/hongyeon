@@ -1,8 +1,10 @@
 package com.ssafy.s14p11a707.game.service.impl;
 
 import com.ssafy.s14p11a707.game.dto.BoardConnection;
+import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
 import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
+import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
 import com.ssafy.s14p11a707.game.dto.BoardNode;
 import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardResponse;
@@ -22,6 +24,7 @@ import com.ssafy.s14p11a707.game.dto.SubmitResponse;
 import com.ssafy.s14p11a707.game.dto.SubmitValidateResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
+import com.ssafy.s14p11a707.game.dto.SuspectInterrogationStateResponse;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
 import com.ssafy.s14p11a707.mock.MockFixtures;
 import com.ssafy.s14p11a707.mock.MockSessionStore;
@@ -142,6 +145,18 @@ public class GameSessionServiceMockImpl implements GameSessionService {
     }
 
     @Override
+    public SuspectInterrogationStateResponse getSuspectInterrogationState(long sessionId, long suspectId) {
+        MockSessionStore.SessionState session = sessionStore.getOrCreate(sessionId);
+        MockSessionStore.SessionState.SuspectState state = session.suspectState(suspectId);
+        return new SuspectInterrogationStateResponse(
+                sessionId,
+                suspectId,
+                state.currentInterrogationLevel(),
+                state.isSecretRevealed()
+        );
+    }
+
+    @Override
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
         MockSessionStore.SessionState session = sessionStore.getOrCreate(sessionId);
         long scenarioId = session.scenarioId();
@@ -154,7 +169,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         Long usedClueId = request == null ? null : request.usedClueId();
 
         if (StringUtils.hasText(userMessage)) {
-            session.addChat(suspectId, "user", userMessage, false, now);
+            session.addChat(suspectId, "user", userMessage, false, now, usedClueId, null);
         }
 
         MockFixtures.SuspectFixture suspect = MockFixtures.findSuspect(scenarioId, suspectId)
@@ -166,11 +181,10 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         Long revealedClueId = maybeRevealClue(session, scenarioId, usedClueId);
 
         boolean isKeyTalk = revealedClueId != null || (usedClueId != null && usedClueId == truth.weaponClueId());
-        session.addChat(suspectId, "assistant", reply, isKeyTalk, now);
-
         session.consumeHealth(usedClueId == null ? 5 : 3);
 
         int responseLevel = isKeyTalk ? 3 : (usedClueId == null ? 1 : 2);
+        session.addChat(suspectId, "assistant", reply, isKeyTalk, now, usedClueId, responseLevel);
 
         return new SuspectChatResponse(
                 sessionId,
@@ -205,8 +219,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
                         clue.detailImageUrl(),
                         clue.assistantComment()
                 ),
-                discoveredAt,
-                session.health()
+                discoveredAt
         );
     }
 
@@ -237,13 +250,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
     public EventLogListResponse getLogs(long sessionId) {
         MockSessionStore.SessionState session = sessionStore.getOrCreate(sessionId);
         List<EventLogListResponse.Log> logs = session.logs();
-        return new EventLogListResponse(
-                sessionId,
-                logs,
-                0,
-                Math.max(10, logs.size()),
-                logs.size()
-        );
+        return new EventLogListResponse(sessionId, logs);
     }
 
     @Override
@@ -315,6 +322,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         int nextFloor = session.currentFloor() >= maxFloor ? 1 : (session.currentFloor() + 1);
 
         Instant now = Instant.now();
+        boolean isFirstVisit = !session.visitedFloors().contains(nextFloor);
         session.moveFloor(nextFloor, now);
 
         MockFixtures.RoomFixture room = MockFixtures.findRoomByFloor(scenarioId, nextFloor)
@@ -329,12 +337,14 @@ public class GameSessionServiceMockImpl implements GameSessionService {
         return new FloorMoveResponse(
                 sessionId,
                 nextFloor,
+                isFirstVisit,
                 new FloorMoveResponse.Room(
                         room.id(),
                         room.floorNumber(),
                         room.roomName(),
                         room.roomType(),
-                        room.assistantComment(),
+                        room.description(),
+                        isFirstVisit ? room.assistantComment() : null,
                         room.objects()
                 ),
                 eventLogs
@@ -380,25 +390,32 @@ public class GameSessionServiceMockImpl implements GameSessionService {
     }
 
     @Override
-    public BoardResponse addBoardConnection(long sessionId) {
+    public BoardResponse updateBoardMemo(long sessionId, long nodeId, BoardMemoUpdateRequest request) {
         MockSessionStore.SessionState session = sessionStore.getOrCreate(sessionId);
-        List<BoardNode> nodes = session.boardNodes();
-        if (nodes.size() < 2) {
+        String memoContent = request == null ? null : request.memoContent();
+        session.updateBoardMemo(nodeId, memoContent);
+        return getBoard(sessionId);
+    }
+
+    @Override
+    public BoardResponse addBoardConnection(long sessionId, BoardConnectionAddRequest request) {
+        MockSessionStore.SessionState session = sessionStore.getOrCreate(sessionId);
+        if (request == null) {
             return getBoard(sessionId);
         }
 
-        BoardNode to = nodes.get(nodes.size() - 1);
-        BoardNode from = nodes.get(nodes.size() - 2);
+        long fromNodeId = request.fromNodeId();
+        long toNodeId = request.toNodeId();
 
         boolean exists = session.boardConnections().stream()
-                .anyMatch(c -> (c.fromNodeId() == from.nodeId() && c.toNodeId() == to.nodeId())
-                        || (c.fromNodeId() == to.nodeId() && c.toNodeId() == from.nodeId()));
+                .anyMatch(c -> (c.fromNodeId() == fromNodeId && c.toNodeId() == toNodeId)
+                        || (c.fromNodeId() == toNodeId && c.toNodeId() == fromNodeId));
         if (exists) {
             return getBoard(sessionId);
         }
 
-        String type = "RED";
-        session.addBoardConnection(new BoardConnection(sessionStore.nextConnectionId(), from.nodeId(), to.nodeId(), type));
+        String type = request.type() == null ? "RED" : request.type().trim().toUpperCase(Locale.ROOT);
+        session.addBoardConnection(new BoardConnection(sessionStore.nextConnectionId(), fromNodeId, toNodeId, type));
         return getBoard(sessionId);
     }
 
@@ -474,12 +491,18 @@ public class GameSessionServiceMockImpl implements GameSessionService {
 
         String aiComment = buildSubmitComment(success, culpritCorrect, weaponCorrect, locationCorrect, motiveSimilarity, causeSimilarity);
 
-        session.markSubmitted(success, score, rankGrade, Instant.now());
+        Instant now = Instant.now();
+        String status = success
+                ? "COMPLETED"
+                : (attemptsUsed >= MAX_SUBMIT_ATTEMPTS ? "FAILED" : "PLAYING");
+        session.markSubmitted(status, success, score, rankGrade, now);
 
         return new SubmitResponse(
                 sessionId,
-                success,
+                status,
                 attemptsUsed,
+                now,
+                score,
                 rankGrade,
                 new SubmitResponse.Evaluation(
                         culpritCorrect,
@@ -496,10 +519,10 @@ public class GameSessionServiceMockImpl implements GameSessionService {
     public GameEndResponse endGame(long sessionId) {
         MockSessionStore.SessionState session = sessionStore.getOrCreate(sessionId);
 
-        if (!"COMPLETED".equalsIgnoreCase(session.status())) {
+        if (!"COMPLETED".equalsIgnoreCase(session.status()) && !"FAILED".equalsIgnoreCase(session.status())) {
             int score = computeFinalScore(session, false, session.submitAttempts());
             String rankGrade = gradeByScore(score);
-            session.markSubmitted(false, score, rankGrade, Instant.now());
+            session.markSubmitted("ABANDONED", false, score, rankGrade, Instant.now());
         }
 
         return new GameEndResponse(
@@ -521,7 +544,7 @@ public class GameSessionServiceMockImpl implements GameSessionService {
                 .orElse(MockFixtures.scenario(scenarioId).suspects().getFirst());
 
         String greeting = "저는 " + suspect.name() + "입니다. 무엇을 알고 싶으신가요?";
-        session.addChat(suspectId, "assistant", greeting, false, Instant.now());
+        session.addChat(suspectId, "assistant", greeting, false, Instant.now(), null, 1);
     }
 
     private static String buildSuspectReply(

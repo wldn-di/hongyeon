@@ -91,7 +91,12 @@ public class AuthService {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
 
-        User user = userService.upsertByEmail(email);
+        String subject = oidcUser.getSubject();
+        if (!StringUtils.hasText(subject)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+
+        User user = userService.upsertByOidc(subject, email);
         return AuthMeResponse.from(user);
     }
 

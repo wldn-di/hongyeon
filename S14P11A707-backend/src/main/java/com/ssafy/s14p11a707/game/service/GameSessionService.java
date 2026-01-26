@@ -1,7 +1,9 @@
 package com.ssafy.s14p11a707.game.service;
 
+import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
 import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
+import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
 import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardResponse;
 import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
@@ -18,6 +20,7 @@ import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
 import com.ssafy.s14p11a707.game.dto.SubmitRequest;
 import com.ssafy.s14p11a707.game.dto.SubmitResponse;
 import com.ssafy.s14p11a707.game.dto.SubmitValidateResponse;
+import com.ssafy.s14p11a707.game.dto.SuspectInterrogationStateResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
 
@@ -28,6 +31,8 @@ public interface GameSessionService {
     InvestigationReportResponse getInvestigationReport(long sessionId);
 
     ChatHistoryResponse getChatHistory(long sessionId, long suspectId);
+
+    SuspectInterrogationStateResponse getSuspectInterrogationState(long sessionId, long suspectId);
 
     SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
 
@@ -49,7 +54,9 @@ public interface GameSessionService {
 
     BoardResponse moveBoardNode(long sessionId, BoardItemMoveRequest request);
 
-    BoardResponse addBoardConnection(long sessionId);
+    BoardResponse updateBoardMemo(long sessionId, long nodeId, BoardMemoUpdateRequest request);
+
+    BoardResponse addBoardConnection(long sessionId, BoardConnectionAddRequest request);
 
     BoardResponse deleteBoard(long sessionId, BoardDeleteRequest request);
 

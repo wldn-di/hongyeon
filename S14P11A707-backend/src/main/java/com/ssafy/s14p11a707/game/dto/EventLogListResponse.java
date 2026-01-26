@@ -5,10 +5,7 @@ import java.util.List;
 
 public record EventLogListResponse(
         long sessionId,
-        List<Log> logs,
-        int page,
-        int size,
-        long totalElements
+        List<Log> logs
 ) {
 
     public record Log(

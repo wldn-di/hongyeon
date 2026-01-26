@@ -4,7 +4,7 @@ public record ScenarioCreateRequest(
         String title,
         String genre,
         int suspectCount,
-        String synopsis
+        String userSynopsis
 ) {
 }
 

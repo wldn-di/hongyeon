@@ -96,7 +96,10 @@ public final class MockFixtures {
                         s.thumbnailUrl(),
                         s.playCount(),
                         s.avgRating(),
-                        s.avgDifficulty()
+                        s.avgDifficulty(),
+                        "COMPLETED",
+                        null,
+                        null
                 ))
                 .toList();
 
@@ -117,6 +120,7 @@ public final class MockFixtures {
                 scenario.id(),
                 scenario.title(),
                 scenario.synopsis(),
+                scenario.synopsis(),
                 scenario.genre(),
                 scenario.thumbnailUrl(),
                 scenario.playCount(),
@@ -128,6 +132,7 @@ public final class MockFixtures {
                         scenario.victim().age(),
                         scenario.victim().gender(),
                         scenario.victim().occupation(),
+                        scenario.victim().background(),
                         scenario.victim().discoveryLocation(),
                         scenario.victim().estimatedDeathTime(),
                         scenario.victim().causeOfDeath(),
@@ -148,7 +153,7 @@ public final class MockFixtures {
                         .toList(),
                 scenario.topRankings().stream()
                         .sorted(Comparator.comparingInt(TopRankingFixture::rank))
-                        .map(r -> new ScenarioDetailResponse.TopRanking(
+                        .map(r -> new ScenarioDetailResponse.ScenarioRanking(
                                 r.rank(),
                                 r.userId(),
                                 nicknameOf(r.userId()),
@@ -167,6 +172,7 @@ public final class MockFixtures {
     public static RoomListResponse roomListResponse(ScenarioFixture scenario) {
         return new RoomListResponse(
                 scenario.id(),
+                scenario.title(),
                 scenario.rooms().stream()
                         .sorted(Comparator.comparingInt(RoomFixture::floorNumber))
                         .map(r -> new RoomListResponse.Room(
@@ -234,7 +240,7 @@ public final class MockFixtures {
                 .sorted(Comparator.comparingInt(ScenarioRankingResponse.Ranking::rank))
                 .toList();
 
-        return new ScenarioRankingResponse(scenario.id(), rankings);
+        return new ScenarioRankingResponse(scenario.id(), false, rankings);
     }
 
     public static ReviewListResponse reviewListResponse(long scenarioId) {
@@ -249,7 +255,8 @@ public final class MockFixtures {
                         r.difficulty(),
                         r.content(),
                         r.isSpoiler(),
-                        r.createdAt()
+                        r.createdAt(),
+                        false
                 ))
                 .toList();
 

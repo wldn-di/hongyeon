@@ -19,7 +19,8 @@ public record ReviewListResponse(
             int difficulty,
             String content,
             boolean isSpoiler,
-            Instant createdAt
+            Instant createdAt,
+            boolean isDeleted
     ) {
     }
 }

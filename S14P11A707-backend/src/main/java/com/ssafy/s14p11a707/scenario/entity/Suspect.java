@@ -1,7 +1,6 @@
 package com.ssafy.s14p11a707.scenario.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.ssafy.s14p11a707.common.entity.CreatedAtEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -23,7 +22,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "suspects")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Suspect extends CreatedAtEntity {
+public class Suspect {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,15 +36,15 @@ public class Suspect extends CreatedAtEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    private int age;
+    private Integer age;
 
     @Column(length = 20)
     private String gender;
 
     @Column(length = 100)
-    private String role;
+    private String occupation;
 
-    @Column(length = 300)
+    @Column(length = 500)
     private String oneLiner;
 
     @Column(name = "is_culprit", nullable = false)
@@ -54,27 +53,26 @@ public class Suspect extends CreatedAtEntity {
     @Lob
     private String motive;
 
-    @Column(nullable = false)
-    private int displayOrder;
+    private Integer displayOrder;
 
-    @Column(length = 2048)
+    @Column(length = 500)
     private String portraitUrl;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
+    @Column(nullable = false, columnDefinition = "jsonb")
     private JsonNode aiConfigJson;
 
     @Builder
     public Suspect(
             Scenario scenario,
             String name,
-            int age,
+            Integer age,
             String gender,
-            String role,
+            String occupation,
             String oneLiner,
             boolean culprit,
             String motive,
-            int displayOrder,
+            Integer displayOrder,
             String portraitUrl,
             JsonNode aiConfigJson
     ) {
@@ -82,7 +80,7 @@ public class Suspect extends CreatedAtEntity {
         this.name = name;
         this.age = age;
         this.gender = gender;
-        this.role = role;
+        this.occupation = occupation;
         this.oneLiner = oneLiner;
         this.culprit = culprit;
         this.motive = motive;

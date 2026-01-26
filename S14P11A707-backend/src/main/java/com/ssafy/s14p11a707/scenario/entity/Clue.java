@@ -1,7 +1,6 @@
 package com.ssafy.s14p11a707.scenario.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.ssafy.s14p11a707.common.entity.CreatedAtEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -25,7 +24,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "clues")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Clue extends CreatedAtEntity {
+public class Clue {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -36,33 +35,34 @@ public class Clue extends CreatedAtEntity {
     @JoinColumn(name = "scenario_id", nullable = false)
     private Scenario scenario;
 
-    @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "room_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "room_id")
     private Room room;
 
     @Column(nullable = false, length = 200)
     private String name;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 20)
+    @Column(nullable = false, length = 20)
     private Importance importance;
 
     @Lob
+    @Column(nullable = false)
     private String description;
 
-    @Column(length = 2048)
+    @Column(length = 500)
     private String detailImageUrl;
+
+    @Lob
+    private String assistantComment;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private JsonNode clueDetailJson;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(name = "transform", columnDefinition = "jsonb")
+    @Column(name = "transform", nullable = false, columnDefinition = "jsonb")
     private JsonNode transformJson;
-
-    @Column(length = 100)
-    private String neo4jNodeAlias;
 
     @Builder
     public Clue(
@@ -72,9 +72,9 @@ public class Clue extends CreatedAtEntity {
             Importance importance,
             String description,
             String detailImageUrl,
+            String assistantComment,
             JsonNode clueDetailJson,
-            JsonNode transformJson,
-            String neo4jNodeAlias
+            JsonNode transformJson
     ) {
         this.scenario = scenario;
         this.room = room;
@@ -82,15 +82,14 @@ public class Clue extends CreatedAtEntity {
         this.importance = importance;
         this.description = description;
         this.detailImageUrl = detailImageUrl;
+        this.assistantComment = assistantComment;
         this.clueDetailJson = clueDetailJson;
         this.transformJson = transformJson;
-        this.neo4jNodeAlias = neo4jNodeAlias;
     }
 
     public enum Importance {
-        LOW,
-        MEDIUM,
-        HIGH,
-        CRITICAL
+        CRITICAL,
+        SUPPORTING,
+        RED_HERRING
     }
 }

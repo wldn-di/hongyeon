@@ -34,13 +34,13 @@ public class User extends BaseEntity {
     @Column(nullable = false, updatable = false)
     private long id;
 
-    @Column(length = 255)
+    @Column(nullable = false, length = 255)
     private String googleId;
 
-    @Column(nullable = false, length = 320)
+    @Column(nullable = false, length = 255)
     private String email;
 
-    @Column(nullable = false, length = 30)
+    @Column(length = 50)
     private String nickname;
 
     @Column(nullable = false)
@@ -86,6 +86,10 @@ public class User extends BaseEntity {
 
     public void changeNickname(String nickname) {
         this.nickname = nickname;
+    }
+
+    public void changeEmail(String email) {
+        this.email = email;
     }
 
     public enum UserRole {

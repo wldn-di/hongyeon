@@ -1,6 +1,7 @@
 package com.ssafy.s14p11a707.game.entity;
 
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
+import com.ssafy.s14p11a707.user.entity.User;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -11,8 +12,8 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
-import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -20,7 +21,12 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@Table(name = "scenario_rankings")
+@Table(
+        name = "scenario_rankings",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_scenario_rankings_scenario_user", columnNames = {"scenario_id", "user_id"})
+        }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class ScenarioRanking {
 
@@ -33,8 +39,12 @@ public class ScenarioRanking {
     @JoinColumn(name = "scenario_id", nullable = false)
     private Scenario scenario;
 
-    @OneToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "session_id", nullable = false, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "session_id", nullable = false)
     private GameSession session;
 
     @Column(nullable = false)
@@ -44,18 +54,20 @@ public class ScenarioRanking {
     private long clearTime;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 20)
+    @Column(nullable = false, length = 5)
     private RankGrade rankGrade;
 
     @Builder
     public ScenarioRanking(
             Scenario scenario,
+            User user,
             GameSession session,
             int score,
             long clearTime,
             RankGrade rankGrade
     ) {
         this.scenario = scenario;
+        this.user = user;
         this.session = session;
         this.score = score;
         this.clearTime = clearTime;
@@ -67,7 +79,6 @@ public class ScenarioRanking {
         A,
         B,
         C,
-        D,
         F
     }
 }

@@ -4,6 +4,7 @@ import com.ssafy.s14p11a707.mock.MockFixtures;
 import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
 import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
+import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
 import com.ssafy.s14p11a707.review.service.ReviewService;
 import java.time.Instant;
 import java.util.List;
@@ -34,9 +35,10 @@ public class ReviewServiceMockImpl implements ReviewService {
                         r.nickname(),
                         r.rating(),
                         r.difficulty(),
-                        r.content(),
+                        r.isDeleted() ? "삭제된 리뷰입니다." : r.content(),
                         r.isSpoiler(),
-                        r.createdAt()
+                        r.createdAt(),
+                        r.isDeleted()
                 ))
                 .toList();
 
@@ -65,10 +67,16 @@ public class ReviewServiceMockImpl implements ReviewService {
     }
 
     @Override
-    public ReviewResponse updateReview(long reviewId, ReviewCreateRequest request) {
+    public ReviewResponse updateReview(long reviewId, ReviewUpdateRequest request) {
         StoredReview existing = REVIEWS.get(reviewId);
         if (existing == null) {
-            return StoredReview.fromCreate(reviewId, 1L, Instant.now(), request).toResponse();
+            ReviewCreateRequest createRequest = new ReviewCreateRequest(
+                    5,
+                    3,
+                    request == null ? null : request.content(),
+                    false
+            );
+            return StoredReview.fromCreate(reviewId, 1L, Instant.now(), createRequest).toResponse();
         }
 
         StoredReview updated = existing.applyUpdate(request, Instant.now());
@@ -78,7 +86,7 @@ public class ReviewServiceMockImpl implements ReviewService {
 
     @Override
     public ReviewResponse deleteReview(long reviewId) {
-        StoredReview existing = REVIEWS.remove(reviewId);
+        StoredReview existing = REVIEWS.get(reviewId);
         if (existing == null) {
             return new ReviewResponse(
                     reviewId,
@@ -94,18 +102,9 @@ public class ReviewServiceMockImpl implements ReviewService {
             );
         }
 
-        return new ReviewResponse(
-                existing.reviewId(),
-                existing.scenarioId(),
-                existing.userId(),
-                existing.nickname(),
-                existing.rating(),
-                existing.difficulty(),
-                "삭제된 리뷰입니다.",
-                existing.isSpoiler(),
-                existing.createdAt(),
-                Instant.now()
-        );
+        StoredReview deleted = existing.markDeleted(Instant.now());
+        REVIEWS.put(reviewId, deleted);
+        return deleted.toResponse();
     }
 
     private record StoredReview(
@@ -117,6 +116,7 @@ public class ReviewServiceMockImpl implements ReviewService {
             int difficulty,
             String content,
             boolean isSpoiler,
+            boolean isDeleted,
             Instant createdAt,
             Instant updatedAt
     ) {
@@ -140,19 +140,32 @@ public class ReviewServiceMockImpl implements ReviewService {
                     difficulty,
                     content,
                     spoiler,
+                    false,
                     now,
                     now
             );
         }
 
-        StoredReview applyUpdate(ReviewCreateRequest request, Instant now) {
-            int rating = request == null ? this.rating : clamp(request.rating(), 1, 5, this.rating);
-            int difficulty = request == null ? this.difficulty : clamp(request.difficulty(), 1, 5, this.difficulty);
+        StoredReview applyUpdate(ReviewUpdateRequest request, Instant now) {
             String content = request == null || request.content() == null || request.content().isBlank()
                     ? this.content
                     : request.content().trim();
-            boolean spoiler = request == null ? this.isSpoiler : request.isSpoiler();
+            return new StoredReview(
+                    reviewId,
+                    scenarioId,
+                    userId,
+                    nickname,
+                    this.rating,
+                    this.difficulty,
+                    content,
+                    this.isSpoiler,
+                    this.isDeleted,
+                    createdAt,
+                    now
+            );
+        }
 
+        StoredReview markDeleted(Instant now) {
             return new StoredReview(
                     reviewId,
                     scenarioId,
@@ -160,8 +173,9 @@ public class ReviewServiceMockImpl implements ReviewService {
                     nickname,
                     rating,
                     difficulty,
-                    content,
-                    spoiler,
+                    "",
+                    isSpoiler,
+                    true,
                     createdAt,
                     now
             );
@@ -175,7 +189,7 @@ public class ReviewServiceMockImpl implements ReviewService {
                     nickname,
                     rating,
                     difficulty,
-                    content,
+                    isDeleted ? "삭제된 리뷰입니다." : content,
                     isSpoiler,
                     createdAt,
                     updatedAt

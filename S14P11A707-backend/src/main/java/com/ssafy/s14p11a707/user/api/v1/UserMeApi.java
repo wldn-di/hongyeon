@@ -4,6 +4,7 @@ import com.ssafy.s14p11a707.ranking.dto.GlobalRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
 import com.ssafy.s14p11a707.user.dto.ActiveSessionListResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
+import com.ssafy.s14p11a707.user.dto.BookshelfStatusResponse;
 import com.ssafy.s14p11a707.user.service.v1.UserV1Service;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,12 @@ public class UserMeApi implements UserMeApiDoc {
     @Override
     public ResponseEntity<BookshelfStatsResponse> getMyBookshelfStats() {
         return ResponseEntity.ok(userService.getMyBookshelfStats());
+    }
+
+    @GetMapping("/bookshelf/sessions")
+    @Override
+    public ResponseEntity<BookshelfStatusResponse> getMyBookshelfSessions() {
+        return ResponseEntity.ok(userService.getMyBookshelfSessions());
     }
 
     @GetMapping("/rankings")

@@ -73,7 +73,16 @@ public class ScenarioServiceMockImpl implements ScenarioService {
         MockFixtures.ScenarioFixture scenario = generateScenario(scenarioId, request);
         CREATED.put(scenarioId, new CreatedScenario(scenario, Instant.now(), estimatedSeconds));
 
-        return new ScenarioCreateResponse(scenarioId, "GENERATING", estimatedSeconds);
+        ScenarioCreateResponse.OriginalRequest originalRequest = request == null
+                ? null
+                : new ScenarioCreateResponse.OriginalRequest(
+                request.title(),
+                request.userSynopsis(),
+                request.genre(),
+                request.suspectCount()
+        );
+
+        return new ScenarioCreateResponse(scenarioId, "GENERATING", estimatedSeconds, null, originalRequest);
     }
 
     @Override
@@ -86,7 +95,7 @@ public class ScenarioServiceMockImpl implements ScenarioService {
     public ScenarioRankingResponse getScenarioRankings(long scenarioId) {
         MockFixtures.ScenarioFixture created = createdScenarioOrNull(scenarioId);
         if (created != null) {
-            return new ScenarioRankingResponse(created.id(), List.of());
+            return new ScenarioRankingResponse(created.id(), false, List.of());
         }
         return MockFixtures.scenarioRankingResponse(scenarioId);
     }
@@ -143,9 +152,9 @@ public class ScenarioServiceMockImpl implements ScenarioService {
                 ? "미스터리"
                 : request.genre().trim();
         int suspectCount = request == null ? 4 : Math.max(2, Math.min(6, request.suspectCount()));
-        String synopsis = request == null || request.synopsis() == null || request.synopsis().isBlank()
+        String synopsis = request == null || request.userSynopsis() == null || request.userSynopsis().isBlank()
                 ? "의문의 사건이 발생했다. 제한된 공간, 제한된 시간. 당신의 추리가 필요하다."
-                : request.synopsis().trim();
+                : request.userSynopsis().trim();
 
         long victimId = scenarioId * 100 + 1;
         MockFixtures.VictimFixture victim = new MockFixtures.VictimFixture(

@@ -1,12 +1,9 @@
 package com.ssafy.s14p11a707.game.entity;
 
 import com.ssafy.s14p11a707.common.entity.CreatedAtEntity;
-import com.ssafy.s14p11a707.scenario.entity.Clue;
 import com.ssafy.s14p11a707.scenario.entity.Suspect;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
-import jakarta.persistence.EnumType;
-import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -35,58 +32,40 @@ public class ChatMessage extends CreatedAtEntity {
     @JoinColumn(name = "session_id", nullable = false)
     private GameSession session;
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 30)
-    private TargetType targetType;
-
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "suspect_id")
     private Suspect suspect;
 
-    @Enumerated(EnumType.STRING)
-    @Column(length = 30)
-    private MessageRole role;
+    @Column(nullable = false, length = 20)
+    private String role;
 
     @Lob
+    @Column(nullable = false)
     private String content;
 
-    @Column(name = "is_key", nullable = false)
-    private boolean keyMessage;
+    private Long usedClueId;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "revealed_clue_id")
-    private Clue revealedClue;
+    private Integer responseLevel;
+
+    @Column(name = "is_key_talk", nullable = false)
+    private boolean keyTalk;
 
     @Builder
     public ChatMessage(
             GameSession session,
-            TargetType targetType,
             Suspect suspect,
-            MessageRole role,
+            String role,
             String content,
-            boolean keyMessage,
-            Clue revealedClue
+            Long usedClueId,
+            Integer responseLevel,
+            boolean keyTalk
     ) {
         this.session = session;
-        this.targetType = targetType;
         this.suspect = suspect;
         this.role = role;
         this.content = content;
-        this.keyMessage = keyMessage;
-        this.revealedClue = revealedClue;
-    }
-
-    public enum TargetType {
-        SUSPECT,
-        VICTIM,
-        ROOM,
-        CLUE,
-        SYSTEM
-    }
-
-    public enum MessageRole {
-        USER,
-        ASSISTANT,
-        SYSTEM
+        this.usedClueId = usedClueId;
+        this.responseLevel = responseLevel;
+        this.keyTalk = keyTalk;
     }
 }

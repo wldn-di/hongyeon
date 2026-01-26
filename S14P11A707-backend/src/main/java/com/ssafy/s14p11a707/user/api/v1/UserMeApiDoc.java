@@ -5,6 +5,7 @@ import com.ssafy.s14p11a707.ranking.dto.GlobalRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
 import com.ssafy.s14p11a707.user.dto.ActiveSessionListResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
+import com.ssafy.s14p11a707.user.dto.BookshelfStatusResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -35,6 +36,26 @@ public interface UserMeApiDoc {
             )
     })
     ResponseEntity<BookshelfStatsResponse> getMyBookshelfStats();
+
+    @Operation(summary = "내 책장 기록 통합 조회", description = "내 책장(완료/미제/실패 등) 기록을 통합 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(schema = @Schema(implementation = BookshelfStatusResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 입력 값",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<BookshelfStatusResponse> getMyBookshelfSessions();
 
     @Operation(summary = "내 랭킹 조회", description = "내 랭킹 정보를 조회합니다.")
     @ApiResponses({

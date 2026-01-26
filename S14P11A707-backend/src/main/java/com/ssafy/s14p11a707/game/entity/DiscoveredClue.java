@@ -10,6 +10,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
+import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -17,7 +19,12 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@Table(name = "discovered_clues")
+@Table(
+        name = "discovered_clues",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_discovered_clues_session_clue", columnNames = {"session_id", "clue_id"})
+        }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class DiscoveredClue {
 
@@ -34,18 +41,17 @@ public class DiscoveredClue {
     @JoinColumn(name = "clue_id", nullable = false)
     private Clue clue;
 
-    @Column(name = "is_neo4j_synced", nullable = false)
-    private boolean neo4jSynced;
+    private Instant discoveredAt;
 
     @Builder
     public DiscoveredClue(
             GameSession session,
             Clue clue,
-            boolean neo4jSynced
+            Instant discoveredAt
     ) {
         this.session = session;
         this.clue = clue;
-        this.neo4jSynced = neo4jSynced;
+        this.discoveredAt = discoveredAt;
     }
 }
 

@@ -7,6 +7,7 @@ import java.util.List;
 public record FloorMoveResponse(
         long sessionId,
         int currentFloor,
+        boolean isFirstVisit,
         Room room,
         List<EventLog> eventLogs
 ) {
@@ -16,6 +17,7 @@ public record FloorMoveResponse(
             int floorNumber,
             String roomName,
             String roomType,
+            String description,
             String assistantComment,
             JsonNode objects
     ) {

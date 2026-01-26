@@ -18,7 +18,10 @@ public record ScenarioListResponse(
             String thumbnailUrl,
             int playCount,
             BigDecimal avgRating,
-            BigDecimal avgDifficulty
+            BigDecimal avgDifficulty,
+            String status,
+            Integer progress,
+            String generationMessage
     ) {
     }
 }

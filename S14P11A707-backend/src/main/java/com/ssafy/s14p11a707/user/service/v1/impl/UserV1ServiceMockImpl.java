@@ -6,7 +6,9 @@ import com.ssafy.s14p11a707.ranking.dto.GlobalRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
 import com.ssafy.s14p11a707.user.dto.ActiveSessionListResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
+import com.ssafy.s14p11a707.user.dto.BookshelfStatusResponse;
 import com.ssafy.s14p11a707.user.service.v1.UserV1Service;
+import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -24,9 +26,39 @@ public class UserV1ServiceMockImpl implements UserV1Service {
                 27,
                 14,
                 14f / 27f,
-                4,
-                12_340,
-                1850L
+                4
+        );
+    }
+
+    @Override
+    public BookshelfStatusResponse getMyBookshelfSessions() {
+        long userId = MockFixtures.meUserId();
+
+        List<BookshelfStatusResponse.Item> items = sessionStore.listActiveSessions(userId).stream()
+                .map(s -> {
+                    MockFixtures.ScenarioFixture scenario = MockFixtures.scenario(s.scenarioId());
+                    return new BookshelfStatusResponse.Item(
+                            s.sessionId(),
+                            s.status(),
+                            s.playTime(),
+                            Instant.now(),
+                            s.scenarioId(),
+                            scenario.title(),
+                            scenario.synopsis(),
+                            scenario.genre(),
+                            "MEDIUM",
+                            scenario.thumbnailUrl(),
+                            null,
+                            null
+                    );
+                })
+                .toList();
+
+        return new BookshelfStatusResponse(
+                items,
+                1,
+                items.size(),
+                0
         );
     }
 

@@ -43,22 +43,27 @@ public class GameSession extends BaseEntity {
     private User user;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, length = 20)
     private Status status;
 
-    @Column(name = "is_success", nullable = false)
-    private boolean success;
-
-    @Column(nullable = false)
-    private int finalScore;
-
-    @Enumerated(EnumType.STRING)
-    @Column(length = 20)
-    private RankGrade rankGrade;
+    private Integer currentFloor;
 
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private JsonNode sessionProgressJson;
+    @Column(name = "visited_floors", columnDefinition = "jsonb")
+    private JsonNode visitedFloorsJson;
+
+    private Integer health;
+
+    private Integer submitAttempts;
+
+    @Column(name = "is_first_play")
+    private Boolean firstPlay;
+
+    private Integer finalScore;
+
+    @Enumerated(EnumType.STRING)
+    @Column(length = 5)
+    private RankGrade rankGrade;
 
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
@@ -68,44 +73,53 @@ public class GameSession extends BaseEntity {
 
     private Instant completedAt;
 
-    @Column(nullable = false)
-    private long playTime;
+    private Long playTime;
 
     private Instant lastSavedAt;
+
+    private Instant expiresAt;
 
     @Builder
     public GameSession(
             Scenario scenario,
             User user,
             Status status,
-            boolean success,
-            int finalScore,
+            Integer currentFloor,
+            JsonNode visitedFloorsJson,
+            Integer health,
+            Integer submitAttempts,
+            Boolean firstPlay,
+            Integer finalScore,
             RankGrade rankGrade,
-            JsonNode sessionProgressJson,
             JsonNode resultReportJson,
             Instant startedAt,
             Instant completedAt,
-            long playTime,
-            Instant lastSavedAt
+            Long playTime,
+            Instant lastSavedAt,
+            Instant expiresAt
     ) {
         this.scenario = scenario;
         this.user = user;
-        this.status = status == null ? Status.IN_PROGRESS : status;
-        this.success = success;
+        this.status = status == null ? Status.PLAYING : status;
+        this.currentFloor = currentFloor;
+        this.visitedFloorsJson = visitedFloorsJson;
+        this.health = health;
+        this.submitAttempts = submitAttempts;
+        this.firstPlay = firstPlay;
         this.finalScore = finalScore;
         this.rankGrade = rankGrade;
-        this.sessionProgressJson = sessionProgressJson;
         this.resultReportJson = resultReportJson;
         this.startedAt = startedAt;
         this.completedAt = completedAt;
         this.playTime = playTime;
         this.lastSavedAt = lastSavedAt;
+        this.expiresAt = expiresAt;
     }
 
     public enum Status {
-        CREATED,
-        IN_PROGRESS,
+        PLAYING,
         COMPLETED,
+        FAILED,
         ABANDONED
     }
 
@@ -114,7 +128,6 @@ public class GameSession extends BaseEntity {
         A,
         B,
         C,
-        D,
         F
     }
 }

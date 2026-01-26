@@ -112,6 +112,7 @@ public class MockSessionStore {
         private long playTime;
 
         private final Map<Long, List<ChatHistoryResponse.Message>> chatBySuspectId = new HashMap<>();
+        private final Map<Long, SuspectState> suspectStates = new HashMap<>();
         private final Map<Long, Instant> discoveredClues = new HashMap<>();
         private final List<EventLogListResponse.Log> logs = new ArrayList<>();
 
@@ -228,10 +229,29 @@ public class MockSessionStore {
             return List.copyOf(chatBySuspectId.getOrDefault(suspectId, List.of()));
         }
 
-        public synchronized void addChat(long suspectId, String role, String content, boolean isKeyTalk, Instant now) {
+        public synchronized void addChat(
+                long suspectId,
+                String role,
+                String content,
+                boolean isKeyTalk,
+                Instant now,
+                Long usedClueId,
+                Integer responseLevel
+        ) {
             chatBySuspectId.computeIfAbsent(suspectId, ignored -> new ArrayList<>())
-                    .add(new ChatHistoryResponse.Message(role, content, isKeyTalk, now));
+                    .add(new ChatHistoryResponse.Message(role, content, now, isKeyTalk, usedClueId, responseLevel));
             logs.add(new EventLogListResponse.Log("CHAT", "INTERROGATION", "용의자 심문이 진행됐다.", now));
+
+            if (responseLevel != null && "assistant".equalsIgnoreCase(role)) {
+                SuspectState current = suspectStates.getOrDefault(suspectId, new SuspectState(1, false));
+                int nextLevel = Math.max(current.currentInterrogationLevel(), responseLevel);
+                boolean nextSecretRevealed = current.isSecretRevealed() || responseLevel >= 3;
+                suspectStates.put(suspectId, new SuspectState(nextLevel, nextSecretRevealed));
+            }
+        }
+
+        public synchronized SuspectState suspectState(long suspectId) {
+            return suspectStates.getOrDefault(suspectId, new SuspectState(1, false));
         }
 
         public synchronized boolean discoverClue(long clueId, Instant now) {
@@ -276,6 +296,17 @@ public class MockSessionStore {
             }
         }
 
+        public synchronized void updateBoardMemo(long nodeId, String memoContent) {
+            for (int i = 0; i < boardNodes.size(); i++) {
+                BoardNode n = boardNodes.get(i);
+                if (n.nodeId() == nodeId) {
+                    boardNodes.set(i, new BoardNode(n.nodeId(), n.type(), n.targetId(), memoContent, n.x(), n.y()));
+                    logs.add(new EventLogListResponse.Log("GAME", "BOARD", "보드 메모를 수정했다.", Instant.now()));
+                    return;
+                }
+            }
+        }
+
         public synchronized Optional<BoardConnection> addBoardConnection(BoardConnection connection) {
             boardConnections.add(connection);
             logs.add(new EventLogListResponse.Log("GAME", "BOARD", "보드에 연결선을 추가했다.", Instant.now()));
@@ -293,8 +324,8 @@ public class MockSessionStore {
             logs.add(new EventLogListResponse.Log("GAME", "BOARD", "보드 항목을 삭제했다.", Instant.now()));
         }
 
-        public synchronized void markSubmitted(boolean success, int finalScore, String rankGrade, Instant now) {
-            this.status = "COMPLETED";
+        public synchronized void markSubmitted(String status, boolean success, int finalScore, String rankGrade, Instant now) {
+            this.status = status;
             this.success = success;
             this.finalScore = finalScore;
             this.rankGrade = rankGrade;
@@ -346,6 +377,12 @@ public class MockSessionStore {
             }
 
             return false;
+        }
+
+        public record SuspectState(
+                int currentInterrogationLevel,
+                boolean isSecretRevealed
+        ) {
         }
     }
 }

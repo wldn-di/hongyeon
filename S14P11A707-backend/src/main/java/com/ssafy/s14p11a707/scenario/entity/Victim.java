@@ -1,7 +1,6 @@
 package com.ssafy.s14p11a707.scenario.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.ssafy.s14p11a707.common.entity.CreatedAtEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -23,7 +22,7 @@ import org.hibernate.type.SqlTypes;
 @Entity
 @Table(name = "victims")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Victim extends CreatedAtEntity {
+public class Victim {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,21 +36,22 @@ public class Victim extends CreatedAtEntity {
     @Column(nullable = false, length = 100)
     private String name;
 
-    private int age;
+    private Integer age;
 
     @Column(length = 20)
     private String gender;
 
     @Column(length = 100)
-    private String role;
+    private String occupation;
 
     @Lob
+    @Column(nullable = false)
     private String background;
 
     @Column(length = 200)
     private String discoveryLocation;
 
-    @Column(length = 200)
+    @Column(length = 100)
     private String estimatedDeathTime;
 
     @Column(length = 200)
@@ -61,16 +61,16 @@ public class Victim extends CreatedAtEntity {
     @Column(columnDefinition = "jsonb")
     private JsonNode victimDetailJson;
 
-    @Column(length = 2048)
+    @Column(length = 500)
     private String portraitUrl;
 
     @Builder
     public Victim(
             Scenario scenario,
             String name,
-            int age,
+            Integer age,
             String gender,
-            String role,
+            String occupation,
             String background,
             String discoveryLocation,
             String estimatedDeathTime,
@@ -82,7 +82,7 @@ public class Victim extends CreatedAtEntity {
         this.name = name;
         this.age = age;
         this.gender = gender;
-        this.role = role;
+        this.occupation = occupation;
         this.background = background;
         this.discoveryLocation = discoveryLocation;
         this.estimatedDeathTime = estimatedDeathTime;

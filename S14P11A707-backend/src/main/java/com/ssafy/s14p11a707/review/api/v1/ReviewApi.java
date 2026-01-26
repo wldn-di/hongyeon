@@ -1,7 +1,7 @@
 package com.ssafy.s14p11a707.review.api.v1;
 
-import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
+import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
 import com.ssafy.s14p11a707.review.service.ReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -23,7 +23,7 @@ public class ReviewApi implements ReviewApiDoc {
     @Override
     public ResponseEntity<ReviewResponse> updateReview(
             @PathVariable long reviewId,
-            @RequestBody ReviewCreateRequest request
+            @RequestBody ReviewUpdateRequest request
     ) {
         return ResponseEntity.ok(reviewService.updateReview(reviewId, request));
     }

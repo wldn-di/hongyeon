@@ -1,7 +1,6 @@
 package com.ssafy.s14p11a707.scenario.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.ssafy.s14p11a707.common.entity.CreatedAtEntity;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -12,6 +11,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
@@ -21,9 +21,14 @@ import org.hibernate.type.SqlTypes;
 
 @Getter
 @Entity
-@Table(name = "rooms")
+@Table(
+        name = "rooms",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_rooms_scenario_floor", columnNames = {"scenario_id", "floor_number"})
+        }
+)
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class Room extends CreatedAtEntity {
+public class Room {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -37,17 +42,20 @@ public class Room extends CreatedAtEntity {
     @Column(nullable = false)
     private int floorNumber;
 
-    @Column(length = 50)
+    @Column(nullable = false, length = 50)
     private String roomType;
 
-    @Column(nullable = false, length = 200)
+    @Column(length = 100)
     private String roomName;
 
     @Lob
     private String description;
 
+    @Lob
+    private String assistantComment;
+
     @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
+    @Column(nullable = false, columnDefinition = "jsonb")
     private JsonNode objectJson;
 
     @Builder
@@ -57,6 +65,7 @@ public class Room extends CreatedAtEntity {
             String roomType,
             String roomName,
             String description,
+            String assistantComment,
             JsonNode objectJson
     ) {
         this.scenario = scenario;
@@ -64,6 +73,7 @@ public class Room extends CreatedAtEntity {
         this.roomType = roomType;
         this.roomName = roomName;
         this.description = description;
+        this.assistantComment = assistantComment;
         this.objectJson = objectJson;
     }
 }

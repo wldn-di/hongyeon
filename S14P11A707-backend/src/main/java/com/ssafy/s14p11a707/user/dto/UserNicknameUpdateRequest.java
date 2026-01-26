@@ -7,7 +7,7 @@ import jakarta.validation.constraints.Size;
 public record UserNicknameUpdateRequest(
         @Schema(description = "변경할 닉네임", example = "홍연탐정")
         @NotBlank
-        @Size(max = 30)
+        @Size(max = 50)
         String nickname
 ) {
 }

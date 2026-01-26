@@ -1,0 +1,343 @@
+{
+  "dtos": [
+    {
+      "id": "2f143ea2-73fc-81cd-b6fc-cb363d805013",
+      "name": "ActiveSessionListResponse(수정본)",
+      "summary": "미완의 기록(진행중 세션) 목록 응답",
+      "codeBlocks": [
+        "{\n  \"content\": [\n    {\n      \"sessionId\": \"long\",\n      \"scenarioId\": \"long\",\n      \"title\": \"string\",\n      \"thumbnailUrl\": \"string\",\n      \"status\": \"string\",        // PLAYING | ABANDONED\n      \"currentFloor\": \"int\",\n      \"health\": \"int\",\n      \"submitAttempts\": \"int\",\n      \"lastSavedAt\": \"datetime\",\n      \"expiresAt\": \"datetime\"\n    }\n  ],\n  \"totalPages\": \"int\",\n  \"totalElements\": \"long\",\n  \"currentPage\": \"int\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-816d-abb6-c02c55da618a",
+      "name": "BoardConnectionAddRequest(수정본)",
+      "summary": "연결선 추가 요청",
+      "codeBlocks": [
+        "{\n  \"fromNodeId\": \"long\",\n  \"toNodeId\": \"long\",\n  \"type\": \"string\"   // RED | YELLOW\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8196-a615-f714a3f1d662",
+      "name": "BoardDeleteRequest(수정본)",
+      "summary": "보드 노드/연결선 삭제 요청",
+      "codeBlocks": [
+        "{\n  \"nodeIds\": \"long[]\",        // 선택\n  \"connectionIds\": \"long[]\"   // 선택\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8121-a6ac-d520441508b8",
+      "name": "BoardItemMoveRequest(수정본)",
+      "summary": "보드 노드 위치 이동 요청",
+      "codeBlocks": [
+        "{\n  \"nodeId\": \"long\",\n  \"x\": \"int\",\n  \"y\": \"int\"\n}"
+      ]
+    },
+    {
+      "id": "2f343ea2-73fc-80be-b063-e815321ac534",
+      "name": "BoardMemoUpdateRequest(수정본)",
+      "summary": "보드메모 수정",
+      "codeBlocks": [
+        "@Getter\npublic class BoardMemoUpdateRequest {\n    @NotBlank\n    @Size(max = 500)\n    private String memoContent;\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-814c-9dd1-d4c924e2484b",
+      "name": "BoardNodeAddRequest(수정본)",
+      "summary": "보드 노드 추가(단서/장소/메모) 요청",
+      "codeBlocks": [
+        "{\n  \"type\": \"string\",        // CLUE | LOCATION | MEMO\n  \"targetId\": \"long\",       // CLUE면 clueId, LOCATION이면 roomId(또는 floor를 targetId로 정하는 정책)\n  \"memoContent\": \"string\",  // MEMO일 때만\n  \"x\": \"int\",\n  \"y\": \"int\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8126-a3ab-e763549a4a14",
+      "name": "BoardResponse(수정본)",
+      "summary": "PostgreSQL board_nodes/board_connections 기반",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"nodes\": [\n    {\n      \"nodeId\": \"long\",          // board_nodes.id\n      \"type\": \"string\",          // VICTIM | SUSPECT | CLUE | MEMO | LOCATION\n      \"targetId\": \"long\",         // victim/suspect/clue/room id (MEMO면 null)\n      \"memoContent\": \"string\",    // MEMO일 때만\n      \"x\": \"int\",\n      \"y\": \"int\"\n    }\n  ],\n  \"connections\": [\n    {\n      \"connectionId\": \"long\",     // board_connections.id\n      \"fromNodeId\": \"long\",\n      \"toNodeId\": \"long\",\n      \"type\": \"string\"            // RED | YELLOW\n    }\n  ],\n  \"redConnectionCount\": \"int\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8188-9392-e8169ceaf02a",
+      "name": "BookshelfStatsResponse(수정본)",
+      "summary": "내 책장 통계 응답(기획서: 총플레이/성공/클리어율/S랭크)",
+      "codeBlocks": [
+        "{\n  \"userId\": \"long\",\n  \"totalAttempts\": \"int\", // 총 플레이 수\n  \"totalClears\": \"int\",   // 총 클리어 수(COMPLETED)\n  \"clearRate\": \"float\",   // 클리어 확률(총 클리어 수 / 총 플레이 수)\n  \"sRankCount\": \"int\"     // S랭크 획득 수 -> 내가 플레이한 세션에서 sRankCount 조회하는 로직 추가 필요\n}"
+      ]
+    },
+    {
+      "id": "2f343ea2-73fc-807f-83ff-e5c2f65c5a45",
+      "name": "BookshelfStatusResponse(수정본)",
+      "summary": "내 책장 상태 응답(미완/미제/클리어)",
+      "codeBlocks": [
+        "{\n  \"content\": [\n    {\n      \"sessionId\": \"long\",\n      \"status\": \"string\",\n      \"playTime\": \"long\",\n      \"playedAt\": \"datetime\",\n      \n      // 시나리오 정보 (JOIN)\n      \"scenarioId\": \"long\",\n      \"title\": \"string\",\n      \"synopsis\": \"string\",\n      \"genre\": \"string\",\n      \"difficulty\" : \"string\",\n      \"thumbnailUrl\": \"string\",\n      \n      // 결과 정보 (COMPLETED/FAILED일 때만)\n      \"finalScore\": \"int\",\n      \"rankGrade\": \"string\"\n    }\n  ],\n  \"totalPages\": \"int\",\n  \"totalElements\": \"long\",\n  \"currentPage\": \"int\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-819c-a70e-f45313563d98",
+      "name": "ChatHistoryResponse(수정본)",
+      "summary": "채팅 내역 조회 응답(chat_messages 기반)",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"suspectId\": \"long\",\n  \"messages\": [\n    {\n      \"role\": \"string\",          // user | suspects\n      \"content\": \"string\",\n      \"createdAt\": \"datetime\",\n      \"isKeyTalk\": \"boolean\",\n      \"usedClueId\" : \"long\",\n      \"responseLevel\" : \"int\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8191-9344-ca440e25258e",
+      "name": "ClueListResponse(수정본)",
+      "summary": "단서 목록(시나리오 기준) + 획득여부(세션 기준)",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"scenarioId\": \"long\",\n  \"clues\": [\n    {\n      \"clueId\": \"long\",\n      \"roomId\": \"long\",\n      \"floorNumber\": \"int\",\n      \"name\": \"string\",\n      \"importance\": \"string\",\n      \"discovered\": \"boolean\",\n      \"discoveredAt\": \"datetime\"\n    },\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8111-a6a7-e1a556cc5ad8",
+      "name": "DiscoveredClueResponse(수정본)",
+      "summary": "단서 획득 응답 - discovered_clues + clues",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"clue\": {\n    \"clueId\": \"long\",\n    \"name\": \"string\",\n    \"description\": \"string\",\n    \"importance\": \"string\",\n    \"detailImageUrl\": \"string\",\n    \"assistantComment\": \"string\"\n  },\n  \"discoveredAt\": \"datetime\",\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8182-8bf3-d2d7fab99610",
+      "name": "EventLogListResponse(수정본)",
+      "summary": "수사 로그 조회 응답 - event_logs",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"logs\": [\n    {\n      \"type\": \"string\",\n      \"name\": \"string\",\n      \"message\": \"string\",\n      \"createdAt\": \"datetime\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81ee-ac35-cc2e9ede241e",
+      "name": "FloorMoveResponse(수정본)",
+      "summary": "층 이동 응답 - rooms + event_logs",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"currentFloor\": \"int\",\n  \"isFirstVisit\": \"boolean\",\n  \"room\": {\n    \"roomId\": \"long\",\n    \"floorNumber\": \"int\",\n    \"roomName\": \"string\",\n    \"roomType\": \"string\",\n    \"description\": \"string\",\n    \"assistantComment\": \"string\", // is_fisrt_visit = true 일 때만 제공, false면 null\n    \"objects\": \"json\"             // rooms.object_json\n  },\n  \"eventLogs\": [\n    {\n      \"type\": \"string\",\n      \"message\": \"string\",\n      \"createdAt\": \"datetime\"\n    }\n  ]\n}",
+        "/*예시\npublic FloorMoveResponse moveFloor(String odcId, Long sessionId, Integer targetFloor) {\n    // 1. 세션 권한 확인\n    GameSession session = validateSession(odcId, sessionId);\n    \n    // 2. 해당 층 방 조회\n    Room room = roomRepository.findByScenarioIdAndFloorNumber(\n        session.getScenarioId(), \n        targetFloor\n    ).orElseThrow(() -> new RuntimeException(\"해당 층이 없습니다\"));\n    \n    // 3. current_floor 갱신\n    session.setCurrentFloor(targetFloor);\n    \n    // 4. visited_floors 처리\n    List<Integer> visitedFloors = session.getVisitedFloors();\n    boolean isFirstVisit = !visitedFloors.contains(targetFloor);\n    if (isFirstVisit) {\n        visitedFloors.add(targetFloor);\n        session.setVisitedFloors(visitedFloors);\n    }\n    \n    // 5. 세션 저장\n    sessionRepository.save(session);\n    \n    // 6. event_logs 기록\n    EventLog eventLog = EventLog.builder()\n        .sessionId(sessionId)\n        .type(\"FLOOR_MOVED\")\n        .message(targetFloor + \"층으로 이동했습니다\")\n        .build();\n    eventLogRepository.save(eventLog);\n    \n    // 7. 응답 반환\n    return new FloorMoveResponse(\n        sessionId,\n        targetFloor,\n        isFirstVisit,\n        new RoomDto(room, isFirstVisit ? room.getAssistantComment() : null),\n        List.of(new EventLogDto(eventLog))\n    );\n}\n*/"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8186-ae63-c08f53920035",
+      "name": "GameEndResponse(수정본)",
+      "summary": "게임 종료(중도 종료 포함) 응답",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"status\": \"string\",        // COMPLETED | FAILED | ABANDONED\n  \"isSuccess\": \"boolean\",\n  \"completedAt\": \"datetime\",\n  \"finalScore\": \"int\",\n  \"rankGrade\": \"string\"       // S/A/B/C/F\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8194-9dde-f055dd71c93a",
+      "name": "GameResumeResponse(수정본)",
+      "summary": "이어하기(세션 복원) 응답 - game_sessions + board + inventory 스냅샷",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"scenarioId\": \"long\",\n  \"userId\": \"long\",\n  \"status\": \"string\",           // PLAYING | COMPLETED | FAILED\n\n  \"currentFloor\": \"int\",\n  \"visitedFloors\": \"int[]\",     // game_sessions.visited_floors\n  \"health\": \"int\",\n  \"submitAttempts\": \"int\",\n\n  \"playTime\": \"long\",           // seconds\n  \"lastSavedAt\": \"datetime\",\n  \"expiresAt\": \"datetime\",\n\n  \"inventory\": {\n    \"clues\": [\n      {\n        \"clueId\": \"long\",\n        \"name\": \"string\",\n        \"importance\": \"string\",\n        \"discoveredAt\": \"datetime\"\n      }\n    ]\n  },\n\n  \"board\": {\n    \"nodes\": \"BoardNode[]\",\n    \"connections\": \"BoardConnection[]\",\n    \"redConnectionCount\": \"int\"\n  }\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81ca-9a87-edd49091d84e",
+      "name": "GameSaveRequest(수정본)",
+      "summary": "게임 상태 저장 요청 - game_sessions 진행상태 저장",
+      "codeBlocks": [
+        "{\n  \"currentFloor\": \"int\",\n  \"visitedFloors\": \"int[]\",\n  \"health\": \"int\",\n  \"playTime\": \"long\"  // seconds\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-811c-878f-c8c2f8b8c7c8",
+      "name": "GameSaveResponse(수정본)",
+      "summary": "게임 상태 저장 응답",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"status\": \"string\",\n  \"lastSavedAt\": \"datetime\",\n  \"expiresAt\": \"datetime\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-813e-958b-fea95603693e",
+      "name": "GameStartResponse(수정본)",
+      "summary": "rooms.object_json을 currentRoom.objects로 그대로 내려주는 구조 권장",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"scenarioId\": \"long\",\n  \"userId\": \"long\",\n  \"status\": \"string\",        // PLAYING\n  \"startedAt\": \"datetime\",\n\n  \"scenario\": {\n    \"title\": \"string\",\n    \"opening\": \"string\"      // story_config_json.narration.opening\n  },\n\n  \"victim\": {\n    \"name\": \"string\",\n    \"age\": \"int\",\n    \"gender\": \"string\",\n    \"occupation\": \"string\",\n    \"discoveryLocation\": \"string\",\n    \"estimatedDeathTime\": \"string\",\n    \"causeOfDeath\": \"string\",\n    \"portraitUrl\": \"string\"\n  },\n\n  \"currentRoom\": {\n    \"floorNumber\": \"int\",\n    \"roomName\": \"string\",\n    \"roomType\": \"string\",\n    \"objects\": \"json\"         // rooms.object_json (프론트 배치 정보 그대로)\n  },\n\n  \"eventLogs\": [\n    {\n      \"type\": \"string\",\n      \"message\": \"string\",\n      \"createdAt\": \"datetime\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-811f-94cf-d61c5ca7c578",
+      "name": "GlobalRankingResponse(수정본)",
+      "summary": "전체 랭킹 조회 응답 + 내 순위 표시",
+      "codeBlocks": [
+        "{\n  \"type\": \"string\",            // SCORE | CLEARS | PLAYTIME\n  \"top10\": [\n    {\n      \"rank\": \"int\",\n      \"userId\": \"long\",\n      \"nickname\": \"string\",\n      \"value\": \"long\"\n    }\n  ],\n  \"myRank\": {\n    \"rank\": \"int\",\n    \"userId\": \"long\",\n    \"nickname\": \"string\",\n    \"value\": \"long\"\n  }\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81af-a80c-e752bbfaeb34",
+      "name": "InvestigationReportResponse(수정본)",
+      "summary": "수사보고서 생성/조회 응답(game_sessions.result_report_json 기반)",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"scenarioId\": \"long\",\n  \"userId\": \"long\",\n\n  \"rankGrade\": \"string\",\n  \"finalScore\": \"int\",\n  \"summary\": \"string\",\n  \"aiComment\": \"string\",\n\n  \"stats\": {\n    \"totalInterrogations\": \"int\",\n    \"cluesCollected\": \"int\"\n  },\n\n  \"keyTalks\": [\n    {\n      \"suspectId\": \"long\",\n      \"content\": \"string\",\n      \"createdAt\": \"datetime\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81d7-85d3-ed0bb1277845",
+      "name": "ReviewCreateRequest(수정본)",
+      "summary": "리뷰 작성/수정 요청",
+      "codeBlocks": [
+        "{\n  \"rating\": \"int\",       // 1~5\n  \"difficulty\": \"int\",   // 1~3(EASY | MEDIUM | HARD)\n  \"content\": \"string\",\n  \"isSpoiler\": \"boolean\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81b3-8ddc-d17d47a9518e",
+      "name": "ReviewListResponse(수정본)",
+      "summary": "리뷰 목록 응답(페이징)",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": \"long\",\n  \"content\": [\n    {\n      \"reviewId\": \"long\",\n      \"userId\": \"long\",\n      \"nickname\": \"string\",\n      \"rating\": \"int\",\n      \"difficulty\": \"int\",\n      \"content\": \"string\", \n      \"isSpoiler\": \"boolean\",\n      \"createdAt\": \"datetime\",\n      \"isDeleted\" : \"boolean\" \n    }\n  ],\n  \"totalPages\": \"int\",\n  \"totalElements\": \"long\",\n  \"currentPage\": \"int\"\n}\n\n\n/* 예시\npublic class ReviewListResponse {\n    private Long reviewId;\n    private Long userId;\n    private String nickname;\n    private Integer rating;\n    private Integer difficulty;\n    private String content;\n    private boolean isSpoiler;\n    private boolean isDeleted;      // 추가\n    private LocalDateTime createdAt;\n    \n    public ReviewDto(Review review, String nickname) {\n        this.reviewId = review.getId();\n        this.userId = review.getUserId();\n        this.nickname = nickname;\n        this.rating = review.getRating();\n        this.difficulty = review.getDifficulty();\n        this.isDeleted = review.isDeleted();\n        this.content = review.isDeleted() ? \"삭제된 리뷰입니다.\" : review.getContent();\n        this.isSpoiler = review.isSpoiler();\n        this.createdAt = review.getCreatedAt();\n    }\n}\n*/"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81a2-8060-d1748e0d4447",
+      "name": "ReviewResponse(수정본)",
+      "summary": "리뷰 단건 응답",
+      "codeBlocks": [
+        "{\n  \"reviewId\": \"long\",\n  \"scenarioId\": \"long\",\n  \"userId\": \"long\",\n  \"nickname\": \"string\",\n  \"rating\": \"int\",\n  \"difficulty\": \"int\",\n  \"content\": \"string\",\n  \"isSpoiler\": \"boolean\",\n  \"createdAt\": \"datetime\",\n  \"updatedAt\": \"datetime\"\n}"
+      ]
+    },
+    {
+      "id": "2f343ea2-73fc-80da-be8b-e5e4daf89e9f",
+      "name": "ReviewUpdateRequest(수정본)",
+      "summary": "리뷰 comment 수정",
+      "codeBlocks": [
+        "{\n\t  \"content\": \"string\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81ac-b3e3-eef2e3d18824",
+      "name": "RoomListResponse(수정본)",
+      "summary": "방(층) 정보 목록 조회 응답",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": Long,           // 시나리오 ID\n  \"scenarioTitle\": String,      // 시나리오 제목 (표시용)\n  \"rooms\": [                    // 방 6개 리스트\n    {\n      \"roomId\": Long,           // 방 고유 ID\n      \"floorNumber\": Integer,   // 1 ~ 6\n      \"roomType\": String,       // \"LIVING_ROOM\", \"KITCHEN\" ...\n      \"roomName\": String,       // \"화려한 거실\"\n      \"description\": String,    // \"피해자가 마지막까지 있었던...\"\n      \n      \"assistantComment\": String, // (구: entry_narration) 처음 방 진입 시 조력자 독백\n                                  // 방문했던 방이면 null 반환\n\t   \n      \"objects\": Array<Object>    // ★ 여기가 핵심 (rooms.object_json + clues)\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8163-a739-e78830f80f46",
+      "name": "ScenarioCreateRequest(수정본)",
+      "summary": "시나리오 생성 요청 (기획서 수정본: 용의자 4~5명)",
+      "codeBlocks": [
+        "{\n  \"title\": \"string\",\n  \"genre\": \"string\",          // THRILLER | MYSTERY | HORROR | ROMANCE | SF\n  \"suspectCount\": \"int\",      // 4~5\n  \"userSynopsis\": \"string\"        // 사용자 입력 시놉시스\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81bd-8778-c7a2fd1c5e5a",
+      "name": "ScenarioCreateResponse(수정본)",
+      "summary": "시나리오 생성 요청 응답 - 생성 상태/예상시간(선택)",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": \"long\",\n  \"status\": \"string\",          // GENERATING | COMPLETED | FAILED\n  \"estimatedTime\" : \"int\",     // seconds (선택)\n  \"errorMessage\": \"string\",\n  \"originalRequest\": {\n    \"title\": \"string\",\n    \"synopsis\": \"string\",\n    \"genre\": \"string\",\n    \"suspectCount\": \"int\"\n  }\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8168-b1fb-daa17e4688ca",
+      "name": "ScenarioDeleteResponse(수정본)",
+      "summary": "시나리오 삭제 응답",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": \"long\",\n  \"deleted\": \"boolean\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-812c-89e7-cca1e61dfbf2",
+      "name": "ScenarioDetailResponse(수정본)",
+      "summary": "시나리오 상세 조회 응답 - victims/suspects + 통계 + TOP3 랭킹",
+      "codeBlocks": [
+        "{\n  \"id\": \"long\",\n  \"title\": \"string\",\n  \"synopsis\": \"string\",\n  \"synopsisDetail\" : \"string\",\n  \"genre\": \"string\",\n  \"thumbnailUrl\": \"string\",\n  \"playCount\": \"int\",\n  \"avgRating\": \"decimal\",\n  \"avgDifficulty\": \"decimal\",\n\n  \"victim\": {\n    \"victimId\": \"long\",\n    \"name\": \"string\",\n    \"age\": \"int\",\n    \"gender\": \"string\",\n    \"occupation\": \"string\",\n    \"background\" : \"string\",\n    \"discoveryLocation\": \"string\",\n    \"estimatedDeathTime\": \"string\",\n    \"causeOfDeath\": \"string\",\n    \"portraitUrl\": \"string\"\n  },\n\n  \"suspects\": [\n    {\n      \"suspectId\": \"long\",\n      \"name\": \"string\",\n      \"age\": \"int\",\n      \"gender\": \"string\",\n      \"occupation\": \"string\",\n      \"oneLiner\": \"string\",\n      \"portraitUrl\": \"string\",\n      \"displayOrder\": \"int\"\n    }\n  ],\n  \"scenarioRankings\": [\n    {\n      \"rank\": \"int\",\n      \"userId\": \"long\",\n      \"nickname\": \"string\",\n      \"score\": \"int\",\n      \"clearTime\": \"long\",\n      \"rankGrade\": \"string\"     // S/A/B/C/F\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f343ea2-73fc-80db-9d1f-d351120772c9",
+      "name": "ScenarioListResponse(수정본)",
+      "summary": "시나리오 목록 조회",
+      "codeBlocks": [
+        "{\n  \"content\": [\n    {\n      \"id\": \"long\",\n      \"title\": \"string\",\n      \"synopsis\": \"string\",\n      \"genre\": \"string\",\n      \"thumbnailUrl\": \"string\", // 주의: 생성 중일 땐 null일 수 있음\n      \"playCount\": \"int\",\n      \"avgRating\": \"decimal\",\n      \"avgDifficulty\": \"decimal\",\n      \n      // ▼▼▼ [추가할 부분] ▼▼▼\n      \"status\": \"string\",            // \"GENERATING\" | \"COMPLETED\" | \"FAILED\"\n      \"progress\": \"int\",             // 0 ~ 100 (생성 중일 때만 값 있음, 완료 시 null 가능)\n      \"generationMessage\": \"string\"  // \"트릭 생성 중...\", \"범인 배치 중...\" (선택 사항)\n    }\n  ],\n  \"totalPages\": \"int\",\n  \"totalElements\": \"long\",\n  \"currentPage\": \"int\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81c8-af34-c58021810e59",
+      "name": "ScenarioRankingResponse(수정본)",
+      "summary": "시나리오별 랭킹 조회 응답",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": \"long\",\n  \"hasUserCleared\":\"boolean\",\n  \"rankings\": [\n    {\n      \"rank\": \"int\",\n      \"userId\": \"long\",\n      \"nickname\": \"string\",\n      \"score\": \"int\",\n      \"clearTime\": \"long\",\n      \"rankGrade\": \"string\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8112-a88e-e2ff96433bad",
+      "name": "ScenarioStatusResponse(수정본)",
+      "summary": "시나리오 생성 상태 조회 응답(비동기 생성 시)",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": \"long\",\n  \"status\": \"string\",          // GENERATING | COMPLETED | FAILED\n  \"progress\": \"int\",           // 0~100\n  \"message\": \"string\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-818f-9233-eeec6d4a609c",
+      "name": "SubmitRequest(수정본)",
+      "summary": "기획서/DB설계 수정본 기준: 범인/도구/장소는 ID 매칭, 동기/사인은 텍스트(임베딩 유사도)",
+      "codeBlocks": [
+        "{\n  \"culpritId\": \"long\",            // suspects.id\n  \"weaponClueId\": \"long\",         // clues.id (도구 단서)\n  \"locationFloor\": \"int\",         // rooms.floor_number (또는 roomId로 변경 시 함께 수정)\n  \"motive\": \"string\",             // 자유 텍스트, pgvector 유사도\n  \"causeOfDeath\": \"string\"         // 자유 텍스트, pgvector 유사도\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8165-963a-d79db64ed0c7",
+      "name": "SubmitResponse(수정본)",
+      "summary": "기획서/DB설계 수정본 기준: ID 완전일치 + 유사도 점수 + 랭크",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"status\": \"string\",\n  \"attemptsUsed\": \"int\",\n  \"completedAt\" : \"datetime\",\n  \"finalScore\" : \"int\",\n  \"rankGrade\": \"string\",          // S/A/B/C/F\n  \"evaluation\": {\n    \"culpritCorrect\": \"boolean\",\n    \"weaponCorrect\": \"boolean\",\n    \"locationCorrect\": \"boolean\",\n    \"motiveSimilarity\": \"float\",          // 0~1\n    \"causeOfDeathSimilarity\": \"float\",    // 0~1\n    \"aiComment\": \"string\"\n  }\n}",
+        "/* 상태변경 로직 예시\n\n// 제출 성공\nif (isSuccess) {\n    session.setStatus(\"COMPLETED\");\n}\n\n// 3회 실패\nif (!isSuccess && session.getSubmitAttempts() >= 3) {\n    session.setStatus(\"FAILED\");\n}\n\n// 1~2회 실패\nif (!isSuccess && session.getSubmitAttempts() < 3) {\n    // status = PLAYING 유지 (재시도 가능)\n}\n\nsession.setCompletedAt(LocalDateTime.now());\nsession.setFinalScore(score);\n*/"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-81cc-bdc2-e0e8b134fec8",
+      "name": "SubmitValidateResponse(수정본)",
+      "summary": "제출 조건 확인 응답 - 필수 붉은 실 연결 체크",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"submittable\": \"boolean\",\n  \"missing\": [\n    \"string\"  // 예: MISSING_CULPRIT, MISSING_WEAPON, MISSING_LOCATION, MISSING_MOTIVE_MEMO, MISSING_CAUSE_MEMO\n  ],\n  \"requiredRedConnections\": [\n    {\n      \"fromType\": \"string\",   // VICTIM | SUSPECT | CLUE | LOCATION | MEMO\n      \"toType\": \"string\",\n      \"description\": \"string\" // 예: '피해자→범인'\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8107-9e81-dfc2472709c8",
+      "name": "SuspectChatRequest(수정본)",
+      "summary": "용의자 심문 요청 - 단서 제시(@단서) 포함",
+      "codeBlocks": [
+        "{\n  \"message\": \"string\",\n  \"usedClueId\": \"long\"   // 선택: 제시한 단서(clues.id). 없으면 null\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-810b-8d3a-c223bbb1cd1b",
+      "name": "SuspectChatResponse(수정본)",
+      "summary": "용의자 심문 응답 - 체력 감소/레벨/단서 공개",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"suspectId\": \"long\",\n  \"response\": \"string\",\n  \"responseLevel\": \"int\",        // 1/2/3\n  \"health\": \"int\",               // 남은 체력\n  \"revealedClueId\": \"long\"       // 이번 대화로 새로 공개된 단서 (없으면 null)\n}"
+      ]
+    },
+    {
+      "id": "2f343ea2-73fc-81df-b584-ded5feeb7af1",
+      "name": "SuspectInterrogationStateResponse(수정본)",
+      "summary": "session_suspect_states 기반 - 용의자별 심문 진행도/비밀 공개 여부",
+      "codeBlocks": [
+        "{\n  \"sessionId\": \"long\",\n  \"suspectId\": \"long\",\n  \"currentInterrogationLevel\": \"int\",   // 1: 거짓, 2: 부분진실, 3: 자백\n  \"isSecretRevealed\": \"boolean\"\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-8103-8128-d68a9904feab",
+      "name": "SuspectListResponse(수정본)",
+      "summary": "용의자 목록 조회 응답",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": \"long\",\n  \"suspects\": [\n    {\n      \"suspectId\": \"long\",\n      \"name\": \"string\",\n      \"age\": \"int\",\n      \"gender\": \"string\",\n      \"occupation\": \"string\",\n      \"oneLiner\": \"string\",\n      \"portraitUrl\": \"string\",\n      \"displayOrder\": \"int\"\n    }\n  ]\n}"
+      ]
+    },
+    {
+      "id": "2f143ea2-73fc-811e-881f-ceba5c141e50",
+      "name": "VictimResponse(수정본)",
+      "summary": "피해자 정보 단독 조회 응답",
+      "codeBlocks": [
+        "{\n  \"scenarioId\": \"long\",\n  \"victim\": {\n    \"victimId\": \"long\",\n    \"name\": \"string\",\n    \"age\": \"int\",\n    \"gender\": \"string\",\n    \"occupation\": \"string\",\n    \"discoveryLocation\": \"string\",\n    \"estimatedDeathTime\": \"string\",\n    \"causeOfDeath\": \"string\",\n    \"background\": \"string\",\n    \"portraitUrl\": \"string\"\n  }\n}"
+      ]
+    },
+    {
+      "id": "2f343ea2-73fc-808d-b3ef-e3a7b049c504",
+      "name": "RankingReportResponse(수정본)",
+      "summary": "시나리오 상세 페이지 - 수사보고서 열람",
+      "codeBlocks": [
+        "{\n  \"userId\": \"long\",\n  \"nickname\": \"string\",\n  \"rankGrade\": \"string\",\n  \"score\": \"int\",\n  \"clearTime\": \"long\",\n  \"report\": {\n    \"submission\": {\n      \"culpritId\": \"long\",\n      \"weaponClueId\": \"long\",\n      \"locationFloor\": \"int\",\n      \"motive\": \"string\",\n      \"causeOfDeath\": \"string\"\n    },\n    \"evaluation\": {\n      \"culpritCorrect\": \"boolean\",\n      \"weaponCorrect\": \"boolean\",\n      \"locationCorrect\": \"boolean\",\n      \"motiveSimilarity\": \"float\",\n      \"causeOfDeathSimilarity\": \"float\",\n      \"aiComment\": \"string\"\n    },\n    \"stats\": {\n      \"total_interrogations\": \"int\",\n      \"clues_collected\": \"int\"\n    }\n  }\n}",
+        "1. 시나리오 상세 조회 → canViewReports: false (미클리어)\n2. 게임 클리어\n3. 시나리오 상세 조회 → canViewReports: true\n4. 랭킹에서 유저 클릭 → 수사보고서 열람 API 호출"
+      ]
+    }
+  ]
+}

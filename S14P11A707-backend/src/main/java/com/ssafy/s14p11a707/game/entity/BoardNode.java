@@ -20,9 +20,9 @@ import lombok.NoArgsConstructor;
 
 @Getter
 @Entity
-@Table(name = "board_items")
+@Table(name = "board_nodes")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
-public class BoardItem extends BaseEntity {
+public class BoardNode extends BaseEntity {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -34,11 +34,10 @@ public class BoardItem extends BaseEntity {
     private GameSession session;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false, length = 30)
+    @Column(nullable = false, length = 20)
     private ItemType itemType;
 
-    @Column(nullable = false)
-    private long targetId;
+    private Long targetId;
 
     @Lob
     private String memoContent;
@@ -50,10 +49,10 @@ public class BoardItem extends BaseEntity {
     private int positionY;
 
     @Builder
-    public BoardItem(
+    public BoardNode(
             GameSession session,
             ItemType itemType,
-            long targetId,
+            Long targetId,
             String memoContent,
             int positionX,
             int positionY
@@ -67,9 +66,10 @@ public class BoardItem extends BaseEntity {
     }
 
     public enum ItemType {
+        VICTIM,
         SUSPECT,
         CLUE,
-        ROOM,
+        LOCATION,
         MEMO
     }
 }

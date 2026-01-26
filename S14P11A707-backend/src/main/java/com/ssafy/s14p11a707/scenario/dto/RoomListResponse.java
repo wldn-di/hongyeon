@@ -5,6 +5,7 @@ import java.util.List;
 
 public record RoomListResponse(
         long scenarioId,
+        String scenarioTitle,
         List<Room> rooms
 ) {
 

@@ -1,7 +1,9 @@
 package com.ssafy.s14p11a707.game.api.v1;
 
+import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
 import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
+import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
 import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardResponse;
 import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
@@ -19,6 +21,7 @@ import com.ssafy.s14p11a707.game.dto.SubmitResponse;
 import com.ssafy.s14p11a707.game.dto.SubmitValidateResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
+import com.ssafy.s14p11a707.game.dto.SuspectInterrogationStateResponse;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -51,6 +54,15 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long suspectId
     ) {
         return ResponseEntity.ok(gameSessionService.getChatHistory(sessionId, suspectId));
+    }
+
+    @GetMapping("/{sessionId}/suspects/{suspectId}/state")
+    @Override
+    public ResponseEntity<SuspectInterrogationStateResponse> getSuspectInterrogationState(
+            @PathVariable long sessionId,
+            @PathVariable long suspectId
+    ) {
+        return ResponseEntity.ok(gameSessionService.getSuspectInterrogationState(sessionId, suspectId));
     }
 
     @PostMapping("/{sessionId}/suspects/{suspectId}/chat")
@@ -129,10 +141,23 @@ public class SessionApi implements SessionApiDoc {
         return ResponseEntity.ok(gameSessionService.moveBoardNode(sessionId, request));
     }
 
+    @PatchMapping("/{sessionId}/board/nodes/{nodeId}")
+    @Override
+    public ResponseEntity<BoardResponse> updateBoardMemo(
+            @PathVariable long sessionId,
+            @PathVariable long nodeId,
+            @RequestBody BoardMemoUpdateRequest request
+    ) {
+        return ResponseEntity.ok(gameSessionService.updateBoardMemo(sessionId, nodeId, request));
+    }
+
     @PostMapping("/{sessionId}/board/connections")
     @Override
-    public ResponseEntity<BoardResponse> addBoardConnection(@PathVariable long sessionId) {
-        return ResponseEntity.ok(gameSessionService.addBoardConnection(sessionId));
+    public ResponseEntity<BoardResponse> addBoardConnection(
+            @PathVariable long sessionId,
+            @RequestBody BoardConnectionAddRequest request
+    ) {
+        return ResponseEntity.ok(gameSessionService.addBoardConnection(sessionId, request));
     }
 
     @DeleteMapping("/{sessionId}/board")

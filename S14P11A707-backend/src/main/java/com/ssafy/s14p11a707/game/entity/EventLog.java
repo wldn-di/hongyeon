@@ -34,13 +34,13 @@ public class EventLog extends CreatedAtEntity {
     private GameSession session;
 
     @Enumerated(EnumType.STRING)
-    @Column(length = 30)
+    @Column(nullable = false, length = 30)
     private EventType eventType;
 
     @Column(length = 100)
     private String eventName;
 
-    @Lob
+    @Column(length = 500)
     private String displayMessage;
 
     @Builder
@@ -57,8 +57,11 @@ public class EventLog extends CreatedAtEntity {
     }
 
     public enum EventType {
-        SYSTEM,
-        GAME,
-        CHAT
+        GAME_START,
+        GAME_END,
+        FLOOR_MOVED,
+        CLUE_FOUND,
+        CHAT_STARTED,
+        SUBMIT_ATTEMPT
     }
 }

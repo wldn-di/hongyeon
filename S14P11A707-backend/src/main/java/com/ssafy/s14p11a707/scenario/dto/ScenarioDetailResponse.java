@@ -7,6 +7,7 @@ public record ScenarioDetailResponse(
         long id,
         String title,
         String synopsis,
+        String synopsisDetail,
         String genre,
         String thumbnailUrl,
         int playCount,
@@ -14,7 +15,7 @@ public record ScenarioDetailResponse(
         BigDecimal avgDifficulty,
         Victim victim,
         List<Suspect> suspects,
-        List<TopRanking> topRankings
+        List<ScenarioRanking> scenarioRankings
 ) {
 
     public record Victim(
@@ -23,6 +24,7 @@ public record ScenarioDetailResponse(
             int age,
             String gender,
             String occupation,
+            String background,
             String discoveryLocation,
             String estimatedDeathTime,
             String causeOfDeath,
@@ -42,7 +44,7 @@ public record ScenarioDetailResponse(
     ) {
     }
 
-    public record TopRanking(
+    public record ScenarioRanking(
             int rank,
             long userId,
             String nickname,

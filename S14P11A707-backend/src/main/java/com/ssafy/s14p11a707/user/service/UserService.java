@@ -21,7 +21,7 @@ import org.springframework.util.StringUtils;
  * <p><b>트랜잭션</b></p>
  * <ul>
  *   <li>클래스 기본은 {@code readOnly=true}로 동작한다.</li>
- *   <li>쓰기 작업(upsert)은 {@link #upsertByEmail(String)}에서 별도 트랜잭션으로 수행한다.</li>
+ *   <li>쓰기 작업(upsert)은 {@link #upsertByOidc(String, String)}에서 별도 트랜잭션으로 수행한다.</li>
  * </ul>
  * <p><b>예외</b></p>
  * <ul>
@@ -40,45 +40,50 @@ public class UserService {
     private final UserRepository userRepository;
 
     /**
-     * 이메일 기준 사용자 upsert
+     * OIDC subject + 이메일 기준 사용자 upsert
      * <p>
-     * 입력 이메일을 정규화한 뒤 {@link UserRepository#findByEmail(String)}로 조회하고,
-     * 존재하지 않으면 새 {@link User}를 저장한다.
-     * 저장 시 유니크 제약 등으로 충돌하면 재조회로 복구한다.
+     * OIDC subject(= {@code google_id})를 기준으로 사용자 조회 후,
+     * 없으면 생성하고 있으면 이메일을 최신 값으로 동기화한다.
      * </p>
      * <p>
      * 본 메서드는 트랜잭션 범위 내에서 실행되며, 예외 발생 시 롤백된다.
      * </p>
      *
+     * @param rawGoogleId OIDC subject(= google_id)
      * @param rawEmail Cognito 클레임 등에서 전달받은 원본 이메일
      * @return 조회/생성/복구된 {@link User}
-     * @throws BaseException 이메일이 비어 있는 경우
+     * @throws BaseException googleId/email이 비어 있는 경우
      */
     @Transactional
-    public User upsertByEmail(String rawEmail) {
+    public User upsertByOidc(String rawGoogleId, String rawEmail) {
+        String googleId = rawGoogleId == null ? null : rawGoogleId.trim();
+        if (!StringUtils.hasText(googleId)) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
         String email = rawEmail == null ? null : rawEmail.trim().toLowerCase(Locale.ROOT);
         if (!StringUtils.hasText(email)) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        return userRepository.findByEmail(email)
-                .orElseGet(() -> createOrGet(email));
+        return userRepository.findByGoogleId(googleId)
+                .map(user -> {
+                    if (!email.equals(user.getEmail())) {
+                        user.changeEmail(email);
+                    }
+                    return user;
+                })
+                .orElseGet(() -> createOrGet(googleId, email));
     }
 
     @Transactional
-    public User changeNickname(String rawEmail, String rawNickname) {
-        String email = rawEmail == null ? null : rawEmail.trim().toLowerCase(Locale.ROOT);
-        if (!StringUtils.hasText(email)) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
-        }
-
+    public User changeNickname(String rawGoogleId, String rawEmail, String rawNickname) {
         String nickname = rawNickname == null ? null : rawNickname.trim();
-        if (!StringUtils.hasText(nickname) || nickname.length() > 30) {
+        if (!StringUtils.hasText(nickname) || nickname.length() > 50) {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        User user = userRepository.findByEmail(email)
-                .orElseGet(() -> createOrGet(email));
+        User user = upsertByOidc(rawGoogleId, rawEmail);
         user.changeNickname(nickname);
         return user;
     }
@@ -90,14 +95,19 @@ public class UserService {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
         }
 
-        return changeNickname(email, rawNickname);
+        String googleId = oidcUser.getSubject();
+        if (!StringUtils.hasText(googleId)) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+
+        return changeNickname(googleId, email, rawNickname);
     }
 
-    private User createOrGet(String email) {
+    private User createOrGet(String googleId, String email) {
         try {
-            return userRepository.save(User.builder().email(email).build());
+            return userRepository.save(User.builder().googleId(googleId).email(email).build());
         } catch (DataIntegrityViolationException e) {
-            return userRepository.findByEmail(email)
+            return userRepository.findByGoogleId(googleId)
                     .orElseThrow(() -> e);
         }
     }

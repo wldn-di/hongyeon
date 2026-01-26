@@ -12,8 +12,10 @@ public record ChatHistoryResponse(
     public record Message(
             String role,
             String content,
+            Instant createdAt,
             boolean isKeyTalk,
-            Instant createdAt
+            Long usedClueId,
+            Integer responseLevel
     ) {
     }
 }

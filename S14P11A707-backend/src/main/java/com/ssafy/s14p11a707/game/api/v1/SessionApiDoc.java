@@ -1,8 +1,10 @@
 package com.ssafy.s14p11a707.game.api.v1;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
+import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
 import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
+import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
 import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardResponse;
 import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
@@ -20,6 +22,7 @@ import com.ssafy.s14p11a707.game.dto.SubmitResponse;
 import com.ssafy.s14p11a707.game.dto.SubmitValidateResponse;
 import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
+import com.ssafy.s14p11a707.game.dto.SuspectInterrogationStateResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -70,6 +73,26 @@ public interface SessionApiDoc {
             )
     })
     ResponseEntity<ChatHistoryResponse> getChatHistory(long sessionId, long suspectId);
+
+    @Operation(summary = "용의자 심문 진행도 조회", description = "용의자별 심문 진행 상태를 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(schema = @Schema(implementation = SuspectInterrogationStateResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 입력 값",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SuspectInterrogationStateResponse> getSuspectInterrogationState(long sessionId, long suspectId);
 
     @Operation(summary = "용의자 심문", description = "용의자에게 질문을 보내고 답변을 받습니다.")
     @ApiResponses({
@@ -271,6 +294,26 @@ public interface SessionApiDoc {
     })
     ResponseEntity<BoardResponse> moveBoardNode(long sessionId, BoardItemMoveRequest request);
 
+    @Operation(summary = "보드 메모 수정", description = "추리 보드의 메모 노드 내용을 수정합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "수정 성공",
+                    content = @Content(schema = @Schema(implementation = BoardResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 입력 값",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "500",
+                    description = "서버 오류",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<BoardResponse> updateBoardMemo(long sessionId, long nodeId, BoardMemoUpdateRequest request);
+
     @Operation(summary = "보드 연결선 추가", description = "추리 보드에 연결선을 추가합니다.")
     @ApiResponses({
             @ApiResponse(
@@ -289,7 +332,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<BoardResponse> addBoardConnection(long sessionId);
+    ResponseEntity<BoardResponse> addBoardConnection(long sessionId, BoardConnectionAddRequest request);
 
     @Operation(summary = "보드 삭제", description = "추리 보드를 삭제합니다.")
     @ApiResponses({

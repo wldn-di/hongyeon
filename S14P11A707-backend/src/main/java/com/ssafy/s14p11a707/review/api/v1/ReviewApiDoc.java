@@ -1,8 +1,8 @@
 package com.ssafy.s14p11a707.review.api.v1;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
-import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
+import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -32,7 +32,7 @@ public interface ReviewApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ReviewResponse> updateReview(long reviewId, ReviewCreateRequest request);
+    ResponseEntity<ReviewResponse> updateReview(long reviewId, ReviewUpdateRequest request);
 
     @Operation(summary = "리뷰 삭제", description = "리뷰를 삭제합니다.")
     @ApiResponses({

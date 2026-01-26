@@ -4,6 +4,7 @@ import java.util.List;
 
 public record ScenarioRankingResponse(
         long scenarioId,
+        boolean hasUserCleared,
         List<Ranking> rankings
 ) {
 

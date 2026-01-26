@@ -1,9 +1,13 @@
 package com.ssafy.s14p11a707.game.dto;
 
+import java.time.Instant;
+
 public record SubmitResponse(
         long sessionId,
-        boolean isSuccess,
+        String status,
         int attemptsUsed,
+        Instant completedAt,
+        int finalScore,
         String rankGrade,
         Evaluation evaluation
 ) {

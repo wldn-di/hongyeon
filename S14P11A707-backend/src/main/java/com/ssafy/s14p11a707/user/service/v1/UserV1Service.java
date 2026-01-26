@@ -4,10 +4,13 @@ import com.ssafy.s14p11a707.ranking.dto.GlobalRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
 import com.ssafy.s14p11a707.user.dto.ActiveSessionListResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
+import com.ssafy.s14p11a707.user.dto.BookshelfStatusResponse;
 
 public interface UserV1Service {
 
     BookshelfStatsResponse getMyBookshelfStats();
+
+    BookshelfStatusResponse getMyBookshelfSessions();
 
     GlobalRankingResponse getMyRankings();
 
