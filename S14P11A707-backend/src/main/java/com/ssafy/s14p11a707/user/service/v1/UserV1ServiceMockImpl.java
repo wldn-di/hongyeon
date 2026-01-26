@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.user.service.v1.impl;
+package com.ssafy.s14p11a707.user.service.v1;
 
 import com.ssafy.s14p11a707.mock.MockFixtures;
 import com.ssafy.s14p11a707.mock.MockSessionStore;
@@ -7,7 +7,7 @@ import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
 import com.ssafy.s14p11a707.user.dto.ActiveSessionListResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatusResponse;
-import com.ssafy.s14p11a707.user.service.v1.UserV1Service;
+
 import java.time.Instant;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
