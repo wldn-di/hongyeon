@@ -1,6 +1,8 @@
 package com.ssafy.s14p11a707.game.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import io.swagger.v3.oas.annotations.media.ArraySchema;
+import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
 import java.util.List;
 
@@ -38,6 +40,7 @@ public record GameStartResponse(
             int floorNumber,
             String roomName,
             String roomType,
+            @ArraySchema(schema = @Schema(implementation = Object.class))
             JsonNode objects
     ) {
     }

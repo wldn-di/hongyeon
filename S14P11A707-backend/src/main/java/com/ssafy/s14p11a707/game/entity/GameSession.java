@@ -2,9 +2,11 @@ package com.ssafy.s14p11a707.game.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ssafy.s14p11a707.common.entity.BaseEntity;
+import com.ssafy.s14p11a707.common.jpa.PgVectorConverter;
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.user.entity.User;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -69,6 +71,14 @@ public class GameSession extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private JsonNode resultReportJson;
 
+    @Convert(converter = PgVectorConverter.class)
+    @Column(name = "submitted_motive_embedding", columnDefinition = "vector(1536)")
+    private float[] submittedMotiveEmbedding;
+
+    @Convert(converter = PgVectorConverter.class)
+    @Column(name = "submitted_cause_of_death_embedding", columnDefinition = "vector(1536)")
+    private float[] submittedCauseOfDeathEmbedding;
+
     private Instant startedAt;
 
     private Instant completedAt;
@@ -92,6 +102,8 @@ public class GameSession extends BaseEntity {
             Integer finalScore,
             RankGrade rankGrade,
             JsonNode resultReportJson,
+            float[] submittedMotiveEmbedding,
+            float[] submittedCauseOfDeathEmbedding,
             Instant startedAt,
             Instant completedAt,
             Long playTime,
@@ -109,6 +121,8 @@ public class GameSession extends BaseEntity {
         this.finalScore = finalScore;
         this.rankGrade = rankGrade;
         this.resultReportJson = resultReportJson;
+        this.submittedMotiveEmbedding = submittedMotiveEmbedding;
+        this.submittedCauseOfDeathEmbedding = submittedCauseOfDeathEmbedding;
         this.startedAt = startedAt;
         this.completedAt = completedAt;
         this.playTime = playTime;

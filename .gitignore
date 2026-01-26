@@ -42,6 +42,9 @@ S14P11A707-backend/.env
 S14P11A707-backend/.env.*
 !S14P11A707-backend/.env.example
 
+### Local Notion spec extraction ###
+.notion_spec/
+
 ### Docs ###
 S14P11A707-backend/document/
 
