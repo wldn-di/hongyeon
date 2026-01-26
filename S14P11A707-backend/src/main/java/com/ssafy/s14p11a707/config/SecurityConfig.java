@@ -66,7 +66,13 @@ public class SecurityConfig {
             "/actuator/info",
             "/oauth2/**",
             "/login/oauth2/**",
-            "/api/auth/login"
+            "/api/auth/login",
+            // 정적 리소스 (프론트엔드)
+            "/",
+            "/index.html",
+            "/assets/**",
+            "/favicon.ico",
+            "/vite.svg"
     };
 
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
