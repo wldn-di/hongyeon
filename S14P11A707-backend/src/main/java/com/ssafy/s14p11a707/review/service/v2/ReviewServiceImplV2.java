@@ -12,6 +12,7 @@ import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.scenario.repository.ScenarioRepository;
 import com.ssafy.s14p11a707.user.entity.User;
 import com.ssafy.s14p11a707.user.repository.UserRepository;
+import java.math.BigDecimal;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
@@ -65,6 +66,8 @@ public class ReviewServiceImplV2 implements ReviewServiceV2 {
         Review review = request.toEntity(scenario, currentUser);
         reviewRepository.save(review);
 
+        updateScenarioAverages(scenario);
+
         return ReviewResponse.from(review);
     }
 
@@ -109,5 +112,15 @@ public class ReviewServiceImplV2 implements ReviewServiceV2 {
         String googleId = oidcUser.getSubject();
         return userRepository.findByGoogleId(googleId)
                 .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
+    }
+
+    private void updateScenarioAverages(Scenario scenario) {
+        Double avgRating = reviewRepository.calculateAvgRating(scenario.getId());
+        Double avgDifficulty = reviewRepository.calculateAvgDifficulty(scenario.getId());
+
+        scenario.updateAverages(
+                avgRating != null ? BigDecimal.valueOf(avgRating) : null,
+                avgDifficulty != null ? BigDecimal.valueOf(avgDifficulty) : null
+        );
     }
 }

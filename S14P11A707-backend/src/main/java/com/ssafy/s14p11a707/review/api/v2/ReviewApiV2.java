@@ -5,6 +5,7 @@ import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
 import com.ssafy.s14p11a707.review.service.v2.ReviewServiceV2;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -36,7 +37,7 @@ public class ReviewApiV2 implements ReviewApiV2Doc {
     @Override
     public ResponseEntity<ReviewResponse> createReview(
             @PathVariable long scenarioId,
-            @RequestBody ReviewCreateRequest request,
+            @Valid @RequestBody ReviewCreateRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         return ResponseEntity.ok(reviewService.createReview(scenarioId, request, oidcUser));

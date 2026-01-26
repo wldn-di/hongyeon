@@ -6,6 +6,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ReviewRepository extends JpaRepository<Review, Long> {
 
@@ -16,5 +18,12 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     Optional<Review> findByScenarioIdAndUserId(long scenarioId, long userId);
 
     boolean existsByScenarioIdAndUserId(long scenarioId, long userId);
+
+    // 평균 계산 (삭제된 리뷰 포함)
+    @Query("SELECT AVG(r.rating) FROM Review r WHERE r.scenario.id = :scenarioId")
+    Double calculateAvgRating(@Param("scenarioId") long scenarioId);
+
+    @Query("SELECT AVG(r.difficulty) FROM Review r WHERE r.scenario.id = :scenarioId")
+    Double calculateAvgDifficulty(@Param("scenarioId") long scenarioId);
 }
 

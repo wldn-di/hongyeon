@@ -130,6 +130,11 @@ public class Scenario extends BaseEntity {
         this.avgDifficulty = avgDifficulty;
     }
 
+    public void updateAverages(BigDecimal avgRating, BigDecimal avgDifficulty) {
+        this.avgRating = avgRating;
+        this.avgDifficulty = avgDifficulty;
+    }
+
     public enum GenerationStatus {
         GENERATING,
         COMPLETED,
