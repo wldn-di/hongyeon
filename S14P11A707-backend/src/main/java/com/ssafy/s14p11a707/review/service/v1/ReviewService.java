@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.review.service;
+package com.ssafy.s14p11a707.review.service.v1;
 
 import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
 import com.ssafy.s14p11a707.review.dto.ReviewListResponse;

@@ -1,6 +1,7 @@
-package com.ssafy.s14p11a707.game.entity;
+package com.ssafy.s14p11a707.review.entity;
 
 import com.ssafy.s14p11a707.common.entity.BaseEntity;
+import com.ssafy.s14p11a707.game.entity.GameSession;
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.user.entity.User;
 import jakarta.persistence.Column;
@@ -81,6 +82,16 @@ public class Review extends BaseEntity {
         this.content = content;
         this.spoiler = spoiler;
         this.deleted = deleted;
+    }
+
+    public void updateContent(String content) {
+        if (content != null && !content.isBlank()) {
+            this.content = content.trim();
+        }
+    }
+
+    public void markDeleted() {
+        this.deleted = true;
     }
 }
 

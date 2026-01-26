@@ -1,11 +1,11 @@
-package com.ssafy.s14p11a707.review.service.impl;
+package com.ssafy.s14p11a707.review.service.v1;
 
 import com.ssafy.s14p11a707.mock.MockFixtures;
 import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
 import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
-import com.ssafy.s14p11a707.review.service.ReviewService;
+
 import java.time.Instant;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;

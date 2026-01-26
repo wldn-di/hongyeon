@@ -5,7 +5,7 @@ import com.ssafy.s14p11a707.game.service.GameSessionService;
 import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
 import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
-import com.ssafy.s14p11a707.review.service.ReviewService;
+import com.ssafy.s14p11a707.review.service.v1.ReviewService;
 import com.ssafy.s14p11a707.scenario.dto.RoomListResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateRequest;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateResponse;

@@ -61,6 +61,11 @@ public class GameSession extends BaseEntity {
     @Column(name = "is_first_play")
     private Boolean firstPlay;
 
+    /*
+    @Enumerated(EnumType.STRING)
+    private String status;
+     */
+
     private Integer finalScore;
 
     @Enumerated(EnumType.STRING)
