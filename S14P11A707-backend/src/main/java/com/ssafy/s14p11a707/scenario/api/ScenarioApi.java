@@ -103,25 +103,4 @@ public class ScenarioApi implements ScenarioApiDoc {
     public ResponseEntity<SuspectListResponse> getSuspects(@PathVariable long scenarioId) {
         return ResponseEntity.ok(scenarioService.getSuspects(scenarioId));
     }
-
-    @GetMapping("/{scenarioId}/reviews")
-    @Override
-    public ResponseEntity<ReviewListResponse> getReviews(@PathVariable long scenarioId) {
-        return ResponseEntity.ok(reviewService.getReviews(scenarioId));
-    }
-
-    @PostMapping("/{scenarioId}/reviews")
-    @Override
-    public ResponseEntity<ReviewResponse> createReview(
-            @PathVariable long scenarioId,
-            @RequestBody ReviewCreateRequest request
-    ) {
-        return ResponseEntity.ok(reviewService.createReview(scenarioId, request));
-    }
-
-    @PostMapping("/{scenarioId}/sessions")
-    @Override
-    public ResponseEntity<GameStartResponse> startGame(@PathVariable long scenarioId) {
-        return ResponseEntity.ok(gameSessionService.startGame(scenarioId));
-    }
 }

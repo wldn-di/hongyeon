@@ -1,22 +1,6 @@
 package com.ssafy.s14p11a707.game.service;
 
-import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
-import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
-import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
-import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
-import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
-import com.ssafy.s14p11a707.game.dto.BoardResponse;
-import com.ssafy.s14p11a707.game.dto.ClueDetailResponse;
-import com.ssafy.s14p11a707.game.dto.ClueListResponse;
-import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
-import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
-import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
-import com.ssafy.s14p11a707.game.dto.GameEndResponse;
-import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
-import com.ssafy.s14p11a707.game.dto.GameSaveRequest;
-import com.ssafy.s14p11a707.game.dto.GameSaveResponse;
-import com.ssafy.s14p11a707.game.dto.GameStartResponse;
-import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
+import com.ssafy.s14p11a707.game.dto.*;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 public interface GameSessionService {
@@ -54,4 +38,8 @@ public interface GameSessionService {
     BoardResponse deleteBoard(long sessionId, BoardDeleteRequest request, OidcUser oidcUser);
 
     GameEndResponse endGame(long sessionId, OidcUser oidcUser);
+
+    SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
+
+    SubmitResponse submit(long sessionId, SubmitRequest request);
 }
