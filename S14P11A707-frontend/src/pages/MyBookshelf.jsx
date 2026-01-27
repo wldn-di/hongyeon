@@ -1,23 +1,27 @@
-import React, { useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Link } from 'wouter'
 import { Button } from '@/components/ui/Button'
-import { completedScenarios, failedScenarios } from '@/data/dummyData'
-import { Trophy, XCircle, ChevronLeft, ChevronRight, Clock, Award, X, Share2, FileText } from 'lucide-react'
+import { completedScenarios, imcompletedScenarios, failedScenarios } from '@/data/dummyData'
+import {
+  Trophy, XCircle, ChevronLeft, ChevronRight, Clock, Award,
+  X, Share2, FileText
+} from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// 등급별 스타일 - 단순하고 어울리게
+// 등급별 스타일
 const gradeStyles = {
   S: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50',
   A: 'bg-purple-500/20 text-purple-400 border border-purple-500/50',
   B: 'bg-blue-500/20 text-blue-400 border border-blue-500/50',
 }
 
-// 수사보고서 팝업
+// =========================
+// 수사보고서 모달
+// =========================
 function ReportModal({ isOpen, onClose, book }) {
   const [shareUuid, setShareUuid] = useState(null)
   const [copied, setCopied] = useState(false)
 
-  // UUID 생성 함수
   const generateUuid = () => {
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
       const r = Math.random() * 16 | 0
@@ -27,27 +31,24 @@ function ReportModal({ isOpen, onClose, book }) {
   }
 
   const handleShare = () => {
-    if (!shareUuid) {
-      setShareUuid(generateUuid())
-    }
+    if (!shareUuid) setShareUuid(generateUuid())
   }
 
   const handleCopyUuid = async () => {
-    if (shareUuid) {
-      try {
-        await navigator.clipboard.writeText(shareUuid)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      } catch (err) {
-        const textArea = document.createElement('textarea')
-        textArea.value = shareUuid
-        document.body.appendChild(textArea)
-        textArea.select()
-        document.execCommand('copy')
-        document.body.removeChild(textArea)
-        setCopied(true)
-        setTimeout(() => setCopied(false), 2000)
-      }
+    if (!shareUuid) return
+    try {
+      await navigator.clipboard.writeText(shareUuid)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      const textArea = document.createElement('textarea')
+      textArea.value = shareUuid
+      document.body.appendChild(textArea)
+      textArea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textArea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }
 
@@ -59,7 +60,7 @@ function ReportModal({ isOpen, onClose, book }) {
 
   if (!isOpen || !book) return null
 
-  // 더미 보고서 데이터 생성
+  // 더미 보고서 데이터 (현재 book 기반)
   const report = {
     playerName: "탐정",
     scenarioTitle: book.title,
@@ -71,8 +72,8 @@ function ReportModal({ isOpen, onClose, book }) {
     summary: book.grade === 'S'
       ? "완벽한 추리력을 보여주셨습니다! 모든 증거를 정확하게 분석하고 범인을 정확히 특정했습니다."
       : book.grade === 'A'
-      ? "훌륭한 추리력을 보여주셨습니다. 대부분의 증거를 정확하게 분석했으며, 범인의 동기를 정확히 파악했습니다."
-      : "좋은 추리력을 보여주셨습니다. 일부 증거 분석에 오류가 있었지만 결국 사건을 해결했습니다.",
+        ? "훌륭한 추리력을 보여주셨습니다. 대부분의 증거를 정확하게 분석했으며, 범인의 동기를 정확히 파악했습니다."
+        : "좋은 추리력을 보여주셨습니다. 일부 증거 분석에 오류가 있었지만 결국 사건을 해결했습니다.",
     timeline: [
       { time: "00:05", event: "첫 번째 증거 발견" },
       { time: "00:15", event: "용의자 심문 시작" },
@@ -146,7 +147,6 @@ function ReportModal({ isOpen, onClose, book }) {
         </div>
 
         <div className="p-4 border-t border-border space-y-3">
-          {/* UUID 공유 영역 */}
           {shareUuid && (
             <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-3">
               <span className="text-xs text-muted-foreground">공유 코드:</span>
@@ -165,7 +165,6 @@ function ReportModal({ isOpen, onClose, book }) {
             </div>
           )}
 
-          {/* 버튼 영역 */}
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={handleClose}>
               닫기
@@ -181,12 +180,16 @@ function ReportModal({ isOpen, onClose, book }) {
   )
 }
 
-// 책 표지 카드 컴포넌트
-function BookCard({ book, isSuccess, isActive, onViewReport }) {
-  if (!book) {
-    // 빈 슬롯
-    return <div className="w-40 flex-shrink-0" />
-  }
+// =========================
+// 책 표지 카드
+// =========================
+function BookCard({ book, mode, isActive, onViewReport }) {
+  // mode: 'solved' | 'progress' | 'failed'
+  if (!book) return <div className="w-40 flex-shrink-0" />
+
+  const isSolved = mode === 'solved'
+  const isProgress = mode === 'progress'
+  const isFailed = mode === 'failed'
 
   return (
     <div
@@ -195,7 +198,6 @@ function BookCard({ book, isSuccess, isActive, onViewReport }) {
         isActive ? "w-56 z-10" : "w-40 opacity-60 scale-90"
       )}
     >
-      {/* 책 표지 */}
       <div
         className={cn(
           "relative aspect-[3/4] rounded-lg overflow-hidden",
@@ -204,74 +206,73 @@ function BookCard({ book, isSuccess, isActive, onViewReport }) {
           isActive && "shadow-2xl shadow-primary/20"
         )}
       >
-        {/* 썸네일 이미지 */}
         <img
           src={book.thumbnail}
           alt={book.title}
           className="absolute inset-0 w-full h-full object-cover"
-          onError={(e) => {
-            e.target.style.display = 'none'
-          }}
+          onError={(e) => { e.target.style.display = 'none' }}
         />
 
-        {/* 그라데이션 오버레이 */}
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
 
-        {/* 책 정보 */}
         <div className="absolute bottom-0 left-0 right-0 p-3">
-          <h3 className={cn(
-            "font-bold text-white mb-1 line-clamp-1",
-            isActive ? "text-base" : "text-sm"
-          )}>
+          <h3 className={cn("font-bold text-white mb-1 line-clamp-1", isActive ? "text-base" : "text-sm")}>
             {book.title}
           </h3>
+
           {isActive && (
             <p className="text-xs text-gray-300 line-clamp-2 mb-2">
               {book.synopsis}
             </p>
           )}
 
-          {isSuccess ? (
+          {/* 하단 메타 */}
+          {isSolved && (
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1 text-xs text-gray-400">
                 <Clock className="w-3 h-3" />
                 <span>{book.playTime}분</span>
               </div>
-              {/* 단순한 등급 뱃지 */}
-              <span className={cn(
-                "px-2 py-0.5 rounded text-xs font-bold",
-                gradeStyles[book.grade]
-              )}>
+              <span className={cn("px-2 py-0.5 rounded text-xs font-bold", gradeStyles[book.grade] || gradeStyles.B)}>
                 {book.grade}
               </span>
             </div>
-          ) : (
+          )}
+
+          {isProgress && (
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-gray-400">
                 <span>진척도</span>
-                <span className="text-red-400 font-bold">{book.progress}%</span>
+                <span className="text-primary font-bold">{book.progress ?? 0}%</span>
               </div>
               <div className="h-1 bg-black/50 rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-gradient-to-r from-red-500 to-red-400 rounded-full"
-                  style={{ width: `${book.progress}%` }}
+                  className="h-full bg-gradient-to-r from-yellow-500 to-yellow-300 rounded-full"
+                  style={{ width: `${book.progress ?? 0}%` }}
                 />
               </div>
             </div>
           )}
+
+          {isFailed && (
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-gray-400">정답 제출</div>
+              <span className="text-xs font-bold text-red-400">실패</span>
+            </div>
+          )}
         </div>
 
-        {/* 성공 배지 */}
-        {isSuccess && isActive && (
+        {/* 해결 배지 */}
+        {isSolved && isActive && (
           <div className="absolute top-2 right-2">
             <Award className="w-6 h-6 text-primary drop-shadow-lg" />
           </div>
         )}
 
-        {/* 호버 오버레이 */}
+        {/* 호버 액션 */}
         {isActive && (
           <div className="absolute inset-0 bg-primary/10 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
-            {isSuccess ? (
+            {isSolved ? (
               <Button
                 variant="neon"
                 size="sm"
@@ -282,6 +283,7 @@ function BookCard({ book, isSuccess, isActive, onViewReport }) {
                 수사보고서 열람
               </Button>
             ) : (
+              // 진행중/실패 둘 다 “이어하기”로 처리(실패는 재도전 개념)
               <Link href={`/scenario/${book.scenarioId}`}>
                 <Button variant="neon" size="sm" className="shadow-lg">
                   이어하기
@@ -295,53 +297,49 @@ function BookCard({ book, isSuccess, isActive, onViewReport }) {
   )
 }
 
-// 책장 캐러셀 컴포넌트 - 선택 항목이 가운데
-function BookShelf({ books, isSuccess, title, icon: Icon, onViewReport }) {
+// =========================
+// 섹션 헤더(사진처럼)
+// =========================
+function ShelfHeader({ title, count }) {
+  return (
+    <div className="flex items-center gap-3 mb-6">
+      <h2 className="text-2xl font-bold gold-glow">| {title} |</h2>
+      <span className="text-sm text-muted-foreground font-serif">{count}건</span>
+    </div>
+  )
+}
+
+// =========================
+// 책장 캐러셀 (가운데 활성)
+// =========================
+function BookShelf({ books, mode, title, onViewReport }) {
   const [activeIndex, setActiveIndex] = useState(0)
 
-  const handlePrev = () => {
-    setActiveIndex(prev => Math.max(0, prev - 1))
-  }
+  const safeBooks = Array.isArray(books) ? books : []
+  const count = safeBooks.length
 
-  const handleNext = () => {
-    setActiveIndex(prev => Math.min(books.length - 1, prev + 1))
-  }
+  const handlePrev = () => setActiveIndex(prev => Math.max(0, prev - 1))
+  const handleNext = () => setActiveIndex(prev => Math.min(count - 1, prev + 1))
 
-  // 가운데 정렬: [이전 책, 활성 책, 다음 책]
-  const getVisibleBooks = () => {
-    const prev = activeIndex > 0 ? books[activeIndex - 1] : null
-    const current = books[activeIndex]
-    const next = activeIndex < books.length - 1 ? books[activeIndex + 1] : null
+  const visibleBooks = useMemo(() => {
+    const prev = activeIndex > 0 ? safeBooks[activeIndex - 1] : null
+    const current = safeBooks[activeIndex]
+    const next = activeIndex < count - 1 ? safeBooks[activeIndex + 1] : null
     return [prev, current, next]
-  }
-
-  const visibleBooks = getVisibleBooks()
+  }, [activeIndex, safeBooks, count])
 
   return (
     <div className="mb-16">
-      {/* 섹션 타이틀 */}
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Icon className={cn("w-7 h-7", isSuccess ? 'text-primary' : 'text-red-500')} />
-          <h2 className={cn("text-2xl font-bold", isSuccess ? 'gold-glow' : 'red-glow')}>
-            {title}
-          </h2>
-          <span className="font-serif text-muted-foreground ml-2">[{books.length}권]</span>
-        </div>
-
-        {/* 페이지 인디케이터 */}
-        {books.length > 1 && (
-          <div className="flex items-center gap-2 text-sm text-muted-foreground font-serif">
-            <span>{activeIndex + 1}</span>
-            <span>/</span>
-            <span>{books.length}</span>
+      <div className="flex items-center justify-between">
+        <ShelfHeader title={title} count={count} />
+        {count > 1 && (
+          <div className="text-sm text-muted-foreground font-serif">
+            {activeIndex + 1} / {count}
           </div>
         )}
       </div>
 
-      {/* 책장 컨테이너 */}
       <div className="relative">
-        {/* 좌측 네비게이션 */}
         {activeIndex > 0 && (
           <button
             onClick={handlePrev}
@@ -353,13 +351,13 @@ function BookShelf({ books, isSuccess, title, icon: Icon, onViewReport }) {
               "hover:bg-primary/20 hover:border-primary transition-all",
               "shadow-lg"
             )}
+            aria-label="이전"
           >
             <ChevronLeft className="w-6 h-6" />
           </button>
         )}
 
-        {/* 우측 네비게이션 */}
-        {activeIndex < books.length - 1 && (
+        {activeIndex < count - 1 && (
           <button
             onClick={handleNext}
             className={cn(
@@ -370,12 +368,12 @@ function BookShelf({ books, isSuccess, title, icon: Icon, onViewReport }) {
               "hover:bg-primary/20 hover:border-primary transition-all",
               "shadow-lg"
             )}
+            aria-label="다음"
           >
             <ChevronRight className="w-6 h-6" />
           </button>
         )}
 
-        {/* 책장 배경 */}
         <div
           className="rounded-xl p-8 relative overflow-hidden"
           style={{
@@ -383,7 +381,6 @@ function BookShelf({ books, isSuccess, title, icon: Icon, onViewReport }) {
             boxShadow: 'inset 0 2px 20px rgba(0,0,0,0.5), 0 8px 32px rgba(0,0,0,0.3)',
           }}
         >
-          {/* 미묘한 패턴 */}
           <div
             className="absolute inset-0 opacity-5"
             style={{
@@ -391,14 +388,12 @@ function BookShelf({ books, isSuccess, title, icon: Icon, onViewReport }) {
               backgroundSize: '24px 24px',
             }}
           />
-
-          {/* 상단 장식 라인 */}
           <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
 
-          {books.length === 0 ? (
+          {count === 0 ? (
             <div className="text-center py-16 text-muted-foreground relative z-10">
               <div className="text-5xl mb-4 opacity-30">📚</div>
-              <p className="text-lg">아직 {isSuccess ? '성공한' : '도전한'} 시나리오가 없습니다</p>
+              <p className="text-lg">아직 {title}이 없습니다</p>
               <Link href="/scenarios">
                 <Button variant="neon" className="mt-4">
                   시나리오 둘러보기
@@ -411,15 +406,14 @@ function BookShelf({ books, isSuccess, title, icon: Icon, onViewReport }) {
                 <BookCard
                   key={book?.id || `empty-${idx}`}
                   book={book}
-                  isSuccess={isSuccess}
-                  isActive={idx === 1} // 가운데가 활성
+                  mode={mode}
+                  isActive={idx === 1}
                   onViewReport={onViewReport}
                 />
               ))}
             </div>
           )}
 
-          {/* 하단 선반 효과 */}
           <div
             className="absolute bottom-0 left-0 right-0 h-3"
             style={{
@@ -433,9 +427,20 @@ function BookShelf({ books, isSuccess, title, icon: Icon, onViewReport }) {
   )
 }
 
+// =========================
+// 메인 페이지
+// =========================
 export default function MyBookshelf() {
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [selectedBook, setSelectedBook] = useState(null)
+
+  const solvedCount = completedScenarios.length
+  const inProgressCount = imcompletedScenarios.length
+  const failedCount = failedScenarios.length
+  const sGradeCount = completedScenarios.filter(s => s.grade === 'S').length
+
+  const totalCount = solvedCount + inProgressCount + failedCount
+  const solveRate = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0
 
   const handleViewReport = (book) => {
     setSelectedBook(book)
@@ -444,62 +449,47 @@ export default function MyBookshelf() {
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
-
       <main className="flex-1 py-12">
         <div className="container max-w-6xl">
-          {/* 페이지 헤더 */}
+          {/* 헤더 */}
           <div className="mb-12 text-center">
             <h1 className="text-4xl font-bold gold-glow mb-4">내 수사록</h1>
-            <p className="text-muted-foreground">
-              당신의 추리 기록이 책으로 남아있습니다
-            </p>
+            <p className="text-muted-foreground">당신의 추리 기록이 책으로 남아있습니다</p>
           </div>
 
-          {/* 통계 */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
-            <div className="bg-card/50 border border-border rounded-lg p-4 text-center">
-              <div className="text-3xl font-bold text-primary">{completedScenarios.length}</div>
-              <div className="text-sm text-muted-foreground">성공</div>
-            </div>
-            <div className="bg-card/50 border border-border rounded-lg p-4 text-center">
-              <div className="text-3xl font-bold text-red-500">{failedScenarios.length}</div>
-              <div className="text-sm text-muted-foreground">미완</div>
-            </div>
-            <div className="bg-card/50 border border-border rounded-lg p-4 text-center">
-              <div className="text-3xl font-bold text-primary">
-                {completedScenarios.filter(s => s.grade === 'S').length}
-              </div>
-              <div className="text-sm text-muted-foreground">S등급</div>
-            </div>
-            <div className="bg-card/50 border border-border rounded-lg p-4 text-center">
-              <div className="text-3xl font-bold text-primary">
-                {Math.round((completedScenarios.length / (completedScenarios.length + failedScenarios.length)) * 100) || 0}%
-              </div>
-              <div className="text-sm text-muted-foreground">성공률</div>
-            </div>
+          {/* ✅ 통계 (사진처럼 5칸 한 줄) */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-12">
+            <StatCard label="해결" value={solvedCount} tone="gold" />
+            <StatCard label="미해결" value={inProgressCount} tone="red" />
+            <StatCard label="미제" value={failedCount} tone="red" />
+            <StatCard label="S등급" value={sGradeCount} tone="gold" />
+            <StatCard label="사건 해결률" value={`${solveRate}%`} tone="gold" />
           </div>
 
-          {/* 성공 책장 */}
+          {/* 섹션들 (사진처럼 제목) */}
           <BookShelf
             books={completedScenarios}
-            isSuccess={true}
-            title="성공한 시나리오"
-            icon={Trophy}
+            mode="solved"
+            title="해결한 사건들"
             onViewReport={handleViewReport}
           />
 
-          {/* 실패 책장 */}
+          <BookShelf
+            books={imcompletedScenarios}
+            mode="progress"
+            title="미해결 사건들"
+            onViewReport={handleViewReport}
+          />
+
           <BookShelf
             books={failedScenarios}
-            isSuccess={false}
-            title="미완의 기록"
-            icon={XCircle}
+            mode="failed"
+            title="미제 사건들"
             onViewReport={handleViewReport}
           />
         </div>
       </main>
 
-      {/* 수사보고서 모달 */}
       <ReportModal
         isOpen={reportModalOpen}
         onClose={() => setReportModalOpen(false)}
@@ -513,6 +503,21 @@ export default function MyBookshelf() {
           </p>
         </div>
       </footer>
+    </div>
+  )
+}
+
+// =========================
+// 통계 카드 (재사용)
+// =========================
+function StatCard({ label, value, tone = "gold" }) {
+  const valueClass =
+    tone === "red" ? "text-red-500" : "text-primary"
+
+  return (
+    <div className="bg-card/50 border border-border rounded-lg p-4 text-center">
+      <div className={cn("text-3xl font-bold", valueClass)}>{value}</div>
+      <div className="text-sm text-muted-foreground">{label}</div>
     </div>
   )
 }

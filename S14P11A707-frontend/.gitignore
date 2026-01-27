@@ -6,3 +6,6 @@ build/
 .env.*
 !.env.example
 .DS_Store
+# Local tooling
+CLAUDE.md
+claude_code_zai_env.sh

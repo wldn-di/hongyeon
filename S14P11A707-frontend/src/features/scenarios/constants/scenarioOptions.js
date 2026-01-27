@@ -13,7 +13,7 @@ export const DIFFICULTIES = [
 ];
 
 export const SORT_OPTIONS = [
+  { value: "views", label: "최신순" },
   { value: "popular", label: "인기순" },
-  { value: "views", label: "플레이순" },
   { value: "rating", label: "별점순" },
 ];

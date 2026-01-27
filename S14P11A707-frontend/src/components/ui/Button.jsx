@@ -9,6 +9,7 @@ const buttonVariants = {
   ghost: 'text-foreground hover:bg-muted hover:text-foreground',
   link: 'text-primary underline-offset-4 hover:underline',
   neon: 'bg-primary/20 text-primary hover:bg-primary/30 border border-primary',
+  tab: 'tab-chevron',
 }
 
 const buttonSizes = {

@@ -47,14 +47,7 @@ export default function ScenarioDetailCard({ scenario }) {
           <Link href={`/game/${scenario.id}`}>
             <Button variant="neon" size="lg" className="w-full">
               <Play className="w-5 h-5 mr-2" />
-              솔로 플레이
-            </Button>
-          </Link>
-
-          <Link href={`/coop/${scenario.id}`}>
-            <Button size="lg" variant="outline" className="w-full neon-border-magenta">
-              <Users2 className="w-5 h-5 mr-2" />
-              협동 플레이
+              플레이
             </Button>
           </Link>
         </div>
