@@ -85,6 +85,9 @@ export const mapScenarioDetailResponse = (response) => {
     avgRating: response.avgRating || 0,
     avgDifficulty: response.avgDifficulty || 0,
     difficulty: mapDifficulty(response.avgDifficulty),
+    // UI 호환성 필드
+    rating: response.avgRating ? Math.round(response.avgRating * 100) : 0,
+    estimatedTime: response.estimatedTime || 30, // 기본값 30분
     // 중첩 데이터 매핑
     victim: response.victim ? mapVictim(response.victim) : null,
     suspects: response.suspects?.map(mapSuspect) || [],
