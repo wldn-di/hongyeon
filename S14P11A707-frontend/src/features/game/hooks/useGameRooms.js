@@ -33,7 +33,7 @@ export function useGameRooms(scenarioId) {
       ])
 
       const mappedRooms = mapRoomListResponse(roomsResponse)
-      setRooms(mappedRooms.rooms)
+      setRooms(mappedRooms)
 
       if (victimResponse) {
         const mappedVictim = mapVictimResponse(victimResponse)
