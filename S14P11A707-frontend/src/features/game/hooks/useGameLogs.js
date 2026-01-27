@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchEventLogs } from '../../session/api/logsApi'
 import { normalizeEventLogListResponse } from '../../session/api/sessionMappers'
 import { toast } from 'sonner'
@@ -39,8 +39,15 @@ export function useGameLogs(sessionId) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  const fetch = async () => {
-    if (!sessionId) {
+  // sessionId를 ref로 관리하여 refetch 시 최신 값 사용
+  const sessionIdRef = useRef(sessionId)
+  useEffect(() => {
+    sessionIdRef.current = sessionId
+  }, [sessionId])
+
+  const fetchLogs = useCallback(async () => {
+    const currentSessionId = sessionIdRef.current
+    if (!currentSessionId) {
       setLogs([])
       setLoading(false)
       return
@@ -49,7 +56,7 @@ export function useGameLogs(sessionId) {
     try {
       setLoading(true)
       setError(null)
-      const response = await fetchEventLogs(Number(sessionId))
+      const response = await fetchEventLogs(Number(currentSessionId))
       const mapped = normalizeEventLogListResponse(response)
 
       // 백엔드 로그를 UI 포맷으로 변환
@@ -68,13 +75,13 @@ export function useGameLogs(sessionId) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     if (sessionId) {
-      fetch()
+      fetchLogs()
     }
-  }, [sessionId])
+  }, [sessionId, fetchLogs])
 
   // 로컬에 로그 추가 (API 호출 없이)
   const addLog = useCallback((type, message) => {
@@ -98,7 +105,7 @@ export function useGameLogs(sessionId) {
     error,
     addLog,
     resetLogs,
-    refetch: fetch,
+    refetch: fetchLogs,
   }
 }
 

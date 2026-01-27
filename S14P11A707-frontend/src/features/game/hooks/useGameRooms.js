@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { fetchScenarioRooms, fetchScenarioVictim } from '../../scenarios/api/scenariosApi'
 import { mapRoomListResponse, mapVictimResponse } from '../../scenarios/api/scenarioMappers'
 import { toast } from 'sonner'
@@ -14,8 +14,15 @@ export function useGameRooms(scenarioId) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  const fetch = async () => {
-    if (!scenarioId) {
+  // scenarioId를 ref로 관리
+  const scenarioIdRef = useRef(scenarioId)
+  useEffect(() => {
+    scenarioIdRef.current = scenarioId
+  }, [scenarioId])
+
+  const fetchRooms = useCallback(async () => {
+    const currentScenarioId = scenarioIdRef.current
+    if (!currentScenarioId) {
       setRooms([])
       setVictim(null)
       setLoading(false)
@@ -28,11 +35,29 @@ export function useGameRooms(scenarioId) {
 
       // 방 정보와 피해자 정보 병렬 조회
       const [roomsResponse, victimResponse] = await Promise.all([
-        fetchScenarioRooms(Number(scenarioId)),
-        fetchScenarioVictim(Number(scenarioId)).catch(() => null), // 피해자 정보는 없을 수 있음
+        fetchScenarioRooms(Number(currentScenarioId)),
+        fetchScenarioVictim(Number(currentScenarioId)).catch(() => null), // 피해자 정보는 없을 수 있음
       ])
 
-      const mappedRooms = mapRoomListResponse(roomsResponse)
+      // 백엔드 응답이 배열인 경우 직접 처리
+      let mappedRooms
+      if (Array.isArray(roomsResponse)) {
+        // 응답이 직접 배열인 경우
+        mappedRooms = roomsResponse.map((room, idx) => ({
+          id: room.roomId || room.id || idx,
+          floorNumber: room.floorNumber ?? idx,
+          roomType: room.roomType || 'default',
+          name: room.roomName || room.name || `${idx + 1}층`,
+          description: room.description || '',
+          assistantComment: room.assistantComment || '',
+          objects: room.objects || null,
+          unlocked: true,
+          image: `/images/rooms/room-${room.roomId || idx}.png`,
+        }))
+      } else {
+        mappedRooms = mapRoomListResponse(roomsResponse)
+      }
+
       setRooms(mappedRooms)
 
       if (victimResponse) {
@@ -46,18 +71,18 @@ export function useGameRooms(scenarioId) {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
-    fetch()
-  }, [scenarioId])
+    fetchRooms()
+  }, [scenarioId, fetchRooms])
 
   return {
     rooms,
     victim,
     loading,
     error,
-    refetch: fetch,
+    refetch: fetchRooms,
   }
 }
 
