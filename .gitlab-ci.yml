@@ -1,152 +1,101 @@
-# S14P11A707 GitLab CI
-#
-# 브랜치별 동작 요약
-# - 기타 브랜치: 백엔드 테스트만 수행 (ECR/배포 없음)
-# - dev: 테스트 → ECR 이미지 푸시(dev-*) → SSAFY EC2(~/infra)에서 docker compose로 재기동
-# - master/main: 테스트 → ECR 이미지 푸시(prod-*) (배포 on/off는 수동)
+# 간단한 CI/CD - 도커 없이
+# main/master 푸시 시 → 프론트 빌드 → 백엔드 jar 빌드 → EC2 배포
 
 stages:
-  - test
   - build
   - deploy
 
 variables:
+  FRONTEND_DIR: "S14P11A707-frontend"
   BACKEND_DIR: "S14P11A707-backend"
-  GRADLE_USER_HOME: "$CI_PROJECT_DIR/.gradle"
-  # docker:dind 사용 시 필요 (build job에서 bootBuildImage / docker push)
-  DOCKER_HOST: "tcp://docker:2375"
-  DOCKER_TLS_CERTDIR: ""
-
-cache:
-  # Gradle wrapper + dependency caches
-  key: "gradle"
-  paths:
-    - .gradle/wrapper
-    - .gradle/caches
+  DEPLOY_PATH: "/home/ubuntu/app"
 
 # -----------------------------
-# 1) 모든 브랜치: 빌드(컴파일) 체크
+# 1) 빌드: 프론트 → 백엔드 static 복사 → jar 생성
 # -----------------------------
-backend:test:
-  stage: test
+build:
+  stage: build
   image: gradle:8.10.0-jdk21-jammy
   rules:
-    - if: '$CI_COMMIT_BRANCH'
+    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master)$/'
   script:
     - set -euo pipefail
-    - cd "$BACKEND_DIR"
-    - chmod +x gradlew
-    - ./gradlew --no-daemon assemble
 
-# ---------------------------------------
-# 2) dev/main/master: 이미지 빌드 + ECR 푸시
-#    - dev: dev-<sha>, dev-latest
-#    - master/main: prod-<sha>, prod-latest
-# ---------------------------------------
-backend:build_push_ecr:
-  stage: build
-  image: docker:27.1.2
-  services:
-    - name: docker:27.1.2-dind
-      command: ["--tls=false"]
-  needs: ["backend:test"]
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^(dev|main|master)$/'
-  before_script:
-    # docker image에는 java/aws-cli가 없으므로 설치 (bootBuildImage에 JDK21 필요)
-    - apk add --no-cache bash curl aws-cli openjdk21-jdk unzip
-  script:
-    - set -euo pipefail
-    - ': "${AWS_REGION:?}"'
-    - ': "${AWS_ACCOUNT_ID:?}"'
-    - ': "${ECR_REPO:?}"'
-    - ': "${APP_NAME:?}"'
-    # AWS 자격증명 확인 (잘못된 키면 여기서 실패)
-    - aws sts get-caller-identity --region "$AWS_REGION" >/dev/null
-    - ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-    # ECR 로그인
-    - aws ecr get-login-password --region "$AWS_REGION" | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-    - cd "$BACKEND_DIR"
-    - chmod +x gradlew
-    # Spring Boot Buildpacks로 컨테이너 이미지 생성 (로컬태그: <APP_NAME>:local)
-    - ./gradlew --no-daemon bootBuildImage --imageName "${APP_NAME}:local"
-    - BRANCH_NAME="${CI_COMMIT_REF_NAME}"
-    - |
-      case "$BRANCH_NAME" in
-        main|master)
-          IMAGE_TAG="prod-${CI_COMMIT_SHORT_SHA}"
-          LATEST_TAG="prod-latest"
-          ;;
-        dev)
-          IMAGE_TAG="dev-${CI_COMMIT_SHORT_SHA}"
-          LATEST_TAG="dev-latest"
-          ;;
-        *)
-          echo "Unsupported branch: $BRANCH_NAME" >&2
-          exit 1
-          ;;
-      esac
-    - ECR_IMAGE="${ECR_REGISTRY}/${ECR_REPO}:${IMAGE_TAG}"
-    - ECR_LATEST="${ECR_REGISTRY}/${ECR_REPO}:${LATEST_TAG}"
-    # 커밋 태그 + latest 태그 둘 다 푸시
-    - docker tag "${APP_NAME}:local" "$ECR_IMAGE"
-    - docker push "$ECR_IMAGE"
-    - docker tag "${APP_NAME}:local" "$ECR_LATEST"
-    - docker push "$ECR_LATEST"
-    # deploy job에서 참고할 수 있도록 dotenv artifact로 남김
+    # Node.js 설치 (프론트 빌드용)
+    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    - apt-get install -y nodejs
+
+    # 프론트엔드 빌드
+    - cd "$FRONTEND_DIR"
+    - npm ci
+    - npm run build
+
+    # 스프링부트 resources/static 폴더 생성 및 dist 복사
     - cd "$CI_PROJECT_DIR"
-    - printf "ECR_IMAGE=%s\n" "$ECR_IMAGE" > ecr-image.env
-    - printf "ECR_LATEST=%s\n" "$ECR_LATEST" >> ecr-image.env
-    - printf "ECR_REGISTRY=%s\n" "$ECR_REGISTRY" >> ecr-image.env
-    - printf "IMAGE_TAG=%s\n" "$IMAGE_TAG" >> ecr-image.env
-    - printf "LATEST_TAG=%s\n" "$LATEST_TAG" >> ecr-image.env
-    - printf "BRANCH_NAME=%s\n" "$BRANCH_NAME" >> ecr-image.env
-  artifacts:
-    reports:
-      dotenv: ecr-image.env
+    - mkdir -p "$BACKEND_DIR/src/main/resources/static"
+    - cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/main/resources/static/"
 
-# ---------------------------------------
-# 3) dev: SSAFY EC2 자동 배포
-#    - EC2의 ~/infra/docker-compose.yml 기준으로 pull/up
-#    - master/main은 여기서 아무것도 안함 (ECR 푸시까지만)
-# ---------------------------------------
-deploy:dev_ssafy_ec2:
+    # 스프링부트 jar 빌드
+    - cd "$BACKEND_DIR"
+    - chmod +x gradlew
+    - ./gradlew --no-daemon bootJar
+
+    # jar 파일을 artifact로 저장 (deploy 단계에서 사용)
+    - cd "$CI_PROJECT_DIR"
+    - mkdir -p artifacts
+    - cp "$BACKEND_DIR"/build/libs/*.jar artifacts/app.jar
+  artifacts:
+    paths:
+      - artifacts/app.jar
+    expire_in: 1 hour
+
+# -----------------------------
+# 2) 배포: EC2에 jar 전송 + 재시작
+# -----------------------------
+deploy:
   stage: deploy
-  image: docker:27.1.2
-  needs: ["backend:build_push_ecr"]
+  image: ubuntu:24.04
   rules:
-    - if: '$CI_COMMIT_REF_NAME == "dev" && $DEV_EC2_HOST && $DEV_EC2_USER && $DEV_EC2_SSH_PRIVATE_KEY'
-  environment:
-    name: dev
+    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master)$/'
   before_script:
-    - apk add --no-cache bash openssh-client aws-cli
+    - apt-get update && apt-get install -y openssh-client
+    # SSH 키 설정 (GitLab CI Variables에 EC2_SSH_KEY 등록 필요 - File 타입)
+    - mkdir -p ~/.ssh
+    - chmod 700 ~/.ssh
+    # File 타입 변수는 cat으로 읽어야 함
+    - cat "$EC2_SSH_KEY" | tr -d '\r' > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan i14a707.p.ssafy.io >> ~/.ssh/known_hosts
   script:
-    - set -euo pipefail
-    - ': "${AWS_REGION:?}"'
-    - ': "${AWS_ACCOUNT_ID:?}"'
-    # GitLab CI Variables에 File 타입으로 BACKEND_ENV_FILE 등록(= .env 내용)
-    - ': "${BACKEND_ENV_FILE:?}"'
-    - ': "${DEV_EC2_HOST:?}"'
-    - ': "${DEV_EC2_USER:?}"'
-    # GitLab CI Variables에 File 타입으로 DEV_EC2_SSH_PRIVATE_KEY 등록(= private key 내용)
-    - ': "${DEV_EC2_SSH_PRIVATE_KEY:?}"'
-    - ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-    # SSH 키 파일 생성 (GitLab File 변수는 "파일 경로"로 주입됨)
-    - KEY_FILE="$CI_PROJECT_DIR/dev-ec2.key"
-    - tr -d '\r' < "$DEV_EC2_SSH_PRIVATE_KEY" > "$KEY_FILE"
-    - chmod 600 "$KEY_FILE"
-    # dev .env를 EC2(~/infra)에 업로드 (compose 파일에서 env_file로 참조하도록 구성)
-    - ENV_FILE="$CI_PROJECT_DIR/backend.dev.env"
-    - tr -d '\r' < "$BACKEND_ENV_FILE" > "$ENV_FILE"
-    - scp -i "$KEY_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "$ENV_FILE" "${DEV_EC2_USER}@${DEV_EC2_HOST}:~/infra/.env.backend"
-    - ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${DEV_EC2_USER}@${DEV_EC2_HOST}" "chmod 600 ~/infra/.env.backend || true"
-    # 1) 원격 EC2에서 ECR docker login (비밀번호는 CI에서 생성해 ssh로 전달)
-    - aws ecr get-login-password --region "$AWS_REGION" | ssh -i "$KEY_FILE" -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null "${DEV_EC2_USER}@${DEV_EC2_HOST}" "docker login --username AWS --password-stdin '$ECR_REGISTRY'"
-    # 2) ~/infra 에서 docker compose로 backend 서비스만 pull/up
+    # 배포 경로 생성
+    - ssh ubuntu@i14a707.p.ssafy.io "mkdir -p $DEPLOY_PATH"
+
+    # jar 파일 전송
+    - scp artifacts/app.jar ubuntu@i14a707.p.ssafy.io:$DEPLOY_PATH/app.jar
+
+    # 프로세스 종료 후 재시작
     - |
-      ssh -i "$KEY_FILE" \
-        -o StrictHostKeyChecking=no \
-        -o UserKnownHostsFile=/dev/null \
-        "${DEV_EC2_USER}@${DEV_EC2_HOST}" \
-        "cd ~/infra && (docker compose version >/dev/null 2>&1 && DC='docker compose' || DC='docker-compose'); \
-          \$DC pull backend && \$DC up -d --no-deps backend"
+      ssh ubuntu@i14a707.p.ssafy.io "
+        cd $DEPLOY_PATH
+
+        # Java 설치 (없으면 자동 설치)
+        if ! command -v java &> /dev/null; then
+          sudo apt-get update && sudo apt-get install -y openjdk-21-jdk
+        fi
+
+        # 기존 프로세스 종료
+        if [ -f pid.txt ]; then
+          kill \$(cat pid.txt) 2>/dev/null || true
+        fi
+        pkill -f 'app.jar' 2>/dev/null || true
+        sleep 2
+
+        # 새 jar 실행 (백그라운드)
+        nohup java -jar app.jar > app.log 2>&1 &
+        echo \$! > pid.txt
+        echo '애플리케이션 시작됨'
+      "
+
+  environment:
+    name: production
+    url: http://i14a707.p.ssafy.io

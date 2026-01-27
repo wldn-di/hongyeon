@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.scenario.api.v1;
+package com.ssafy.s14p11a707.scenario.api;
 
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
@@ -18,23 +18,28 @@ import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
 import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
 import com.ssafy.s14p11a707.scenario.service.ScenarioService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/scenarios")
+@RequestMapping("/api/scenarios")
 public class ScenarioApi implements ScenarioApiDoc {
 
     private final ScenarioService scenarioService;
     private final ReviewService reviewService;
     private final GameSessionService gameSessionService;
+
 
     @GetMapping
     @Override
@@ -44,8 +49,8 @@ public class ScenarioApi implements ScenarioApiDoc {
 
     @GetMapping("/search")
     @Override
-    public ResponseEntity<ScenarioListResponse> searchScenarios() {
-        return ResponseEntity.ok(scenarioService.searchScenarios());
+    public ResponseEntity<ScenarioListResponse> searchScenarios(@RequestParam(required = false) String keyword) {
+        return ResponseEntity.ok(scenarioService.searchScenarios(keyword));
     }
 
     @GetMapping("/{scenarioId}")
@@ -74,8 +79,11 @@ public class ScenarioApi implements ScenarioApiDoc {
 
     @GetMapping("/{scenarioId}/rankings")
     @Override
-    public ResponseEntity<ScenarioRankingResponse> getScenarioRankings(@PathVariable long scenarioId) {
-        return ResponseEntity.ok(scenarioService.getScenarioRankings(scenarioId));
+    public ResponseEntity<ScenarioRankingResponse> getScenarioRankings(
+            @PathVariable long scenarioId,
+            @AuthenticationPrincipal OidcUser oidcUser
+    ) {
+        return ResponseEntity.ok(scenarioService.getScenarioRankings(scenarioId, oidcUser));
     }
 
     @GetMapping("/{scenarioId}/rooms")
@@ -94,26 +102,5 @@ public class ScenarioApi implements ScenarioApiDoc {
     @Override
     public ResponseEntity<SuspectListResponse> getSuspects(@PathVariable long scenarioId) {
         return ResponseEntity.ok(scenarioService.getSuspects(scenarioId));
-    }
-
-    @GetMapping("/{scenarioId}/reviews")
-    @Override
-    public ResponseEntity<ReviewListResponse> getReviews(@PathVariable long scenarioId) {
-        return ResponseEntity.ok(reviewService.getReviews(scenarioId));
-    }
-
-    @PostMapping("/{scenarioId}/reviews")
-    @Override
-    public ResponseEntity<ReviewResponse> createReview(
-            @PathVariable long scenarioId,
-            @RequestBody ReviewCreateRequest request
-    ) {
-        return ResponseEntity.ok(reviewService.createReview(scenarioId, request));
-    }
-
-    @PostMapping("/{scenarioId}/sessions")
-    @Override
-    public ResponseEntity<GameStartResponse> startGame(@PathVariable long scenarioId) {
-        return ResponseEntity.ok(gameSessionService.startGame(scenarioId));
     }
 }

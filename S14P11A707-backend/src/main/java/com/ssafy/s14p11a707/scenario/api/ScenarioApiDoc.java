@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.scenario.api.v1;
+package com.ssafy.s14p11a707.scenario.api;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
@@ -22,6 +22,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Tag(name = "Scenario API", description = "시나리오/리뷰/게임시작 API")
 public interface ScenarioApiDoc {
@@ -64,7 +67,7 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioListResponse> searchScenarios();
+    ResponseEntity<ScenarioListResponse> searchScenarios(@RequestParam(required = false) String keyword);
 
     @Operation(summary = "시나리오 상세 조회", description = "시나리오 상세 정보를 조회합니다.")
     @ApiResponses({
@@ -164,7 +167,10 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioRankingResponse> getScenarioRankings(long scenarioId);
+    ResponseEntity<ScenarioRankingResponse> getScenarioRankings(
+            long scenarioId,
+            @AuthenticationPrincipal OidcUser oidcUser
+    );
 
     @Operation(summary = "방 정보 조회", description = "시나리오 방 정보를 조회합니다.")
     @ApiResponses({
@@ -225,65 +231,5 @@ public interface ScenarioApiDoc {
             )
     })
     ResponseEntity<SuspectListResponse> getSuspects(long scenarioId);
-
-    @Operation(summary = "리뷰 목록 조회", description = "시나리오 리뷰 목록을 조회합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "조회 성공",
-                    content = @Content(schema = @Schema(implementation = ReviewListResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "잘못된 입력 값",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 오류",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<ReviewListResponse> getReviews(long scenarioId);
-
-    @Operation(summary = "리뷰 작성", description = "시나리오 리뷰를 작성합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "작성 성공",
-                    content = @Content(schema = @Schema(implementation = ReviewResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "잘못된 입력 값",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 오류",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<ReviewResponse> createReview(long scenarioId, ReviewCreateRequest request);
-
-    @Operation(summary = "게임 시작", description = "게임 세션을 시작합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "시작 성공",
-                    content = @Content(schema = @Schema(implementation = GameStartResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "400",
-                    description = "잘못된 입력 값",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "500",
-                    description = "서버 오류",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<GameStartResponse> startGame(long scenarioId);
 }
 
