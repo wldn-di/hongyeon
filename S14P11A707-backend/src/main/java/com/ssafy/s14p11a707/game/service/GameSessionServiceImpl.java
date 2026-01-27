@@ -39,9 +39,11 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 public class GameSessionServiceImpl implements GameSessionService {
@@ -92,17 +94,17 @@ public class GameSessionServiceImpl implements GameSessionService {
     @Override
     @Transactional
     public GameStartResponse startGame(long scenarioId, OidcUser oidcUser) {
+        log.info("=== 게임 시작 요청 === scenarioId: {}", scenarioId);
+
         User user = getUser(oidcUser);
+        log.info("1. 유저 조회 완료: userId={}", user.getId());
 
         Scenario scenario = scenarioRepository.findById(scenarioId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
+        log.info("2. 시나리오 조회 완료: title={}, status={}", scenario.getTitle(), scenario.getGenerationStatus());
 
         if (scenario.getGenerationStatus() != Scenario.GenerationStatus.COMPLETED) {
             throw new BaseException(ErrorCode.SCENARIO_NOT_READY);
-        }
-
-        if (gameSessionRepository.existsByScenarioIdAndUserIdAndStatus(scenarioId, user.getId(), Status.PLAYING)) {
-            throw new BaseException(ErrorCode.SESSION_ALREADY_PLAYING);
         }
 
         GameSession session = GameSession.builder()
@@ -118,6 +120,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .playTime(0L)
                 .build();
         gameSessionRepository.save(session);
+        log.info("4. 게임 세션 저장 완료: sessionId={}", session.getId());
 
         EventLog startLog = EventLog.builder()
                 .session(session)
@@ -126,21 +129,31 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .displayMessage("사건 파일이 열렸습니다.")
                 .build();
         eventLogRepository.save(startLog);
+        log.info("5. 이벤트 로그 저장 완료");
 
         // 시나리오 플레이 횟수 증가
         scenario.incrementPlayCount();
+        log.info("6. 시나리오 플레이 횟수 증가");
 
         // 유저 시도 횟수 증가
         user.incrementTotalAttempts();
+        log.info("7. 유저 시도 횟수 증가");
 
         session.markSaved();
+        log.info("8. 세션 저장 마킹 완료");
 
         Victim victim = victimRepository.findByScenarioId(scenarioId).orElse(null);
+        log.info("9. 피해자 조회 완료: victim={}", victim != null ? victim.getName() : "null");
 
         // TODO: 룸 확인
         Room room = roomRepository.findByScenarioIdAndFloorNumber(scenarioId, 1).orElse(null);
+        log.info("10. 방 조회 완료: room={}", room != null ? room.getRoomName() : "null");
 
-        return GameStartResponse.from(session, scenario, victim, room, startLog);
+        log.info("11. GameStartResponse 생성 시작");
+        GameStartResponse response = GameStartResponse.from(session, scenario, victim, room, startLog);
+        log.info("12. GameStartResponse 생성 완료");
+
+        return response;
     }
 
     @Override
