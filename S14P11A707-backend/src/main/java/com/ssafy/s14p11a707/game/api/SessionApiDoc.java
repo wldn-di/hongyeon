@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.game.api.v1;
+package com.ssafy.s14p11a707.game.api;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
 import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;

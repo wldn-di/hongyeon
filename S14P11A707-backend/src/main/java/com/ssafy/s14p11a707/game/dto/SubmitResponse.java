@@ -17,7 +17,6 @@ public record SubmitResponse(
             boolean weaponCorrect,
             boolean locationCorrect,
             float motiveSimilarity,
-            float causeOfDeathSimilarity,
             String aiComment
     ) {
     }

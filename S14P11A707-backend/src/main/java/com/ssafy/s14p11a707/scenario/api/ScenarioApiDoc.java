@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.scenario.api.v2;
+package com.ssafy.s14p11a707.scenario.api;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;

@@ -4,9 +4,13 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.ssafy.s14p11a707.game.dto.*;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
 import com.ssafy.s14p11a707.scenario.entity.Clue;
+import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.scenario.entity.Suspect;
+import com.ssafy.s14p11a707.game.entity.GameSession;
 import com.ssafy.s14p11a707.scenario.repository.ClueRepository;
+import com.ssafy.s14p11a707.scenario.repository.ScenarioRepository;
 import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
+import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
@@ -15,9 +19,14 @@ import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.document.Document;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
+import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.springframework.context.annotation.Primary;
 
@@ -30,20 +39,57 @@ public class GameSessionServiceImpl implements GameSessionService {
     private final ChatMemory chatMemory;
     private final SuspectRepository suspectRepository;
     private final ClueRepository clueRepository;
+    private final ScenarioRepository scenarioRepository;
+    private final GameSessionRepository gameSessionRepository;
+    private final EmbeddingModel embeddingModel;
 
     public GameSessionServiceImpl(@Qualifier("genAiChatClient") ChatClient chatClient,
                                   ChatMemoryRepository chatMemoryRepository,
                                   VectorStore vectorStore,
                                   SuspectRepository suspectRepository,
-                                  ClueRepository clueRepository) {
+                                  ClueRepository clueRepository,
+                                  ScenarioRepository scenarioRepository,
+                                  GameSessionRepository gameSessionRepository,
+                                  EmbeddingModel embeddingModel) {
         this.chatClient = chatClient;
         this.vectorStore = vectorStore;
         this.suspectRepository = suspectRepository;
         this.clueRepository = clueRepository;
+        this.scenarioRepository = scenarioRepository;
+        this.gameSessionRepository = gameSessionRepository;
+        this.embeddingModel = embeddingModel;
         this.chatMemory = MessageWindowChatMemory.builder()
                 .maxMessages(20) // 최근 20개 대화 기억
                 .chatMemoryRepository(chatMemoryRepository) // PostgreSQL 저장소 사용
                 .build();
+    }
+
+    /**
+     * 코사인 유사도 계산
+     * @param vec1 첫 번째 벡터
+     * @param vec2 두 번째 벡터
+     * @return 유사도 (0~1, 1이 가장 유사)
+     */
+    private float cosineSimilarity(float[] vec1, float[] vec2) {
+        if (vec1 == null || vec2 == null || vec1.length != vec2.length) {
+            return 0.0f;
+        }
+
+        float dotProduct = 0.0f;
+        float norm1 = 0.0f;
+        float norm2 = 0.0f;
+
+        for (int i = 0; i < vec1.length; i++) {
+            dotProduct += vec1[i] * vec2[i];
+            norm1 += vec1[i] * vec1[i];
+            norm2 += vec2[i] * vec2[i];
+        }
+
+        if (norm1 == 0.0f || norm2 == 0.0f) {
+            return 0.0f;
+        }
+
+        return (float) (dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2)));
     }
 
     @Override
@@ -95,7 +141,8 @@ public class GameSessionServiceImpl implements GameSessionService {
             behaviorGuideline = """
                     - 당신은 무고합니다. 당황하거나 공포스러워할 수 있지만 사실만 말하세요.
                     - 범행과 무관함을 명확히 하고, 자신의 알리바이를 솔직하게 말하세요.
-                    - 진실을 말하므로 모순이 없어야 합니다.
+                    - 하지만 당신에게 밝혀지면 안 되는 비밀이 있다면, 이를 숨기기 위해 거짓말을 할 수 있습니다.
+                    - 진실을 말하되, 비밀과 관련된 내용은 회피하거나 거짓으로 말해도 됩니다.
                     - 다른 용의자에 대한 추측은 신중하게 하세요.
                     """;
         }
@@ -264,7 +311,96 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     @Override
     public SubmitResponse submit(long sessionId, SubmitRequest request) {
-        return null;
+        // 1. GameSession 조회
+        GameSession gameSession = gameSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("GameSession not found: " + sessionId));
+
+        // 2. Scenario 조회
+        Scenario scenario = gameSession.getScenario();
+
+        // 3. motive 임베딩
+        float[] motiveEmbedding = null;
+        float motiveSimilarity = 0.0f;
+
+        if (request.motive() != null && !request.motive().isBlank()) {
+            // EmbeddingModel로 텍스트 임베딩
+            var embeddingResult = embeddingModel.embed(request.motive());
+            motiveEmbedding = embeddingResult.getResult().getOutput();
+
+            // Scenario의 correctMotiveEmbedding과 유사도 계산
+            float[] correctMotiveEmbedding = scenario.getCorrectMotiveEmbedding();
+            if (correctMotiveEmbedding != null) {
+                motiveSimilarity = cosineSimilarity(motiveEmbedding, correctMotiveEmbedding);
+            }
+        }
+
+
+        // 5. GameSession에 임베딩 저장
+        gameSession.setSubmittedMotiveEmbedding(motiveEmbedding);
+        gameSessionRepository.save(gameSession);
+
+        // 6. truthConfigJson에서 정답 확인
+        JsonNode truthConfig = scenario.getTruthConfigJson();
+        boolean culpritCorrect = false;
+        boolean weaponCorrect = false;
+        boolean locationCorrect = false;
+
+        if (truthConfig != null) {
+            long correctCulpritId = truthConfig.has("culpritSuspectId")
+                    ? truthConfig.get("culpritSuspectId").asLong() : 0;
+            long correctWeaponClueId = truthConfig.has("weaponClueId")
+                    ? truthConfig.get("weaponClueId").asLong() : 0;
+            int correctLocationFloor = truthConfig.has("locationFloor")
+                    ? truthConfig.get("locationFloor").asInt() : 0;
+
+            culpritCorrect = (request.culpritId() == correctCulpritId);
+            weaponCorrect = (request.weaponClueId() == correctWeaponClueId);
+            locationCorrect = (request.locationFloor() == correctLocationFloor);
+        }
+
+        // 7. AI 코멘트 생성
+        String aiComment = buildAiComment(culpritCorrect, weaponCorrect, locationCorrect,
+                motiveSimilarity);
+
+        // 8. 결과 반환
+        return new SubmitResponse(
+                sessionId,
+                "COMPLETED",
+                gameSession.getSubmitAttempts() != null ? gameSession.getSubmitAttempts() + 1 : 1,
+                Instant.now(),
+                0, // finalScore - 추후 계산 필요
+                "C", // rankGrade - 추후 계산 필요
+                new SubmitResponse.Evaluation(
+                        culpritCorrect,
+                        weaponCorrect,
+                        locationCorrect,
+                        motiveSimilarity,
+                        aiComment
+                )
+        );
+    }
+
+    private String buildAiComment(boolean culpritCorrect, boolean weaponCorrect,
+                                   boolean locationCorrect, float motiveSimilarity) {
+        List<String> comments = new ArrayList<>();
+
+        if (culpritCorrect && weaponCorrect && locationCorrect) {
+            comments.add("범인, 흉기, 범행 장소를 정확히 맞혔습니다!");
+        } else {
+            if (!culpritCorrect) comments.add("범인 추리가 다릅니다.");
+            if (!weaponCorrect) comments.add("흉기 추리가 다릅니다.");
+            if (!locationCorrect) comments.add("범행 장소 추리가 다릅니다.");
+        }
+
+        if (motiveSimilarity >= 0.8f) {
+            comments.add("동기 분석이 매우 정확합니다.");
+        } else if (motiveSimilarity >= 0.5f) {
+            comments.add("동기 분석이 부분적으로 맞습니다.");
+        } else if (motiveSimilarity > 0.0f) {
+            comments.add("동기 분석이 부정확합니다.");
+        }
+
+        return String.join(" ", comments);
     }
 
     @Override

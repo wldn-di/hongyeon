@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.game.api.v1;
+package com.ssafy.s14p11a707.game.api;
 
 import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
 import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
@@ -36,7 +36,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v1/sessions")
+@RequestMapping("/api/v2/sessions")
 public class SessionApi implements SessionApiDoc {
 
     private final GameSessionService gameSessionService;

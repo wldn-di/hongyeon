@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.scenario.api.v2;
+package com.ssafy.s14p11a707.scenario.api;
 
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
@@ -16,7 +16,8 @@ import com.ssafy.s14p11a707.scenario.dto.ScenarioRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioStatusResponse;
 import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
 import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
-import com.ssafy.s14p11a707.scenario.service.v2.ScenarioService;
+import com.ssafy.s14p11a707.scenario.service.ScenarioService;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -31,22 +32,14 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/v1/scenarios")
+@RequiredArgsConstructor
+@RequestMapping("/api/scenarios")
 public class ScenarioApi implements ScenarioApiDoc {
 
     private final ScenarioService scenarioService;
     private final ReviewService reviewService;
     private final GameSessionService gameSessionService;
 
-    public ScenarioApi(
-            @Qualifier("scenarioServiceImpl") ScenarioService scenarioService,
-            ReviewService reviewService,
-            @Qualifier("gameSessionServiceImpl") GameSessionService gameSessionService
-    ) {
-        this.scenarioService = scenarioService;
-        this.reviewService = reviewService;
-        this.gameSessionService = gameSessionService;
-    }
 
     @GetMapping
     @Override
