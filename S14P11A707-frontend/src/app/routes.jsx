@@ -32,6 +32,8 @@ export function AppRoutes() {
       <Route path={ROUTES.BOARD_SESSION} component={BoardSession} />
       <Route path={ROUTES.MY_BOOKSHELF} component={MyBookshelf} />
       <Route path={ROUTES.GAME} component={GameRoom} />
+      <Route path={ROUTES.GAME_SOLO} component={GameRoom} />
+      <Route path={ROUTES.GAME_RESUME} component={GameRoom} />
       <Route path={ROUTES.SUBMIT} component={Submit} />
       <Route path={ROUTES.SUBMIT_SESSION} component={SubmitSession} />
       <Route path={ROUTES.NOT_FOUND} component={NotFound} />

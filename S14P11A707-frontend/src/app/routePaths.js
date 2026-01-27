@@ -11,6 +11,8 @@ export const ROUTES = {
   BOARD_SESSION: "/board/session/:sessionId",
   MY_BOOKSHELF: "/my-bookshelf",
   GAME: "/game/:scenarioId",
+  GAME_SOLO: "/room/:scenarioId/solo",
+  GAME_RESUME: "/room/:sessionId/resume",
   SUBMIT: "/submit/:scenarioId",
   SUBMIT_SESSION: "/submit/session/:sessionId",
   NOT_FOUND: "/404",
@@ -22,6 +24,8 @@ export const createPath = {
   board: (scenarioId) => `/board/${scenarioId}`,
   boardSession: (sessionId) => `/board/session/${sessionId}`,
   game: (scenarioId) => `/game/${scenarioId}`,
+  gameSolo: (scenarioId) => `/room/${scenarioId}/solo`,
+  gameResume: (sessionId) => `/room/${sessionId}/resume`,
   submit: (scenarioId) => `/submit/${scenarioId}`,
   submitSession: (sessionId) => `/submit/session/${sessionId}`,
 };
