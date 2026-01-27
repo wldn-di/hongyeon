@@ -23,7 +23,7 @@ public interface GameSessionService {
 
     GameResumeResponse resumeGame(long sessionId, OidcUser oidcUser);
 
-    FloorMoveResponse moveFloor(long sessionId, OidcUser oidcUser);
+    FloorMoveResponse moveFloor(long sessionId, FloorMoveRequest request, OidcUser oidcUser);
 
     BoardResponse getBoard(long sessionId, OidcUser oidcUser);
 

@@ -39,6 +39,7 @@ import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -309,12 +310,27 @@ public class GameSessionServiceImpl implements GameSessionService {
     public DiscoveredClueResponse discoverClue(long sessionId, long clueId, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+        validatePlaying(session);
 
         Clue clue = clueRepository.findById(clueId)
                 .orElseThrow(() -> new BaseException(ErrorCode.CLUE_NOT_FOUND));
 
-        if (discoveredClueRepository.existsBySessionIdAndClueId(sessionId, clueId)) {
-            throw new BaseException(ErrorCode.CLUE_ALREADY_DISCOVERED);
+        if (clue.getScenario().getId() != session.getScenario().getId()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        if (clue.getRoom() != null) {
+            int currentFloor = session.getCurrentFloor() != null ? session.getCurrentFloor() : 1;
+            if (clue.getRoom().getFloorNumber() != currentFloor) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+            }
+        }
+
+        DiscoveredClue existingDiscovered = discoveredClueRepository
+                .findBySessionIdAndClueId(sessionId, clueId)
+                .orElse(null);
+        if (existingDiscovered != null) {
+            return DiscoveredClueResponse.from(sessionId, clue, existingDiscovered.getDiscoveredAt());
         }
 
         Instant now = Instant.now();
@@ -323,7 +339,17 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .clue(clue)
                 .discoveredAt(now)
                 .build();
-        discoveredClueRepository.save(discoveredClue);
+        try {
+            discoveredClueRepository.save(discoveredClue);
+        } catch (DataIntegrityViolationException ex) {
+            DiscoveredClue raced = discoveredClueRepository
+                    .findBySessionIdAndClueId(sessionId, clueId)
+                    .orElse(null);
+            if (raced != null) {
+                return DiscoveredClueResponse.from(sessionId, clue, raced.getDiscoveredAt());
+            }
+            throw ex;
+        }
 
         EventLog log = EventLog.builder()
                 .session(session)
@@ -363,6 +389,23 @@ public class GameSessionServiceImpl implements GameSessionService {
         DiscoveredClue discoveredClue = discoveredClueRepository
                 .findBySessionIdAndClueId(sessionId, clueId)
                 .orElse(null);
+
+        if (discoveredClue == null) {
+            return new ClueDetailResponse(
+                    clue.getId(),
+                    clue.getRoom() != null ? clue.getRoom().getId() : 0,
+                    clue.getRoom() != null ? clue.getRoom().getFloorNumber() : 0,
+                    clue.getName(),
+                    clue.getImportance().name(),
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    false,
+                    null
+            );
+        }
 
         return ClueDetailResponse.from(clue, discoveredClue);
     }
@@ -407,27 +450,36 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     @Override
     @Transactional
-    public FloorMoveResponse moveFloor(long sessionId, OidcUser oidcUser) {
+    public FloorMoveResponse moveFloor(long sessionId, FloorMoveRequest request, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+        validatePlaying(session);
         Scenario scenario = session.getScenario();
 
-        int currentFloor = session.getCurrentFloor() != null ? session.getCurrentFloor() : 1;
+        if (request == null) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        int targetFloor = request.targetFloor();
+        int minFloor = 1;
         int maxFloor = 6;
-        int nextFloor = currentFloor >= maxFloor ? 1 : currentFloor + 1;
+
+        if (targetFloor < minFloor || targetFloor > maxFloor) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
 
         List<Integer> visitedFloors = parseVisitedFloors(session.getVisitedFloorsJson());
-        boolean isFirstVisit = !visitedFloors.contains(nextFloor);
+        boolean isFirstVisit = !visitedFloors.contains(targetFloor);
 
         if (isFirstVisit) {
             visitedFloors = new ArrayList<>(visitedFloors);
-            visitedFloors.add(nextFloor);
+            visitedFloors.add(targetFloor);
         }
 
-        session.moveFloor(nextFloor, objectMapper.valueToTree(visitedFloors));
+        session.moveFloor(targetFloor, objectMapper.valueToTree(visitedFloors));
         session.markSaved();
 
-        Room room = roomRepository.findByScenarioIdAndFloorNumber(scenario.getId(), nextFloor)
+        Room room = roomRepository.findByScenarioIdAndFloorNumber(scenario.getId(), targetFloor)
                 .orElseThrow(() -> new BaseException(ErrorCode.ROOM_NOT_FOUND));
 
         EventLog newLog = null;
@@ -436,12 +488,12 @@ public class GameSessionServiceImpl implements GameSessionService {
                     .session(session)
                     .eventType(EventLog.EventType.FLOOR_MOVED)
                     .eventName("층 이동")
-                    .displayMessage(nextFloor + "층으로 이동했습니다.")
+                    .displayMessage(targetFloor + "층으로 이동했습니다.")
                     .build();
             eventLogRepository.save(newLog);
         }
 
-        return FloorMoveResponse.from(sessionId, nextFloor, isFirstVisit, room, newLog);
+        return FloorMoveResponse.from(sessionId, targetFloor, isFirstVisit, room, newLog);
     }
 
     @Override
@@ -618,6 +670,12 @@ public class GameSessionServiceImpl implements GameSessionService {
             throw new BaseException(ErrorCode.ACCESS_DENIED);
         }
         return session;
+    }
+
+    private void validatePlaying(GameSession session) {
+        if (session.getStatus() != Status.PLAYING) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
     }
 
     private List<Integer> parseVisitedFloors(JsonNode json) {

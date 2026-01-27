@@ -11,6 +11,7 @@ import com.ssafy.s14p11a707.game.dto.ClueDetailResponse;
 import com.ssafy.s14p11a707.game.dto.ClueListResponse;
 import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
 import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
+import com.ssafy.s14p11a707.game.dto.FloorMoveRequest;
 import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
 import com.ssafy.s14p11a707.game.dto.GameEndResponse;
 import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
@@ -283,7 +284,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<FloorMoveResponse> moveFloor(long sessionId, OidcUser oidcUser);
+    ResponseEntity<FloorMoveResponse> moveFloor(long sessionId, FloorMoveRequest request, OidcUser oidcUser);
 
     @Operation(summary = "보드 조회", description = "세션의 추리 보드를 조회합니다.")
     @ApiResponses({

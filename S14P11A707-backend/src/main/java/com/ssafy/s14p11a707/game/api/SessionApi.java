@@ -10,6 +10,7 @@ import com.ssafy.s14p11a707.game.dto.ClueDetailResponse;
 import com.ssafy.s14p11a707.game.dto.ClueListResponse;
 import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
 import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
+import com.ssafy.s14p11a707.game.dto.FloorMoveRequest;
 import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
 import com.ssafy.s14p11a707.game.dto.GameEndResponse;
 import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
@@ -126,9 +127,10 @@ public class SessionApi implements SessionApiDoc {
     @Override
     public ResponseEntity<FloorMoveResponse> moveFloor(
             @PathVariable long sessionId,
+            @RequestBody FloorMoveRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.moveFloor(sessionId, oidcUser));
+        return ResponseEntity.ok(gameSessionService.moveFloor(sessionId, request, oidcUser));
     }
 
     @GetMapping("/{sessionId}/board")
