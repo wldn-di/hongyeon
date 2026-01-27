@@ -18,7 +18,7 @@ import { useGameSubmission } from '@/features/game/hooks/useGameSubmission'
 import { useGameReport } from '@/features/game/hooks/useGameReport'
 import { startGame, endGame, saveGame, fetchResume, moveFloor, submitAnswer } from '@/features/session/api/sessionApi'
 import { fetchClues, discoverClue } from '@/features/session/api/cluesApi'
-import { normalizeGameStartResponse, normalizeResumeResponse, normalizeGameEndResponse, normalizeClueListResponse } from '@/features/session/api/sessionMappers'
+import { normalizeGameStartResponse, normalizeResumeResponse, normalizeGameEndResponse, normalizeClueListResponse, normalizeDiscoveredClueResponse } from '@/features/session/api/sessionMappers'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -503,41 +503,48 @@ export default function GameRoom() {
     if (!clueId) return
 
     try {
-      // 백엔드에 단서 발견 요청 - 응답에서 상세 정보 받음
-      const discoverResponse = await discoverClue(sessionId, clueId)
+      // 백엔드에 단서 발견 요청
+      const response = await discoverClue(sessionId, clueId)
 
-      // API 응답에서 단서 상세 정보 추출
-      const clueData = discoverResponse?.clue || {}
+      // 응답 정규화
+      const normalized = normalizeDiscoveredClueResponse(response)
+      const clueData = normalized.clue
 
-      // 증거 객체 생성 및 수집 (API 응답 데이터 우선 사용)
+      if (!clueData) {
+        console.error('단서 데이터가 없습니다:', response)
+        return
+      }
+
+      // 증거 객체 생성 (API 응답 데이터만 사용)
       const evidence = {
-        id: clueData.clueId || clueId,
-        name: clueData.name || clue.title || '알 수 없는 증거',
-        description: clueData.description || clue.body || '',
-        importance: clueData.importance || clue.importance || '',
-        detailImageUrl: clueData.detailImageUrl || '',
-        assistantComment: clueData.assistantComment || '',
+        id: clueData.id,
+        name: clueData.name,
+        description: clueData.description,
+        importance: clueData.importance,
+        detailImageUrl: clueData.detailImageUrl,
+        assistantComment: clueData.assistantComment,
         location: currentRoom?.name || '현장',
-        discoveredAt: discoverResponse?.discoveredAt || new Date().toISOString(),
+        discoveredAt: normalized.discoveredAt,
       }
       collectEvidence(evidence)
 
       // 로그 추가
       addLog('evidence', `${evidence.name} 단서를 발견했습니다.`)
 
-      // 단서 목록 새로고침 (발견된 단서 제외)
-      const response = await fetchClues(sessionId)
-      const normalized = normalizeClueListResponse(response)
-      setApiClues(normalized.clues || [])
+      // 단서 목록 새로고침
+      const cluesResponse = await fetchClues(sessionId)
+      const cluesNormalized = normalizeClueListResponse(cluesResponse)
+      setApiClues(cluesNormalized.clues || [])
 
       // 백엔드 로그도 새로고침
       refetchLogs?.()
     } catch (err) {
       // 이미 발견된 단서면 에러 무시
-      if (err.message?.includes('이미 발견')) {
+      if (err.message?.includes('이미') || err.message?.includes('already')) {
         console.log('이미 발견된 단서입니다.')
       } else {
         console.error('단서 발견 실패:', err)
+        toast.error('단서 발견에 실패했습니다.')
       }
     }
   }, [sessionId, collectEvidence, currentRoom, addLog, refetchLogs])
@@ -872,7 +879,7 @@ export default function GameRoom() {
 	            {/* sessionId가 있으면 AgitRoom 렌더링 */}
 	            {sessionId ? (
 	              <AgitRoom
-	                key={`${activeScenarioId}-${sessionId}-${clues.length}`}
+	                key={`${activeScenarioId}-${sessionId}`}
 	                clues={clues}
 	                onClueInspected={handleClueInspected}
 	                onRoomChanged={handleRoomChanged}
