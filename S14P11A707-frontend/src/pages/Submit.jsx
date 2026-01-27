@@ -1,38 +1,21 @@
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import { useRoute, Link, useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
-import { scenarios } from '@/data/dummyData'
-import { AlertCircle, CheckCircle } from 'lucide-react'
-
-// 더미 용의자
-const suspects = [
-  { id: 1, name: "김철수" },
-  { id: 2, name: "이영희" },
-  { id: 3, name: "박민수" },
-  { id: 4, name: "최지연" },
-]
-
-// 더미 증거
-const evidences = [
-  { id: 1, name: "피 묻은 장갑" },
-  { id: 2, name: "지문 카드" },
-  { id: 3, name: "목격자 진술서" },
-  { id: 4, name: "협박 편지" },
-]
-
-// 더미 장소
-const locations = [
-  { id: 1, name: "범행 현장" },
-  { id: 2, name: "피해자 사무실" },
-  { id: 3, name: "주차장" },
-  { id: 4, name: "피해자 자택" },
-]
+import { useScenarioById } from '@/features/scenarios/hooks/useScenarioById'
+import { useGameRooms } from '@/features/game/hooks/useGameRooms'
+import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react'
+import { toast } from 'sonner'
 
 export default function Submit() {
   const [, params] = useRoute('/submit/:scenarioId')
-  const scenarioId = params?.scenarioId ? parseInt(params.scenarioId) : 1
-  const scenario = scenarios.find(s => s.id === scenarioId) || scenarios[0]
+  const scenarioId = params?.scenarioId ? parseInt(params.scenarioId) : null
   const [, navigate] = useLocation()
+
+  // 시나리오 정보 조회 (API)
+  const { scenario, loading, error } = useScenarioById(scenarioId)
+
+  // 방 정보 조회 (장소 목록용)
+  const { rooms } = useGameRooms(scenarioId)
 
   const [culprit, setCulprit] = useState('')
   const [weapon, setWeapon] = useState('')
@@ -41,19 +24,102 @@ export default function Submit() {
   const [motive, setMotive] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
+  // 용의자 목록 (시나리오에서 가져옴)
+  const suspects = scenario?.suspects || []
+
+  // 증거 목록 (보드 localStorage에서 가져옴)
+  const evidences = useMemo(() => {
+    if (!scenarioId) return []
+    const itemsRaw = localStorage.getItem(`board-items-${scenarioId}`)
+    if (!itemsRaw) return []
+
+    try {
+      const items = JSON.parse(itemsRaw)
+      return items
+        .filter(item => item.type === 'evidence')
+        .map(item => ({
+          id: item.id,
+          name: item.name || '증거',
+        }))
+    } catch {
+      return []
+    }
+  }, [scenarioId])
+
+  // 장소 목록 (방 정보에서 가져옴)
+  const locations = useMemo(() => {
+    if (!rooms || rooms.length === 0) return []
+    return rooms.map(room => ({
+      id: room.id,
+      name: room.name,
+    }))
+  }, [rooms])
+
   const handleSubmit = () => {
     if (!culprit || !weapon || !method || !location || !motive) {
-      alert('모든 항목을 입력해주세요')
+      toast.error('모든 항목을 입력해주세요')
       return
     }
-    
+
     setSubmitting(true)
-    setTimeout(() => {
-      navigate(`/result/${scenarioId}`)
-    }, 1500)
+
+    // 제출 데이터를 localStorage에 저장 (게임 종료 시 사용)
+    try {
+      const submissionData = {
+        culprit,
+        weapon,
+        method,
+        location,
+        motive,
+        submittedAt: new Date().toISOString(),
+      }
+      localStorage.setItem(`submission-${scenarioId}`, JSON.stringify(submissionData))
+
+      toast.success('제출되었습니다.')
+
+      // 결과 페이지로 이동 (또는 게임 룸으로)
+      setTimeout(() => {
+        navigate(`/scenarios`)
+      }, 1000)
+    } catch (err) {
+      toast.error('제출에 실패했습니다.')
+      setSubmitting(false)
+    }
   }
 
   const isComplete = culprit && weapon && method && location && motive
+
+  // 로딩 상태
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <main className="flex-1 py-12">
+          <div className="container max-w-3xl flex items-center justify-center py-20">
+            <div className="text-center">
+              <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-4" />
+              <p className="text-muted-foreground">시나리오 정보를 불러오는 중...</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
+
+  // 에러 상태
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <main className="flex-1 py-12">
+          <div className="container max-w-3xl flex items-center justify-center py-20">
+            <div className="text-center">
+              <p className="text-red-400 mb-4">시나리오 정보를 불러오는데 실패했습니다.</p>
+              <Button onClick={() => window.location.href = '/scenarios'}>시나리오 목록</Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    )
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -62,7 +128,7 @@ export default function Submit() {
           {/* 헤더 */}
           <div className="mb-8">
             <h1 className="text-4xl font-bold gold-glow mb-4">최종 정답 제출</h1>
-            <p className="text-muted-foreground">{scenario.title}</p>
+            <p className="text-muted-foreground">{scenario?.title || '시나리오'}</p>
           </div>
 
           {/* 경고 메시지 */}

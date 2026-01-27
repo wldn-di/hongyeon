@@ -1,8 +1,7 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo } from 'react'
 import { useLocation, useRoute } from 'wouter'
 import { Button } from '@/components/ui/Button'
-import { scenarios, scenarioSuspects } from '@/data/dummyData'
-import { DoorOpen, Heart, Clock, Lightbulb, Send, MessageCircle, Users, MapPin, Smartphone } from 'lucide-react'
+import { DoorOpen, Heart, Clock, Lightbulb, Send, MessageCircle, MapPin, Smartphone, Loader2 } from 'lucide-react'
 import LeftEvidencePanel from "@/features/game/panels/LeftEvidencePanel"
 import RightLogSidebar from "@/features/game/panels/RightLogSidebar"
 import BottomBoardPanel from "@/features/game/panels/BottomBoardPanel"
@@ -10,40 +9,72 @@ import { ReportModal, EvidenceDetailModal, SubmitAnswerModal, ReviewModal } from
 import PhoneUI from '@/features/game/components/PhoneUI'
 import AgitRoom from '@/features/game/engine/AgitRoom'
 import { useGameSession } from '@/features/game/session'
+import { useScenarioById } from '@/features/scenarios/hooks/useScenarioById'
+import { useGameRooms } from '@/features/game/hooks/useGameRooms'
+import { useGameLogs } from '@/features/game/hooks/useGameLogs'
+import { useGameSubmission } from '@/features/game/hooks/useGameSubmission'
+import { useGameReport } from '@/features/game/hooks/useGameReport'
+import { startGame, endGame, saveGame, fetchResume } from '@/features/session/api/sessionApi'
+import { normalizeGameStartResponse, normalizeResumeResponse, normalizeGameEndResponse } from '@/features/session/api/sessionMappers'
+import { toast } from 'sonner'
 
-//TODO: game play 화명 미동작으로 import 추가
-import {
-  helperInfo,
-  getHelperInitialMessage,
-  generateDummyReport,
-} from '@/features/game/data/gamePlayDummy'
-import { getScenarioClues, getScenarioEvidence, getScenarioRooms } from '@/features/game/data/scenarioClues'
+// 조력자 정보
+const helperInfo = {
+  id: "helper",
+  name: "조수 왓슨",
+  image: "/images/helper.png",
+  isHelper: true,
+}
+
+// 조력자 초기 메시지
+const getHelperInitialMessage = (scenarioTitle) => ({
+  id: Date.now(),
+  sender: "helper",
+  text: `안녕하세요, 탐정님. "${scenarioTitle}" 사건 수사를 도와드리겠습니다. 궁금한 점이 있으시면 언제든 물어보세요!`,
+  time: new Date().toLocaleTimeString("ko-KR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  }),
+})
 
 
 export default function GameRoom() {
   const [, setLocation] = useLocation()
+
   const [matchSolo, paramsSolo] = useRoute('/room/:scenarioId/solo')
-  const [matchCoop, paramsCoop] = useRoute('/room/:scenarioId/:roomCode')
+  const scenarioId = paramsSolo?.scenarioId ? parseInt(paramsSolo.scenarioId) : null
+  const [matchResume, paramsResume] = useRoute('/room/:sessionId/resume')
+  const resumeSessionId = paramsResume?.sessionId ? parseInt(paramsResume.sessionId) : null
 
-  const params = matchSolo ? paramsSolo : paramsCoop
-  const scenarioId = params?.scenarioId ? parseInt(params.scenarioId) : 1
-  const roomCode = paramsCoop?.roomCode || null
-  const isCoop = !!roomCode && roomCode !== 'solo'
+  // 시나리오 정보 조회 (API)
+  const { scenario, loading: scenarioLoading, error: scenarioError } = useScenarioById(scenarioId || resumeSessionId)
 
-  const scenario = scenarios.find(s => s.id === scenarioId) || scenarios[0]
-  const suspects = scenarioSuspects[scenarioId] || scenarioSuspects[1]
+  // 방 데이터 조회 (API)
+  const { rooms, loading: roomsLoading } = useGameRooms(scenarioId)
 
-  const [health, setHealth] = useState(80)
-  const [playTime, setPlayTime] = useState("00:32:15")
-  const [hintsUsed, setHintsUsed] = useState(1)
+  // 게임 로그 조회 (API)
+  const { logs, addLog, resetLogs } = useGameLogs()
+
+  // 게임 제출 Hook
+  const { submitGame, loading: submitLoading, result: submitResult } = useGameSubmission()
+
+  // 수사보고서 Hook
+  const { report, loading: reportLoading, fetchReport, submitReview } = useGameReport()
+
+  // 세션 상태
+  const [sessionId, setSessionId] = useState(null)
+  const [health, setHealth] = useState(100)
+  const [playTimeSeconds, setPlayTimeSeconds] = useState(0)
+  const [hintsUsed, setHintsUsed] = useState(0)
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
   const [rightLogOpen, setRightLogOpen] = useState(true)
   const [boardPanelOpen, setBoardPanelOpen] = useState(false)
   const [pendingAddItem, setPendingAddItem] = useState(null)
   const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [currentRoomIndex, setCurrentRoomIndex] = useState(0)
+  const [gameInitializing, setGameInitializing] = useState(false)
 
-  const { logs, addLog, discoveredEvidence, collectEvidence, resetSession } = useGameSession()
+  const { discoveredEvidence, collectEvidence, resetSession } = useGameSession()
 
   // 휴대폰 관련 상태
   const [phoneOpen, setPhoneOpen] = useState(false)
@@ -54,22 +85,150 @@ export default function GameRoom() {
   const [submitAnswerOpen, setSubmitAnswerOpen] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reportModalOpen, setReportModalOpen] = useState(false)
-  const [reportData, setReportData] = useState(null)
 
   const SIDE_PANEL_WIDTH_PX = 288
 
-  const rooms = getScenarioRooms(scenarioId)
-  const currentRoom = rooms[currentRoomIndex] || rooms[0]
-  const evidenceList = getScenarioEvidence(scenarioId)
-  const clues = getScenarioClues(scenarioId)
+  // 용의자 데이터 (시나리오에서 가져옴)
+  const suspects = scenario?.suspects || []
+
+  // 증거 목록 (단서에서 변환)
+  const evidenceList = discoveredEvidence
+
+  // 현재 방
+  const currentRoom = rooms?.[currentRoomIndex] || rooms?.[0] || null
+
+  // 단서 데이터 (Phaser용) - 방 데이터로부터 생성
+  // TODO: 백엔드에서 단서 위치 정보를 제공하면 그대로 사용
+  const clues = useMemo(() => {
+    if (!rooms || rooms.length === 0) return []
+
+    // 각 방에 기본 단서 위치 생성 (임시)
+    const defaultPositions = [
+      { roomIndex: 0, localX: 90, localY: 200 },
+      { roomIndex: 1, localX: 235, localY: 220 },
+      { roomIndex: 2, localX: 150, localY: 260 },
+      { roomIndex: 3, localX: 210, localY: 190 },
+      { roomIndex: 4, localX: 120, localY: 160 },
+      { roomIndex: 5, localX: 240, localY: 250 },
+    ]
+
+    return rooms.slice(0, 6).map((room, idx) => {
+      const pos = defaultPositions[idx] || defaultPositions[0]
+      return {
+        clueId: `${scenarioId}-${room.id}`,
+        evidenceId: room.id,
+        title: room.name,
+        body: room.description || `${room.name}에서 조사가 필요합니다.`,
+        roomIndex: idx,
+        localX: pos.localX,
+        localY: pos.localY,
+      }
+    })
+  }, [rooms, scenarioId])
+
+  // 로딩 상태
+  const isLoading = scenarioLoading || roomsLoading || gameInitializing
+
+  // 에러 상태
+  const hasError = scenarioError || (!scenario && !scenarioLoading)
+
+  // 플레이 시간 포맷
+  const formatPlayTime = (seconds) => {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = seconds % 60
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`
+  }
+
+  const playTime = formatPlayTime(playTimeSeconds)
+
+  // 게임 초기화 (새로 시작)
+  const initializeNewGame = useCallback(async () => {
+    if (!scenarioId) return
+
+    try {
+      setGameInitializing(true)
+      const response = await startGame(scenarioId)
+      const normalized = normalizeGameStartResponse(response)
+
+      setSessionId(normalized.sessionId)
+      setHealth(100)
+      setPlayTimeSeconds(0)
+      setHintsUsed(0)
+      setCurrentRoomIndex(0)
+
+      // 초기 로그 추가
+      if (normalized.eventLog) {
+        addLog('system', '수사가 시작되었습니다.')
+      }
+
+      return normalized
+    } catch (err) {
+      toast.error(err.message || '게임 시작에 실패했습니다.')
+      throw err
+    } finally {
+      setGameInitializing(false)
+    }
+  }, [scenarioId, addLog])
+
+  // 게임 이어하기
+  const resumeGame = useCallback(async (sessionId) => {
+    try {
+      setGameInitializing(true)
+      const response = await fetchResume(sessionId)
+      const normalized = normalizeResumeResponse(response)
+
+      setSessionId(normalized.sessionId)
+      setHealth(normalized.health || 100)
+      setPlayTimeSeconds(normalized.playTime || 0)
+      setHintsUsed(0)
+      setCurrentRoomIndex(normalized.currentFloor || 0)
+
+      // 로그 복원
+      if (Array.isArray(normalized.board?.nodes)) {
+        // 보드 데이터로부터 증거 복원
+        const inventoryClues = normalized.inventory?.clues || []
+        inventoryClues.forEach(clue => {
+          collectEvidence({
+            id: clue.clueId,
+            name: clue.name,
+          }, { log: false })
+        })
+      }
+
+      addLog('system', '수사를 이어서 진행합니다.')
+
+      return normalized
+    } catch (err) {
+      toast.error(err.message || '이어하기에 실패했습니다.')
+      throw err
+    } finally {
+      setGameInitializing(false)
+    }
+  }, [addLog, collectEvidence])
+
+  // 컴포넌트 마운트 시 게임 초기화
+  useEffect(() => {
+    if (resumeSessionId) {
+      // 이어하기 모드
+      resumeGame(resumeSessionId)
+    } else if (scenarioId && scenario) {
+      // 새 게임 시작
+      initializeNewGame()
+    }
+  }, [resumeSessionId, scenarioId, scenario?.id, initializeNewGame, resumeGame])
 
   useLayoutEffect(() => {
-    localStorage.removeItem(`board-items-${scenarioId}`)
-    localStorage.removeItem(`board-connections-${scenarioId}`)
+    if (scenarioId) {
+      localStorage.removeItem(`board-items-${scenarioId}`)
+      localStorage.removeItem(`board-connections-${scenarioId}`)
+    }
   }, [scenarioId])
 
   // 시나리오 시작/변경 시 세션 초기화
   useEffect(() => {
+    if (!scenarioId) return
+
     resetSession()
     setCurrentRoomIndex(0)
     setSelectedEvidence(null)
@@ -80,17 +239,27 @@ export default function GameRoom() {
     setSubmitAnswerOpen(false)
     setReviewModalOpen(false)
     setReportModalOpen(false)
-    setReportData(null)
 
     addLog('system', '수사가 시작되었습니다.')
 
-    const initialMsg = getHelperInitialMessage(scenario.title)
+    const initialMsg = getHelperInitialMessage(scenario?.title || '사건')
     setChatHistories({ helper: [initialMsg] })
 
     setPhoneNotification(initialMsg.text)
     const timer = setTimeout(() => setPhoneNotification(null), 3000)
     return () => clearTimeout(timer)
-  }, [scenarioId, scenario.title, resetSession, addLog])
+  }, [scenarioId, scenario?.title, resetSession, addLog])
+
+  // 플레이 시간 타이머
+  useEffect(() => {
+    if (!sessionId) return
+
+    const timer = setInterval(() => {
+      setPlayTimeSeconds(prev => prev + 1)
+    }, 1000)
+
+    return () => clearInterval(timer)
+  }, [sessionId])
 
   const handleClueInspected = useCallback((clue) => {
     const evidence =
@@ -157,18 +326,85 @@ export default function GameRoom() {
     setLocation('/scenarios')
   }, [setLocation])
 
-  const handleSubmitClick = () => { setSubmitAnswerOpen(true) }
-  const handleAnswerSubmit = () => { setSubmitAnswerOpen(false); setReviewModalOpen(true) }
-  const handleReviewSubmit = () => {
-    setReviewModalOpen(false)
-    setReportData(generateDummyReport("현재 플레이어"))
-    setReportModalOpen(true)
+  const handleSubmitClick = () => {
+    if (!sessionId) {
+      toast.error('게임 세션이 초기화되지 않았습니다.')
+      return
+    }
+    setSubmitAnswerOpen(true)
   }
+
+  const handleAnswerSubmit = async () => {
+    if (!sessionId) return
+
+    try {
+      setSubmitAnswerOpen(false)
+
+      // 게임 종료 API 호출
+      const result = await submitGame(sessionId)
+
+      if (result.isSuccess) {
+        setReviewModalOpen(true)
+      }
+    } catch (err) {
+      // 에러는 submitGame hook에서 처리됨
+      setSubmitAnswerOpen(true)
+    }
+  }
+
+  const handleReviewSubmit = async (difficulty, rating, review) => {
+    if (!scenarioId) return
+
+    try {
+      setReviewModalOpen(false)
+
+      // 리뷰 작성
+      await submitReview(scenarioId, {
+        rating,
+        difficulty: difficulty.toUpperCase(),
+        content: review,
+        isSpoiler: false,
+      })
+
+      // 수사보고서 조회
+      const reportData = await fetchReport(sessionId)
+      if (reportData) {
+        setReportModalOpen(true)
+      }
+    } catch (err) {
+      toast.error('후기 작성에 실패했습니다.')
+    }
+  }
+
   const handleAddToBoard = (item, type) => {
     if (!item) return
     if (type === 'evidence') setSelectedEvidence(null)
     setBoardPanelOpen(true)
     setPendingAddItem({ type, data: item })
+  }
+
+  // 로딩 상태 렌더링
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">게임을 불러오는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // 에러 상태 렌더링
+  if (hasError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <p className="text-red-400 mb-4">시나리오를 불러오는데 실패했습니다.</p>
+          <Button onClick={() => window.location.href = '/scenarios'}>시나리오 목록</Button>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -192,13 +428,6 @@ export default function GameRoom() {
                 <Clock className="w-5 h-5 text-primary" />
                 <span className="font-mono text-lg">{playTime}</span>
               </div>
-              {isCoop && (
-                <div className="flex items-center gap-2 px-3 py-1 bg-purple-500/20 rounded-full">
-                  <Users className="w-4 h-4 text-purple-400" />
-                  <span className="text-sm text-purple-400">협동 모드</span>
-                  <span className="text-xs text-muted-foreground">#{roomCode}</span>
-                </div>
-              )}
             </div>
 
             <div className="flex items-center gap-3">
@@ -237,7 +466,7 @@ export default function GameRoom() {
                 {currentRoom?.name || "발견 장소"}
               </span>
             </div>
-            <span className="text-sm font-bold gold-glow truncate">{scenario.title}</span>
+            <span className="text-sm font-bold gold-glow truncate">{scenario?.title || '시나리오'}</span>
 	          </div>
 
 	          <div className="w-full h-[calc(100%-40px)] bg-black/40 relative">
