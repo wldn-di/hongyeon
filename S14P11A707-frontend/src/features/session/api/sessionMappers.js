@@ -190,7 +190,9 @@ export const normalizeClue = (clue) => {
     floorNumber: clue.floorNumber,
     name: clue.name || '',
     importance: clue.importance || '',
+    description: clue.description || '',
     detailImageUrl: clue.detailImageUrl || '',
+    assistantComment: clue.assistantComment || '',
     discovered: clue.discovered || false,
     discoveredAt: clue.discoveredAt || null,
   }
@@ -202,6 +204,15 @@ export const normalizeClue = (clue) => {
  * @returns {Object} Normalized clue list data
  */
 export const normalizeClueListResponse = (response) => {
+  // 응답이 직접 배열인 경우
+  if (Array.isArray(response)) {
+    return {
+      sessionId: null,
+      scenarioId: null,
+      clues: response.map(normalizeClue).filter(Boolean),
+    }
+  }
+
   if (!response || typeof response !== 'object') {
     console.error('Invalid clue list response:', response)
     return {
@@ -211,9 +222,14 @@ export const normalizeClueListResponse = (response) => {
     }
   }
 
-  const clues = Array.isArray(response.clues)
-    ? response.clues.map(normalizeClue).filter(Boolean)
-    : []
+  // clues 필드가 있는 경우
+  let clues = []
+  if (Array.isArray(response.clues)) {
+    clues = response.clues.map(normalizeClue).filter(Boolean)
+  } else if (Array.isArray(response.content)) {
+    // 페이징 응답인 경우
+    clues = response.content.map(normalizeClue).filter(Boolean)
+  }
 
   return {
     sessionId: response.sessionId || null,
@@ -587,6 +603,14 @@ export const normalizeEventLog = (log) => {
  * @returns {Object} Normalized event log list data
  */
 export const normalizeEventLogListResponse = (response) => {
+  // 응답이 직접 배열인 경우
+  if (Array.isArray(response)) {
+    return {
+      sessionId: null,
+      logs: response.map(normalizeEventLog).filter(Boolean),
+    }
+  }
+
   if (!response || typeof response !== 'object') {
     console.error('Invalid event log list response:', response)
     return {
@@ -595,9 +619,16 @@ export const normalizeEventLogListResponse = (response) => {
     }
   }
 
-  const logs = Array.isArray(response.logs)
-    ? response.logs.map(normalizeEventLog).filter(Boolean)
-    : []
+  // logs 필드가 있는 경우
+  let logs = []
+  if (Array.isArray(response.logs)) {
+    logs = response.logs.map(normalizeEventLog).filter(Boolean)
+  } else if (Array.isArray(response.eventLogs)) {
+    logs = response.eventLogs.map(normalizeEventLog).filter(Boolean)
+  } else if (Array.isArray(response.content)) {
+    // 페이징 응답인 경우
+    logs = response.content.map(normalizeEventLog).filter(Boolean)
+  }
 
   return {
     sessionId: response.sessionId || null,

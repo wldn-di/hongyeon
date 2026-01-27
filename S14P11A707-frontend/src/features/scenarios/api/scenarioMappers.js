@@ -175,8 +175,19 @@ export const mapRoom = (room) => {
  * @returns {Array} 방 배열
  */
 export const mapRoomListResponse = (response) => {
-  if (!response?.rooms) return []
-  return response.rooms.map(mapRoom)
+  // 응답이 직접 배열인 경우
+  if (Array.isArray(response)) {
+    return response.map(mapRoom).filter(Boolean)
+  }
+  // 응답이 객체이고 rooms 필드가 있는 경우
+  if (response?.rooms) {
+    return response.rooms.map(mapRoom).filter(Boolean)
+  }
+  // 응답이 객체이고 content 필드가 있는 경우 (페이징 응답)
+  if (response?.content) {
+    return response.content.map(mapRoom).filter(Boolean)
+  }
+  return []
 }
 
 /**
