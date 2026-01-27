@@ -45,8 +45,9 @@ export function useGameLogs(sessionId) {
     sessionIdRef.current = sessionId
   }, [sessionId])
 
-  const fetchLogs = useCallback(async () => {
-    const currentSessionId = sessionIdRef.current
+  const fetchLogs = useCallback(async (id) => {
+    // id가 전달되면 사용, 아니면 ref 값 사용 (refetch용)
+    const currentSessionId = id ?? sessionIdRef.current
     if (!currentSessionId) {
       setLogs([])
       setLoading(false)
@@ -79,7 +80,7 @@ export function useGameLogs(sessionId) {
 
   useEffect(() => {
     if (sessionId) {
-      fetchLogs()
+      fetchLogs(sessionId)
     }
   }, [sessionId, fetchLogs])
 

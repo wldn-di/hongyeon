@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { fetchScenarioRooms, fetchScenarioVictim } from '../../scenarios/api/scenariosApi'
 import { mapRoomListResponse, mapVictimResponse } from '../../scenarios/api/scenarioMappers'
 import { toast } from 'sonner'
@@ -14,15 +14,8 @@ export function useGameRooms(scenarioId) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
-  // scenarioId를 ref로 관리
-  const scenarioIdRef = useRef(scenarioId)
-  useEffect(() => {
-    scenarioIdRef.current = scenarioId
-  }, [scenarioId])
-
-  const fetchRooms = useCallback(async () => {
-    const currentScenarioId = scenarioIdRef.current
-    if (!currentScenarioId) {
+  const fetchRooms = useCallback(async (id) => {
+    if (!id) {
       setRooms([])
       setVictim(null)
       setLoading(false)
@@ -35,8 +28,8 @@ export function useGameRooms(scenarioId) {
 
       // 방 정보와 피해자 정보 병렬 조회
       const [roomsResponse, victimResponse] = await Promise.all([
-        fetchScenarioRooms(Number(currentScenarioId)),
-        fetchScenarioVictim(Number(currentScenarioId)).catch(() => null), // 피해자 정보는 없을 수 있음
+        fetchScenarioRooms(Number(id)),
+        fetchScenarioVictim(Number(id)).catch(() => null), // 피해자 정보는 없을 수 있음
       ])
 
       // 백엔드 응답이 배열인 경우 직접 처리
@@ -74,7 +67,7 @@ export function useGameRooms(scenarioId) {
   }, [])
 
   useEffect(() => {
-    fetchRooms()
+    fetchRooms(scenarioId)
   }, [scenarioId, fetchRooms])
 
   return {
@@ -82,7 +75,7 @@ export function useGameRooms(scenarioId) {
     victim,
     loading,
     error,
-    refetch: fetchRooms,
+    refetch: () => fetchRooms(scenarioId),
   }
 }
 
