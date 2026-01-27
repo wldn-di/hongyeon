@@ -10,12 +10,13 @@ import com.ssafy.s14p11a707.scenario.dto.ScenarioRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioStatusResponse;
 import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
 import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
 public interface ScenarioService {
 
     ScenarioListResponse listScenarios();
 
-    ScenarioListResponse searchScenarios();
+    ScenarioListResponse searchScenarios(String keyword);
 
     ScenarioDetailResponse getScenario(long scenarioId);
 
@@ -25,7 +26,7 @@ public interface ScenarioService {
 
     ScenarioDeleteResponse deleteScenario(long scenarioId);
 
-    ScenarioRankingResponse getScenarioRankings(long scenarioId);
+    ScenarioRankingResponse getScenarioRankings(long scenarioId, OidcUser oidcUser);
 
     RoomListResponse getRooms(long scenarioId);
 
