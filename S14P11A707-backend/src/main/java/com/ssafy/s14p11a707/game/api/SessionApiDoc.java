@@ -12,12 +12,16 @@ import com.ssafy.s14p11a707.game.dto.ClueListResponse;
 import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
 import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
 import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
-import com.ssafy.s14p11a707.game.dto.GameEndResponse;
 import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
 import com.ssafy.s14p11a707.game.dto.GameSaveRequest;
 import com.ssafy.s14p11a707.game.dto.GameSaveResponse;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
 import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
+import com.ssafy.s14p11a707.game.dto.SubmitRequest;
+import com.ssafy.s14p11a707.game.dto.SubmitResponse;
+import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
+import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
+import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -440,12 +444,12 @@ public interface SessionApiDoc {
     })
     ResponseEntity<BoardResponse> deleteBoard(long sessionId, BoardDeleteRequest request, OidcUser oidcUser);
 
-    @Operation(summary = "게임 종료", description = "세션을 종료합니다.")
+    @Operation(summary = "최종 정답 제출", description = "보드 검증 + 범인/흉기/장소/동기 채점 + 결과 처리를 수행합니다.")
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "종료 성공",
-                    content = @Content(schema = @Schema(implementation = GameEndResponse.class))
+                    description = "제출 결과 반환 (COMPLETED/WRONG_ANSWER/FAILED/BOARD_INVALID)",
+                    content = @Content(schema = @Schema(implementation = SubmitResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
@@ -463,5 +467,35 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<GameEndResponse> endGame(long sessionId, OidcUser oidcUser);
+    ResponseEntity<SubmitResponse> submit(long sessionId, SubmitRequest request, OidcUser oidcUser);
+
+    @Operation(summary = "용의자 심문", description = "용의자와 대화를 진행합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "심문 성공",
+                    content = @Content(schema = @Schema(implementation = SuspectChatResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "세션/용의자를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<SuspectChatResponse> chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
+
+    @Operation(summary = "심문 기록 조회", description = "특정 용의자와의 대화 기록을 조회합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "조회 성공",
+                    content = @Content(schema = @Schema(implementation = ChatHistoryResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "세션/용의자를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<ChatHistoryResponse> getChatHistory(long sessionId, long suspectId);
 }

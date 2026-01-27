@@ -11,12 +11,16 @@ import com.ssafy.s14p11a707.game.dto.ClueListResponse;
 import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
 import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
 import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
-import com.ssafy.s14p11a707.game.dto.GameEndResponse;
 import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
 import com.ssafy.s14p11a707.game.dto.GameSaveRequest;
 import com.ssafy.s14p11a707.game.dto.GameSaveResponse;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
 import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
+import com.ssafy.s14p11a707.game.dto.SubmitRequest;
+import com.ssafy.s14p11a707.game.dto.SubmitResponse;
+import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
+import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
+import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -29,6 +33,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -191,12 +196,32 @@ public class SessionApi implements SessionApiDoc {
         return ResponseEntity.ok(gameSessionService.deleteBoard(sessionId, request, oidcUser));
     }
 
-    @PostMapping("/{sessionId}/end")
+    @PostMapping("/{sessionId}/submit")
     @Override
-    public ResponseEntity<GameEndResponse> endGame(
+    public ResponseEntity<SubmitResponse> submit(
             @PathVariable long sessionId,
+            @RequestBody SubmitRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.endGame(sessionId, oidcUser));
+        return ResponseEntity.ok(gameSessionService.submit(sessionId, request, oidcUser));
+    }
+
+    @PostMapping("/{sessionId}/suspects/{suspectId}/chat")
+    @Override
+    public ResponseEntity<SuspectChatResponse> chatWithSuspect(
+            @PathVariable long sessionId,
+            @PathVariable long suspectId,
+            @RequestBody SuspectChatRequest request
+    ) {
+        return ResponseEntity.ok(gameSessionService.chatWithSuspect(sessionId, suspectId, request));
+    }
+
+    @GetMapping("/{sessionId}/suspects/{suspectId}/chats")
+    @Override
+    public ResponseEntity<ChatHistoryResponse> getChatHistory(
+            @PathVariable long sessionId,
+            @PathVariable long suspectId
+    ) {
+        return ResponseEntity.ok(gameSessionService.getChatHistory(sessionId, suspectId));
     }
 }
