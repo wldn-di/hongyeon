@@ -281,7 +281,6 @@ public class ScenarioServiceImpl implements ScenarioService {
                     .storyConfigJson(storyConfig)
                     .truthConfigJson(truthConfig)
                     .correctMotiveEmbedding(motiveEmbeddingStr)
-                    .correctCauseOfDeathEmbedding(causeEmbeddingStr)
                     .build();
 
             scenarioRepository.saveScenario(scenario);

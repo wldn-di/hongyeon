@@ -2,11 +2,9 @@ package com.ssafy.s14p11a707.game.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ssafy.s14p11a707.common.entity.BaseEntity;
-import com.ssafy.s14p11a707.common.jpa.PgVectorConverter;
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.user.entity.User;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -72,9 +70,8 @@ public class GameSession extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private JsonNode resultReportJson;
 
-    @Convert(converter = PgVectorConverter.class)
-    @Column(name = "submitted_motive_embedding", columnDefinition = "vector(1536)")
-    private float[] submittedMotiveEmbedding;
+    @Column(name = "submitted_motive_embedding", columnDefinition = "text")
+    private String submittedMotiveEmbedding;
 
     private Instant startedAt;
 
@@ -99,8 +96,7 @@ public class GameSession extends BaseEntity {
             Integer finalScore,
             RankGrade rankGrade,
             JsonNode resultReportJson,
-            float[] submittedMotiveEmbedding,
-            float[] submittedCauseOfDeathEmbedding,
+            String submittedMotiveEmbedding,
             Instant startedAt,
             Instant completedAt,
             Long playTime,

@@ -2,10 +2,8 @@ package com.ssafy.s14p11a707.scenario.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ssafy.s14p11a707.common.entity.BaseEntity;
-import com.ssafy.s14p11a707.common.jpa.PgVectorConverter;
 import com.ssafy.s14p11a707.user.entity.User;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -82,9 +80,6 @@ public class Scenario extends BaseEntity {
     @Column(name = "correct_motive_embedding", columnDefinition = "text")
     private String correctMotiveEmbedding;
 
-    @Column(name = "correct_cause_of_death_embedding", columnDefinition = "text")
-    private String correctCauseOfDeathEmbedding;
-
     @Column(nullable = false)
     private int playCount;
 
@@ -107,7 +102,6 @@ public class Scenario extends BaseEntity {
             JsonNode storyConfigJson,
             JsonNode truthConfigJson,
             String correctMotiveEmbedding,
-            String correctCauseOfDeathEmbedding,
             int playCount,
             BigDecimal avgRating,
             BigDecimal avgDifficulty
@@ -125,7 +119,6 @@ public class Scenario extends BaseEntity {
         this.storyConfigJson = storyConfigJson;
         this.truthConfigJson = truthConfigJson;
         this.correctMotiveEmbedding = correctMotiveEmbedding;
-        this.correctCauseOfDeathEmbedding = correctCauseOfDeathEmbedding;
         this.playCount = playCount;
         this.avgRating = avgRating;
         this.avgDifficulty = avgDifficulty;

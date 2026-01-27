@@ -45,4 +45,3 @@ public class PgVectorConverter implements AttributeConverter<float[], String> {
         return result;
     }
 }
-
