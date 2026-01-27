@@ -1,6 +1,8 @@
 spring:
   application:
     name: S14P11A707
+  main:
+    allow-bean-definition-overriding: true
 
   # 로컬/테스트: .env 파일을 사용하고 싶으면(선택)
   # - `.env` 파일은 properties 형식(KEY=VALUE)으로 작성
@@ -23,6 +25,7 @@ spring:
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO}
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
 
   security:
     oauth2:
@@ -43,6 +46,17 @@ spring:
               - openid
               - email
             redirect-uri: "{baseUrl}/oauth2/code/{registrationId}"
+  ai:
+    google:
+      genai:
+        api-key: AIzaSyBMw4Wb1KPcC1SlTy_rJ_8EduAOQ5cVQNw
+        chat:
+          options:
+            model: gemini-3.0-pro
+        embedding:
+          options:
+            model: text-embedding-004
+        base-url: https://generativelanguage.googleapis.com
 
 springdoc:
   swagger-ui:

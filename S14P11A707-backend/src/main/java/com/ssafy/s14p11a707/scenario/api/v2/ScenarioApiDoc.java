@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.scenario.api.v1;
+package com.ssafy.s14p11a707.scenario.api.v2;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
@@ -22,6 +22,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @Tag(name = "Scenario API", description = "시나리오/리뷰/게임시작 API")
 public interface ScenarioApiDoc {
@@ -64,7 +67,7 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioListResponse> searchScenarios();
+    ResponseEntity<ScenarioListResponse> searchScenarios(@RequestParam(required = false) String keyword);
 
     @Operation(summary = "시나리오 상세 조회", description = "시나리오 상세 정보를 조회합니다.")
     @ApiResponses({
@@ -164,7 +167,10 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioRankingResponse> getScenarioRankings(long scenarioId);
+    ResponseEntity<ScenarioRankingResponse> getScenarioRankings(
+            long scenarioId,
+            @AuthenticationPrincipal OidcUser oidcUser
+    );
 
     @Operation(summary = "방 정보 조회", description = "시나리오 방 정보를 조회합니다.")
     @ApiResponses({

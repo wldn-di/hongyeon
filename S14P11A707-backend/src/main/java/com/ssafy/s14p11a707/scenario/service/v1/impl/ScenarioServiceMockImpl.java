@@ -1,4 +1,4 @@
-package com.ssafy.s14p11a707.scenario.service.impl;
+package com.ssafy.s14p11a707.scenario.service.v1.impl;
 
 import com.ssafy.s14p11a707.mock.MockFixtures;
 import com.ssafy.s14p11a707.scenario.dto.RoomListResponse;
@@ -11,7 +11,7 @@ import com.ssafy.s14p11a707.scenario.dto.ScenarioRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioStatusResponse;
 import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
 import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
-import com.ssafy.s14p11a707.scenario.service.ScenarioService;
+import com.ssafy.s14p11a707.scenario.service.v2.ScenarioService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Comparator;
@@ -19,8 +19,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicLong;
+
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -42,9 +43,10 @@ public class ScenarioServiceMockImpl implements ScenarioService {
     }
 
     @Override
-    public ScenarioListResponse searchScenarios() {
-        return listScenarios();
+    public ScenarioListResponse searchScenarios(String keyword) {
+        return null;
     }
+
 
     @Override
     public ScenarioDetailResponse getScenario(long scenarioId) {
@@ -92,13 +94,10 @@ public class ScenarioServiceMockImpl implements ScenarioService {
     }
 
     @Override
-    public ScenarioRankingResponse getScenarioRankings(long scenarioId) {
-        MockFixtures.ScenarioFixture created = createdScenarioOrNull(scenarioId);
-        if (created != null) {
-            return new ScenarioRankingResponse(created.id(), false, List.of());
-        }
-        return MockFixtures.scenarioRankingResponse(scenarioId);
+    public ScenarioRankingResponse getScenarioRankings(long scenarioId, OidcUser oidcUser) {
+        return null;
     }
+
 
     @Override
     public RoomListResponse getRooms(long scenarioId) {
