@@ -57,7 +57,7 @@ export function ScenarioCard({ scenario, className }) {
         
         {/* 중앙: 버튼 (가운데 정렬) */}
         <div className="flex-1 flex items-end justify-center pb-2">
-          <Link href={`/game/${scenario.id}`}>
+          <Link href={`/scenario/${scenario.id}`}>
             <Button variant="neon">
               자세히
             </Button>

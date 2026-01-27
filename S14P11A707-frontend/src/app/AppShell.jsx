@@ -11,7 +11,7 @@ export function AppShell() {
   const [location] = useLocation()
   
   // 게임 플레이 화면에서는 헤더 숨기기
-  const hideHeader = location.startsWith('/room/')
+  const hideHeader = location.startsWith('/room/') || location.startsWith('/game/')
   
   return (
     <div className="dark">
