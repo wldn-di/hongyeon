@@ -48,7 +48,7 @@ export function AuthProvider({ children }) {
     let alive = true
     ;(async () => {
       try {
-        const res = await fetch(`${base}/api/v1/auth/me`, { credentials: "include" })
+        const res = await fetch(`${base}/api/auth/me`, { credentials: "include" })
         if (!alive) return
         if (res.ok) dispatch({ type: "SET_USER", user: await res.json() })
         else dispatch({ type: "CLEAR_USER" })
@@ -81,7 +81,7 @@ export function AuthProvider({ children }) {
           return
         }
 
-        const url = `${base}/api/v1/auth/login`
+        const url = `${base}/api/auth/login`
         console.log("LOGIN URL:", url)
         window.location.href = url
       },
@@ -105,7 +105,7 @@ export function AuthProvider({ children }) {
 
         dispatch({ type: "SET_LOADING", loading: true })
         try {
-          const res = await fetch(`${base}/api/v1/auth/me`, { credentials: "include" })
+          const res = await fetch(`${base}/api/auth/me`, { credentials: "include" })
           if (res.ok) dispatch({ type: "SET_USER", user: await res.json() })
           else dispatch({ type: "CLEAR_USER" })
         } catch {
@@ -125,7 +125,7 @@ export function AuthProvider({ children }) {
         return
 
         // 백엔드 준비되면 아래 주석 해제
-        // const res = await fetch(`${base}/api/v1/auth/me`, {
+        // const res = await fetch(`${base}/api/auth/me`, {
         //   method: "DELETE",
         //   credentials: "include",
         // })
