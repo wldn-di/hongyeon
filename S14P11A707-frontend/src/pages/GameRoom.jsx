@@ -1,23 +1,163 @@
 import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo } from 'react'
 import { useLocation, useRoute } from 'wouter'
 import { Button } from '@/components/ui/Button'
-import { DoorOpen, Heart, Clock, Lightbulb, Send, MessageCircle, MapPin, Smartphone, Loader2 } from 'lucide-react'
+import { Card } from '@/components/ui/Card'
+import { DoorOpen, Heart, Clock, Lightbulb, Send, MessageCircle, MapPin, Smartphone, Loader2, ArrowRight, Users } from 'lucide-react'
 import LeftEvidencePanel from "@/features/game/panels/LeftEvidencePanel"
 import RightLogSidebar from "@/features/game/panels/RightLogSidebar"
 import BottomBoardPanel from "@/features/game/panels/BottomBoardPanel"
 import { ReportModal, EvidenceDetailModal, SubmitAnswerModal, ReviewModal } from '@/features/game/modals'
 import PhoneUI from '@/features/game/components/PhoneUI'
 import AgitRoom from '@/features/game/engine/AgitRoom'
+import TypingText from '@/features/tutorial/components/TypingText'
 import { useGameSession } from '@/features/game/session'
 import { useScenarioById } from '@/features/scenarios/hooks/useScenarioById'
 import { useGameRooms } from '@/features/game/hooks/useGameRooms'
 import { useGameLogs } from '@/features/game/hooks/useGameLogs'
 import { useGameSubmission } from '@/features/game/hooks/useGameSubmission'
 import { useGameReport } from '@/features/game/hooks/useGameReport'
-import { startGame, endGame, saveGame, fetchResume, moveFloor, chatWithSuspect, fetchChatHistory } from '@/features/session/api/sessionApi'
+import { startGame, endGame, saveGame, fetchResume, moveFloor, submitAnswer } from '@/features/session/api/sessionApi'
 import { fetchClues, discoverClue } from '@/features/session/api/cluesApi'
 import { normalizeGameStartResponse, normalizeResumeResponse, normalizeGameEndResponse, normalizeClueListResponse } from '@/features/session/api/sessionMappers'
 import { toast } from 'sonner'
+import { cn } from '@/lib/utils'
+
+// ========================================
+// 오프닝 페이즈 (시나리오 도입 나레이션)
+// ========================================
+function OpeningPhase({ scenario, onComplete, onSkip }) {
+  const [stage, setStage] = useState('title')
+
+  if (!scenario) return null
+
+  return (
+    <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+      <div
+        className="absolute inset-0 bg-cover bg-center opacity-20"
+        style={{ backgroundImage: `url(${scenario.thumbnail})`, filter: 'blur(4px) grayscale(60%)' }}
+      />
+      <div className="absolute inset-0" style={{ background: 'radial-gradient(circle, transparent 0%, rgba(0,0,0,0.8) 100%)' }} />
+
+      <div className="relative z-10 text-center max-w-2xl px-8">
+        {stage === 'title' && (
+          <div className="animate-in fade-in duration-1000">
+            <p className="text-sm text-primary tracking-widest mb-4">CASE FILE</p>
+            <h1 className="text-4xl md:text-5xl font-bold gold-glow mb-8">
+              <TypingText text={scenario.title} speed={80} onComplete={() => setTimeout(() => setStage('synopsis'), 500)} />
+            </h1>
+          </div>
+        )}
+
+        {stage === 'synopsis' && (
+          <div className="animate-in fade-in duration-700">
+            <p className="text-sm text-primary tracking-widest mb-4">CASE FILE</p>
+            <h1 className="text-3xl font-bold gold-glow mb-6">{scenario.title}</h1>
+            <p className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line">
+              <TypingText
+                text={scenario.synopsisDetail || scenario.synopsis || '사건이 발생했습니다. 진실을 밝혀내세요.'}
+                speed={30}
+                onComplete={() => setTimeout(() => setStage('ready'), 500)}
+              />
+            </p>
+          </div>
+        )}
+
+        {stage === 'ready' && (
+          <div className="animate-in fade-in duration-700">
+            <p className="text-sm text-primary tracking-widest mb-4">CASE FILE</p>
+            <h1 className="text-3xl font-bold gold-glow mb-6">{scenario.title}</h1>
+            <p className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line mb-8">
+              {scenario.synopsisDetail || scenario.synopsis}
+            </p>
+            <Button variant="neon" size="lg" onClick={onComplete}>
+              수사 시작하기 <ArrowRight className="w-5 h-5 ml-2" />
+            </Button>
+          </div>
+        )}
+      </div>
+
+      <button
+        onClick={onSkip}
+        className="absolute top-6 right-6 text-muted-foreground hover:text-white flex items-center gap-2"
+      >
+        <span className="text-sm">스킵</span>
+      </button>
+    </div>
+  )
+}
+
+// ========================================
+// 피해자 소개 페이즈
+// ========================================
+function VictimIntroPhase({ victim, onComplete }) {
+  // 피해자 정보 없으면 바로 완료
+  useEffect(() => {
+    if (!victim) {
+      onComplete?.()
+    }
+  }, [victim, onComplete])
+
+  if (!victim) return null
+
+  return (
+    <div className="fixed inset-0 bg-gradient-to-b from-gray-900 to-black z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ filter: 'grayscale(70%)' }} />
+      <div className="relative z-10 w-full max-w-lg px-4">
+        <Card className="bg-card/95 backdrop-blur border border-border shadow-2xl">
+          <div className="p-6">
+            <div className="text-center mb-6">
+              <span className="text-xs text-red-500 font-bold tracking-widest">VICTIM PROFILE</span>
+              <h2 className="text-2xl font-bold gold-glow mt-2">피해자 정보</h2>
+            </div>
+
+            <div className="flex gap-4 items-center mb-6">
+              <div className="w-24 h-24 bg-muted rounded-xl flex items-center justify-center overflow-hidden">
+                {victim.portraitUrl || victim.image ? (
+                  <img src={victim.portraitUrl || victim.image} alt={victim.name} className="w-full h-full object-cover" />
+                ) : (
+                  <Users className="w-12 h-12 text-muted-foreground" />
+                )}
+              </div>
+              <div>
+                <p className="text-2xl font-bold">{victim.name}</p>
+                <p className="text-muted-foreground">{victim.age}세, {victim.gender}</p>
+                <p className="text-sm text-primary">{victim.occupation}</p>
+              </div>
+            </div>
+
+            {victim.background && (
+              <p className="text-sm text-muted-foreground mb-6 p-3 bg-muted/30 rounded-lg">
+                {victim.background}
+              </p>
+            )}
+
+            <div className="space-y-3 border-t border-border pt-4">
+              <h3 className="text-sm font-bold text-primary">초기 단서</h3>
+              <div className="grid gap-2 text-sm">
+                {[
+                  ['발견 장소', victim.discoveryLocation],
+                  ['사망 추정 시각', victim.estimatedDeathTime],
+                  ['사인', victim.causeOfDeath]
+                ].filter(([, v]) => v).map(([k, v], i) => (
+                  <div key={i} className="flex justify-between p-2 bg-muted/20 rounded">
+                    <span className="text-muted-foreground">{k}</span>
+                    <span className={cn("font-bold", i === 2 && "text-red-400")}>{v}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="mt-6">
+              <Button variant="neon" size="lg" className="w-full" onClick={onComplete}>
+                현장으로 이동 <ArrowRight className="w-5 h-5 ml-2" />
+              </Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    </div>
+  )
+}
 
 // 조력자 정보
 const helperInfo = {
@@ -75,6 +215,10 @@ export default function GameRoom() {
   // 게임 세션 ID (API 호출용)
   const [sessionId, setSessionId] = useState(null)
 
+  // 게임 페이즈: 'opening' -> 'victim' -> 'main'
+  // 이어하기면 바로 'main'
+  const [gamePhase, setGamePhase] = useState(resumeSessionId ? 'main' : 'opening')
+
   // API 단서 데이터
   const [apiClues, setApiClues] = useState([])
 
@@ -98,6 +242,7 @@ export default function GameRoom() {
   const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [currentRoomIndex, setCurrentRoomIndex] = useState(0)
   const [gameInitializing, setGameInitializing] = useState(false)
+  const [gameInitError, setGameInitError] = useState(null)
 
   const { discoveredEvidence, collectEvidence, resetSession } = useGameSession()
 
@@ -143,35 +288,50 @@ export default function GameRoom() {
 
   // 단서 데이터 (Phaser용) - API에서 가져온 데이터 사용
   const clues = useMemo(() => {
-    if (!apiClues || apiClues.length === 0 || !rooms || rooms.length === 0) return []
+    if (roomsLoading) return []
+    if (!apiClues || apiClues.length === 0) return []
 
-    // 각 층(floorNumber)에 맞는 roomIndex 찾기
-    const defaultPositions = [
+    // 방 내 단서 위치 (방마다 최대 3개 단서 배치용)
+    const positionsPerRoom = [
       { localX: 90, localY: 200 },
       { localX: 235, localY: 220 },
       { localX: 150, localY: 260 },
-      { localX: 210, localY: 190 },
-      { localX: 120, localY: 160 },
-      { localX: 240, localY: 250 },
     ]
 
-    return apiClues
-      .filter(clue => !clue.discovered) // 아직 발견되지 않은 단서만
-      .map((clue, idx) => {
-        const roomIndex = rooms.findIndex(r => r.floorNumber === clue.floorNumber)
-        const pos = defaultPositions[idx % defaultPositions.length]
-        return {
-          clueId: clue.id,
-          evidenceId: clue.id,
-          title: clue.name || '알 수 없는 단서',
-          body: clue.description || `단서를 조사해보세요.`,
-          roomIndex: roomIndex >= 0 ? roomIndex : 0,
-          localX: pos.localX,
-          localY: pos.localY,
-          importance: clue.importance,
-        }
-      })
-  }, [apiClues, rooms])
+    const undiscoveredClues = apiClues.filter(clue => !clue.discovered)
+
+    // 방별로 단서를 그룹화하여 인덱스 관리
+    const clueCountByRoom = {}
+
+    return undiscoveredClues.map((clue) => {
+      // rooms가 비어있으면 floorNumber를 roomIndex로 사용
+      let roomIndex = 0
+      if (rooms && rooms.length > 0) {
+        const foundIndex = rooms.findIndex(r => r.floorNumber === clue.floorNumber)
+        roomIndex = foundIndex >= 0 ? foundIndex : (clue.floorNumber || 0)
+      } else {
+        roomIndex = clue.floorNumber || 0
+      }
+
+      // 해당 방에서 몇 번째 단서인지 계산
+      const countInRoom = clueCountByRoom[roomIndex] || 0
+      clueCountByRoom[roomIndex] = countInRoom + 1
+
+      // 방 내에서의 위치 (최대 3개까지, 그 이후는 순환)
+      const pos = positionsPerRoom[countInRoom % positionsPerRoom.length]
+
+      return {
+        clueId: clue.id,
+        evidenceId: clue.id,
+        title: clue.name || '알 수 없는 단서',
+        body: clue.description || `단서를 조사해보세요.`,
+        roomIndex,
+        localX: pos.localX,
+        localY: pos.localY,
+        importance: clue.importance,
+      }
+    })
+  }, [apiClues, rooms, roomsLoading])
 
   // 로딩 상태
   const isLoading = scenarioLoading || roomsLoading || gameInitializing
@@ -200,11 +360,16 @@ export default function GameRoom() {
 
     try {
       setGameInitializing(true)
+      setGameInitError(null)
       const response = await startGame(activeScenarioId)
       console.log('[GameRoom] startGame 응답:', response)
 
       const normalized = normalizeGameStartResponse(response)
       console.log('[GameRoom] normalized:', normalized)
+
+      if (!normalized.sessionId) {
+        throw new Error('세션 ID를 받지 못했습니다.')
+      }
 
       setSessionId(normalized.sessionId)
       setHealth(100)
@@ -220,19 +385,24 @@ export default function GameRoom() {
       return normalized
     } catch (err) {
       console.error('[GameRoom] initializeNewGame 에러:', err)
+      setGameInitError(err.message || '게임 시작에 실패했습니다.')
       toast.error(err.message || '게임 시작에 실패했습니다.')
-      throw err
     } finally {
       setGameInitializing(false)
     }
   }, [activeScenarioId, addLog])
 
   // 게임 이어하기
-  const resumeGame = useCallback(async (sessionId) => {
+  const resumeGame = useCallback(async (resumeId) => {
     try {
       setGameInitializing(true)
-      const response = await fetchResume(sessionId)
+      setGameInitError(null)
+      const response = await fetchResume(resumeId)
       const normalized = normalizeResumeResponse(response)
+
+      if (!normalized.sessionId) {
+        throw new Error('세션 ID를 받지 못했습니다.')
+      }
 
       setSessionId(normalized.sessionId)
       setHealth(normalized.health || 100)
@@ -261,8 +431,9 @@ export default function GameRoom() {
 
       return normalized
     } catch (err) {
+      console.error('[GameRoom] resumeGame 에러:', err)
+      setGameInitError(err.message || '이어하기에 실패했습니다.')
       toast.error(err.message || '이어하기에 실패했습니다.')
-      throw err
     } finally {
       setGameInitializing(false)
     }
@@ -270,8 +441,8 @@ export default function GameRoom() {
 
   // 컴포넌트 마운트 시 게임 초기화
   useEffect(() => {
-    // 이미 세션이 있으면 스킵
-    if (sessionId) return
+    // 이미 세션이 있거나 초기화 중이거나 에러 상태면 스킵
+    if (sessionId || gameInitializing || gameInitError) return
 
     if (resumeSessionId) {
       // 이어하기 모드
@@ -280,7 +451,7 @@ export default function GameRoom() {
       // 새 게임 시작 (시나리오 로딩 완료 후)
       initializeNewGame()
     }
-  }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, initializeNewGame, resumeGame])
+  }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError, initializeNewGame, resumeGame])
 
   useLayoutEffect(() => {
     if (activeScenarioId) {
@@ -332,20 +503,27 @@ export default function GameRoom() {
     if (!clueId) return
 
     try {
-      // 백엔드에 단서 발견 요청
-      await discoverClue(sessionId, clueId)
+      // 백엔드에 단서 발견 요청 - 응답에서 상세 정보 받음
+      const discoverResponse = await discoverClue(sessionId, clueId)
 
-      // 증거 객체 생성 및 수집
+      // API 응답에서 단서 상세 정보 추출
+      const clueData = discoverResponse?.clue || {}
+
+      // 증거 객체 생성 및 수집 (API 응답 데이터 우선 사용)
       const evidence = {
-        id: clueId,
-        name: clue.title || '알 수 없는 증거',
-        description: clue.body || '',
+        id: clueData.clueId || clueId,
+        name: clueData.name || clue.title || '알 수 없는 증거',
+        description: clueData.description || clue.body || '',
+        importance: clueData.importance || clue.importance || '',
+        detailImageUrl: clueData.detailImageUrl || '',
+        assistantComment: clueData.assistantComment || '',
         location: currentRoom?.name || '현장',
+        discoveredAt: discoverResponse?.discoveredAt || new Date().toISOString(),
       }
       collectEvidence(evidence)
 
       // 로그 추가
-      addLog('evidence', `${clue.title} 단서를 발견했습니다.`)
+      addLog('evidence', `${evidence.name} 단서를 발견했습니다.`)
 
       // 단서 목록 새로고침 (발견된 단서 제외)
       const response = await fetchClues(sessionId)
@@ -426,68 +604,27 @@ export default function GameRoom() {
         }))
       }, 500)
     } else {
-      // 용의자 심문 - API 호출
-      if (!sessionId) return
-
-      try {
-        const suspectId = parseInt(contactId, 10)
-        if (isNaN(suspectId)) return
-
-        const response = await chatWithSuspect(sessionId, suspectId, { message: text })
-
+      // 용의자 심문 - 임시 로컬 응답 (API 연결 전)
+      setTimeout(() => {
         const responseMessage = {
           id: Date.now(),
           sender: contactId,
-          text: response.reply || "...",
+          text: "그 부분에 대해서는 제가 알고 있는 바가 없습니다...",
           time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
         }
-
         setChatHistories(prev => ({
           ...prev,
           [contactId]: [...(prev[contactId] || []), responseMessage]
         }))
-
-        // 로그 추가
         addLog('interrogation', `용의자 심문을 진행했습니다.`)
-      } catch (err) {
-        toast.error('심문에 실패했습니다.')
-        console.error('Chat error:', err)
-      }
+      }, 500)
     }
   }
 
-  // 연락처 선택 시 심문 기록 불러오기
-  const handleContactSelect = useCallback(async (contact) => {
-    if (!contact || !sessionId) return
-
-    // 조력자가 아닌 경우 (용의자) 심문 기록 불러오기
-    if (!contact.isHelper) {
-      try {
-        const suspectId = parseInt(contact.id, 10)
-        if (isNaN(suspectId)) return
-
-        const response = await fetchChatHistory(sessionId, suspectId)
-        if (response?.messages && response.messages.length > 0) {
-          // 기존 기록을 UI 포맷으로 변환
-          const formattedMessages = response.messages.map((msg, idx) => ({
-            id: `history-${idx}`,
-            sender: msg.role === 'user' ? 'user' : contact.id,
-            text: msg.content || '',
-            time: msg.createdAt
-              ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-              : '--:--'
-          }))
-
-          setChatHistories(prev => ({
-            ...prev,
-            [contact.id]: formattedMessages
-          }))
-        }
-      } catch (err) {
-        console.error('심문 기록 조회 실패:', err)
-      }
-    }
-  }, [sessionId])
+  // 연락처 선택 시 (API 연결 전이라 별도 처리 없음)
+  const handleContactSelect = useCallback((contact) => {
+    // 채팅 기록은 로컬 상태로 관리
+  }, [])
 
   const handleDragStart = (e, data, type) => {
     const payload = JSON.stringify({ data, type })
@@ -513,20 +650,69 @@ export default function GameRoom() {
     setSubmitAnswerOpen(true)
   }
 
-  const handleAnswerSubmit = async () => {
+  const handleAnswerSubmit = async ({ submissionItems, confirmedConnections }) => {
     if (!sessionId) return
 
     try {
+      // 추리보드에서 범인, 흉기, 장소 추출
+      const suspects = submissionItems.filter(item => item.type === 'suspect')
+      const evidences = submissionItems.filter(item => item.type === 'evidence')
+      const locations = submissionItems.filter(item => item.type === 'location')
+
+      // 가장 많이 연결된 용의자를 범인으로 지목
+      const suspectConnectionCounts = {}
+      confirmedConnections.forEach(conn => {
+        suspects.forEach(s => {
+          if (conn.from === s.id || conn.to === s.id) {
+            suspectConnectionCounts[s.id] = (suspectConnectionCounts[s.id] || 0) + 1
+          }
+        })
+      })
+
+      const culpritItem = suspects.reduce((max, s) =>
+        (suspectConnectionCounts[s.id] || 0) > (suspectConnectionCounts[max?.id] || 0) ? s : max
+      , suspects[0])
+
+      // 범인과 연결된 증거 중 하나를 흉기로
+      const culpritConnectedEvidence = evidences.find(e =>
+        confirmedConnections.some(conn =>
+          (conn.from === culpritItem?.id && conn.to === e.id) ||
+          (conn.to === culpritItem?.id && conn.from === e.id)
+        )
+      )
+
+      // 첫 번째 장소의 floorNumber 사용
+      const locationFloor = locations[0]?.floorNumber || rooms?.[0]?.floorNumber || 1
+
+      const submitData = {
+        culpritId: culpritItem?.suspectId || culpritItem?.targetId || parseInt(String(culpritItem?.id).replace('suspect-', '')) || 1,
+        weaponClueId: culpritConnectedEvidence?.evidenceId || culpritConnectedEvidence?.targetId || parseInt(String(culpritConnectedEvidence?.id).replace('evidence-', '')) || 1,
+        locationFloor,
+        motive: '범행 동기 추리', // 추후 입력 폼 추가 가능
+        causeOfDeath: '사인 추리', // 추후 입력 폼 추가 가능
+      }
+
       setSubmitAnswerOpen(false)
 
-      // 게임 종료 API 호출
-      const result = await submitGame(sessionId)
+      // 최종 제출 API 호출
+      const result = await submitAnswer(sessionId, submitData)
 
-      if (result.isSuccess) {
+      if (result.status === 'COMPLETED') {
+        toast.success(`사건 해결! 랭크: ${result.rankGrade}, 점수: ${result.finalScore}`)
         setReviewModalOpen(true)
+      } else if (result.status === 'WRONG_ANSWER') {
+        toast.error(`틀렸습니다. 남은 기회: ${result.remainingAttempts}회`)
+        if (result.remainingAttempts > 0) {
+          setSubmitAnswerOpen(true)
+        }
+      } else if (result.status === 'FAILED') {
+        toast.error('게임 오버! 기회를 모두 소진했습니다.')
+      } else if (result.status === 'BOARD_INVALID') {
+        toast.error(result.errorMessage || '추리보드가 유효하지 않습니다.')
+        setSubmitAnswerOpen(true)
       }
     } catch (err) {
-      // 에러는 submitGame hook에서 처리됨
+      toast.error(err.message || '제출에 실패했습니다.')
       setSubmitAnswerOpen(true)
     }
   }
@@ -562,6 +748,19 @@ export default function GameRoom() {
     setPendingAddItem({ type, data: item })
   }
 
+  // 오프닝 페이즈 핸들러
+  const handleOpeningComplete = useCallback(() => {
+    setGamePhase('victim')
+  }, [])
+
+  const handleOpeningSkip = useCallback(() => {
+    setGamePhase('main')
+  }, [])
+
+  const handleVictimComplete = useCallback(() => {
+    setGamePhase('main')
+  }, [])
+
   // 로딩 상태 렌더링
   if (isLoading) {
     return (
@@ -583,6 +782,27 @@ export default function GameRoom() {
           <Button onClick={() => window.location.href = '/scenarios'}>시나리오 목록</Button>
         </div>
       </div>
+    )
+  }
+
+  // 오프닝 페이즈 (새 게임 시작 시)
+  if (gamePhase === 'opening' && scenario && !resumeSessionId) {
+    return (
+      <OpeningPhase
+        scenario={scenario}
+        onComplete={handleOpeningComplete}
+        onSkip={handleOpeningSkip}
+      />
+    )
+  }
+
+  // 피해자 소개 페이즈
+  if (gamePhase === 'victim' && scenario && !resumeSessionId) {
+    return (
+      <VictimIntroPhase
+        victim={scenario.victim}
+        onComplete={handleVictimComplete}
+      />
     )
   }
 
@@ -649,7 +869,7 @@ export default function GameRoom() {
 	          </div>
 
 	          <div className="w-full h-[calc(100%-40px)] bg-black/40 relative">
-	            {/* sessionId가 있고 단서가 로드되면 AgitRoom 렌더링 */}
+	            {/* sessionId가 있으면 AgitRoom 렌더링 */}
 	            {sessionId ? (
 	              <AgitRoom
 	                key={`${activeScenarioId}-${sessionId}-${clues.length}`}
@@ -657,6 +877,15 @@ export default function GameRoom() {
 	                onClueInspected={handleClueInspected}
 	                onRoomChanged={handleRoomChanged}
 	              />
+	            ) : gameInitError ? (
+	              <div className="w-full h-full flex items-center justify-center">
+	                <div className="text-center">
+	                  <p className="text-red-400 mb-4">{gameInitError}</p>
+	                  <Button onClick={initializeNewGame} variant="outline">
+	                    다시 시도
+	                  </Button>
+	                </div>
+	              </div>
 	            ) : (
 	              <div className="w-full h-full flex items-center justify-center">
 	                <div className="text-center">
