@@ -721,37 +721,50 @@ public class GameSessionServiceImpl implements GameSessionService {
                     "모든 타입이 연결되어야 합니다. (미연결: " + missingTypes + ")", attempts);
         }
 
-        // 5. 정답 확인
+        //  Scenario 조회
         Scenario scenario = session.getScenario();
-        JsonNode truthConfig = scenario.getTruthConfigJson();
 
-        long correctCulpritId = 0;
-        long correctWeaponClueId = 0;
-        int correctLocationFloor = 0;
-
-        if (truthConfig != null) {
-            correctCulpritId = truthConfig.has("culprit_id")
-                    ? truthConfig.get("culprit_id").asLong() : 0;
-            correctWeaponClueId = truthConfig.has("weapon_clue_id")
-                    ? truthConfig.get("weapon_clue_id").asLong() : 0;
-            correctLocationFloor = truthConfig.has("location_floor")
-                    ? truthConfig.get("location_floor").asInt() : 0;
-        }
-
-        boolean culpritCorrect = (request.culpritId() == correctCulpritId);
-        boolean weaponCorrect = (request.weaponClueId() == correctWeaponClueId);
-        boolean locationCorrect = (request.locationFloor() == correctLocationFloor);
-
-        // 6. 동기 유사도 계산
+        // 3. motive 임베딩
+        float[] motiveEmbedding = null;
         float motiveSimilarity = 0.0f;
+
         if (request.motive() != null && !request.motive().isBlank()) {
-            float[] correctMotiveEmbedding = scenario.getCorrectMotiveEmbedding();
-            if (correctMotiveEmbedding != null) {
-                // TODO: 임베딩 로직 구현 필요
-                var embeddingResult = embeddingModel.embed(request.motive());
-                motiveSimilarity = cosineSimilarity(embeddingResult, correctMotiveEmbedding);
+            // EmbeddingModel로 텍스트 임베딩
+            // TODO 오류 수정 필요
+            var embeddingResult = embeddingModel.embed(request.motive());
+            // motiveEmbedding = embeddingResult.getResult().getOutput();
+
+            // Scenario의 correctMotiveEmbedding과 유사도 계산
+            String correctMotiveEmbeddingStr = scenario.getCorrectMotiveEmbedding();
+            if (correctMotiveEmbeddingStr != null) {
+                float[] correctMotiveEmbedding = parseVectorString(correctMotiveEmbeddingStr);
+                motiveSimilarity = cosineSimilarity(motiveEmbedding, correctMotiveEmbedding);
             }
         }
+
+        // 5. GameSession에 임베딩 저장
+        gameSessionRepository.save(session);
+
+
+        // 6. truthConfigJson에서 정답 확인
+        JsonNode truthConfig = scenario.getTruthConfigJson();
+        boolean culpritCorrect = false;
+        boolean weaponCorrect = false;
+        boolean locationCorrect = false;
+
+        if (truthConfig != null) {
+            long correctCulpritId = truthConfig.has("culpritSuspectId")
+                    ? truthConfig.get("culpritSuspectId").asLong() : 0;
+            long correctWeaponClueId = truthConfig.has("weaponClueId")
+                    ? truthConfig.get("weaponClueId").asLong() : 0;
+            int correctLocationFloor = truthConfig.has("locationFloor")
+                    ? truthConfig.get("locationFloor").asInt() : 0;
+
+            culpritCorrect = (request.culpritId() == correctCulpritId);
+            weaponCorrect = (request.weaponClueId() == correctWeaponClueId);
+            locationCorrect = (request.locationFloor() == correctLocationFloor);
+        }
+
 
         // 7. 범인 틀림 → 횟수 증가 + 게임화면으로
         if (!culpritCorrect) {
@@ -842,6 +855,34 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         return String.join(" ", comments);
     }
+
+    /**
+     * pgvector 문자열 형식을 float[] 배열로 변환
+     * @param vectorString "[0.1,0.2,0.3]" 형식의 문자열
+     * @return float[] 배열
+     */
+    private float[] parseVectorString(String vectorString) {
+        if (vectorString == null || vectorString.isBlank()) {
+            return null;
+        }
+
+        String trimmed = vectorString.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            trimmed = trimmed.substring(1, trimmed.length() - 1).trim();
+        }
+
+        if (trimmed.isEmpty()) {
+            return new float[0];
+        }
+
+        String[] parts = trimmed.split(",");
+        float[] result = new float[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Float.parseFloat(parts[i].trim());
+        }
+        return result;
+    }
+
     /**
      * 코사인 유사도 계산
      * @param vec1 첫 번째 벡터

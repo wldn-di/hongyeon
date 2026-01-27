@@ -44,10 +44,11 @@ public class Scenario extends BaseEntity {
     private String title;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "text")
     private String userSynopsis;
 
     @Lob
+    @Column(columnDefinition = "text")
     private String synopsis;
 
     private Integer suspectCount;
@@ -56,6 +57,7 @@ public class Scenario extends BaseEntity {
     private String genre;
 
     @Lob
+    @Column(columnDefinition = "text")
     private String synopsisDetail;
 
     @Column(length = 500)
@@ -66,6 +68,7 @@ public class Scenario extends BaseEntity {
     private GenerationStatus generationStatus;
 
     @Lob
+    @Column(columnDefinition = "text")
     private String generationError;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -76,13 +79,11 @@ public class Scenario extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private JsonNode truthConfigJson;
 
-    @Convert(converter = PgVectorConverter.class)
-    @Column(name = "correct_motive_embedding", columnDefinition = "vector(1536)")
-    private float[] correctMotiveEmbedding;
+    @Column(name = "correct_motive_embedding", columnDefinition = "text")
+    private String correctMotiveEmbedding;
 
-    @Convert(converter = PgVectorConverter.class)
-    @Column(name = "correct_cause_of_death_embedding", columnDefinition = "vector(1536)")
-    private float[] correctCauseOfDeathEmbedding;
+    @Column(name = "correct_cause_of_death_embedding", columnDefinition = "text")
+    private String correctCauseOfDeathEmbedding;
 
     @Column(nullable = false)
     private int playCount;
@@ -105,8 +106,8 @@ public class Scenario extends BaseEntity {
             String generationError,
             JsonNode storyConfigJson,
             JsonNode truthConfigJson,
-            float[] correctMotiveEmbedding,
-            float[] correctCauseOfDeathEmbedding,
+            String correctMotiveEmbedding,
+            String correctCauseOfDeathEmbedding,
             int playCount,
             BigDecimal avgRating,
             BigDecimal avgDifficulty

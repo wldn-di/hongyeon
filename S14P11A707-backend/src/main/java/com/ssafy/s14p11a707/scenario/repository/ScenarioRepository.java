@@ -5,6 +5,8 @@ import com.ssafy.s14p11a707.user.entity.User;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.List;
 
@@ -16,6 +18,7 @@ public interface ScenarioRepository extends JpaRepository<Scenario, Long> {
         return save(scenario);
     }
 
-    List<Scenario> findByTitleContainingOrSynopsisContaining(String title, String synopsis);
+    @Query(value = "SELECT * FROM scenarios WHERE title LIKE %:keyword%", nativeQuery = true)
+    List<Scenario> findByTitleContainingOrSynopsisContaining(@Param("keyword") String keyword);
 }
 
