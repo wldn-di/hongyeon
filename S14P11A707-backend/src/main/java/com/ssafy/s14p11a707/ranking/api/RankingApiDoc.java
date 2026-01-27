@@ -13,7 +13,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
-@Tag(name = "Ranking API V2", description = "랭킹 API (V2)")
+@Tag(name = "Ranking API", description = "랭킹 API")
 public interface RankingApiDoc {
 
     @Operation(summary = "전체 랭킹 조회", description = "전체 랭킹 Top 10을 조회합니다.")

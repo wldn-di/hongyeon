@@ -27,7 +27,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
-@Tag(name = "Session API V2", description = "게임 세션/보드/단서 API (V2)")
+@Tag(name = "Session API", description = "게임 세션/보드/단서 API")
 public interface SessionApiDoc {
 
     @Operation(summary = "게임 시작", description = "새로운 게임 세션을 생성하고 게임을 시작합니다.")

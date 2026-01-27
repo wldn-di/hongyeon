@@ -33,7 +33,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v2/sessions")
+@RequestMapping("/api/sessions")
 public class SessionApi implements SessionApiDoc {
 
     private final GameSessionService gameSessionService;

@@ -14,7 +14,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
-@Tag(name = "Review API V2", description = "리뷰 API (V2)")
+@Tag(name = "Review API", description = "리뷰 API")
 public interface ReviewApiDoc {
 
     @Operation(summary = "리뷰 목록 조회", description = "시나리오 리뷰 목록을 페이징하여 조회합니다.")

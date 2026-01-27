@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequiredArgsConstructor
-@RequestMapping("/api/v2/users/me")
+@RequestMapping("/api/users/me")
 public class UserMeApi implements UserMeApiDoc {
 
     private final UserMeService userService;

@@ -15,7 +15,7 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
-@Tag(name = "User(Me) API V2", description = "내 정보/책장 API (V2)")
+@Tag(name = "User(Me) API", description = "내 정보/책장 API")
 public interface UserMeApiDoc {
 
     @Operation(summary = "내 책장 통계 조회", description = "내 책장 통계를 조회합니다. (clearRate는 0.0~1.0 사이 값, 프론트에서 xx% 포맷 필요)")
