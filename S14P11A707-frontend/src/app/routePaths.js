@@ -8,6 +8,7 @@ export const ROUTES = {
   RANKING: "/ranking",
   PROFILE: "/me",
   BOARD: "/board/:scenarioId",
+  BOARD_SESSION: "/board/session/:sessionId",
   MY_BOOKSHELF: "/my-bookshelf",
   GAME: "/game/:scenarioId",
   ROOM_SOLO: "/room/:scenarioId/solo",
@@ -15,6 +16,7 @@ export const ROUTES = {
   COOP_LOBBY: "/coop/:scenarioId",
   COOP_GAME: "/coop-game/:scenarioId/:roomCode",
   SUBMIT: "/submit/:scenarioId",
+  SUBMIT_SESSION: "/submit/session/:sessionId",
   NOT_FOUND: "/404",
 };
 
@@ -22,10 +24,12 @@ export const ROUTES = {
 export const createPath = {
   scenarioDetail: (id) => `/scenario/${id}`,
   board: (scenarioId) => `/board/${scenarioId}`,
+  boardSession: (sessionId) => `/board/session/${sessionId}`,
   game: (scenarioId) => `/game/${scenarioId}`,
   roomSolo: (scenarioId) => `/room/${scenarioId}/solo`,
   roomMulti: (scenarioId, roomCode) => `/room/${scenarioId}/${roomCode}`,
   coopLobby: (scenarioId) => `/coop/${scenarioId}`,
   coopGame: (scenarioId, roomCode) => `/coop-game/${scenarioId}/${roomCode}`,
   submit: (scenarioId) => `/submit/${scenarioId}`,
+  submitSession: (sessionId) => `/submit/session/${sessionId}`,
 };
