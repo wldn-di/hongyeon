@@ -135,6 +135,10 @@ public class Scenario extends BaseEntity {
         this.avgDifficulty = avgDifficulty;
     }
 
+    public void incrementPlayCount() {
+        this.playCount++;
+    }
+
     public enum GenerationStatus {
         GENERATING,
         COMPLETED,

@@ -15,5 +15,7 @@ public interface BoardConnectionRepository extends JpaRepository<BoardConnection
 
     int countBySessionAndConnectionType(GameSession session, ConnectionType connectionType);
 
+    List<BoardConnection> findBySessionAndConnectionType(GameSession session, ConnectionType connectionType);
+
     void deleteBySessionAndIdIn(GameSession session, List<Long> ids);
 }
