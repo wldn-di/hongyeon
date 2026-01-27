@@ -11,7 +11,5 @@ public interface VictimRepository extends JpaRepository<Victim, Long> {
     }
 
     Optional<Victim> findByScenarioId(long scenarioId);
-
-    Optional<Victim> findByScenarioId(long scenarioId);
 }
 

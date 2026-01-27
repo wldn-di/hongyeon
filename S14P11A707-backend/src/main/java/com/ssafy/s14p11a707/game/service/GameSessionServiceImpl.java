@@ -39,7 +39,6 @@ import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -675,7 +674,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             // EmbeddingModel로 텍스트 임베딩
             // TODO 오류 수정 필요
             var embeddingResult = embeddingModel.embed(request.motive());
-            motiveEmbedding = embeddingResult.getResult().getOutput();
+            // motiveEmbedding = embeddingResult.getResult().getOutput();
 
             // Scenario의 correctMotiveEmbedding과 유사도 계산
             float[] correctMotiveEmbedding = scenario.getCorrectMotiveEmbedding();

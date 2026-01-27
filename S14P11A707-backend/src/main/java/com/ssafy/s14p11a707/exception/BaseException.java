@@ -1,6 +1,7 @@
 package com.ssafy.s14p11a707.exception;
 
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 
 @Getter
