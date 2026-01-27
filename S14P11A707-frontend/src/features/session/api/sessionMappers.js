@@ -13,12 +13,11 @@ export const NodeType = {
 }
 
 /**
- * Connection type enum
+ * Connection type enum (백엔드 값 기준)
  */
 export const ConnectionType = {
-  CONFIRMED: 'confirmed',
-  SUSPECTED: 'suspected',
-  CONTRADICTION: 'contradiction',
+  RED: 'RED',
+  YELLOW: 'YELLOW',
 }
 
 // ========================================
@@ -191,6 +190,7 @@ export const normalizeClue = (clue) => {
     floorNumber: clue.floorNumber,
     name: clue.name || '',
     importance: clue.importance || '',
+    detailImageUrl: clue.detailImageUrl || '',
     discovered: clue.discovered || false,
     discoveredAt: clue.discoveredAt || null,
   }
@@ -341,7 +341,6 @@ export const normalizeEvaluation = (evaluation) => {
     weaponCorrect: evaluation.weaponCorrect || false,
     locationCorrect: evaluation.locationCorrect || false,
     motiveSimilarity: evaluation.motiveSimilarity || 0,
-    causeOfDeathSimilarity: evaluation.causeOfDeathSimilarity || 0,
     aiComment: evaluation.aiComment || '',
   }
 }
@@ -655,8 +654,11 @@ export const normalizeInvestigationReportResponse = (response) => {
       sessionId: null,
       scenarioId: null,
       userId: null,
+      playerName: '',
+      scenarioTitle: '',
       rankGrade: '',
       finalScore: 0,
+      playTimeMinutes: 0,
       summary: '',
       aiComment: '',
       stats: null,
@@ -668,8 +670,11 @@ export const normalizeInvestigationReportResponse = (response) => {
     sessionId: response.sessionId || null,
     scenarioId: response.scenarioId || null,
     userId: response.userId || null,
+    playerName: response.playerName || '',
+    scenarioTitle: response.scenarioTitle || '',
     rankGrade: response.rankGrade || '',
     finalScore: response.finalScore || 0,
+    playTimeMinutes: response.playTimeMinutes || 0,
     summary: response.summary || '',
     aiComment: response.aiComment || '',
     stats: response.stats ? normalizeStats(response.stats) : null,
