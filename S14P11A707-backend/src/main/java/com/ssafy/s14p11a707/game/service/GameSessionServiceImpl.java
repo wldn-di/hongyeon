@@ -677,15 +677,15 @@ public class GameSessionServiceImpl implements GameSessionService {
             // motiveEmbedding = embeddingResult.getResult().getOutput();
 
             // Scenario의 correctMotiveEmbedding과 유사도 계산
-            float[] correctMotiveEmbedding = scenario.getCorrectMotiveEmbedding();
-            if (correctMotiveEmbedding != null) {
+            String correctMotiveEmbeddingStr = scenario.getCorrectMotiveEmbedding();
+            if (correctMotiveEmbeddingStr != null) {
+                float[] correctMotiveEmbedding = parseVectorString(correctMotiveEmbeddingStr);
                 motiveSimilarity = cosineSimilarity(motiveEmbedding, correctMotiveEmbedding);
             }
         }
 
 
         // 5. GameSession에 임베딩 저장
-        gameSession.setSubmittedMotiveEmbedding(motiveEmbedding);
         gameSessionRepository.save(gameSession);
 
         // 6. truthConfigJson에서 정답 확인
@@ -751,6 +751,34 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         return String.join(" ", comments);
     }
+
+    /**
+     * pgvector 문자열 형식을 float[] 배열로 변환
+     * @param vectorString "[0.1,0.2,0.3]" 형식의 문자열
+     * @return float[] 배열
+     */
+    private float[] parseVectorString(String vectorString) {
+        if (vectorString == null || vectorString.isBlank()) {
+            return null;
+        }
+
+        String trimmed = vectorString.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            trimmed = trimmed.substring(1, trimmed.length() - 1).trim();
+        }
+
+        if (trimmed.isEmpty()) {
+            return new float[0];
+        }
+
+        String[] parts = trimmed.split(",");
+        float[] result = new float[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Float.parseFloat(parts[i].trim());
+        }
+        return result;
+    }
+
     /**
      * 코사인 유사도 계산
      * @param vec1 첫 번째 벡터
