@@ -67,6 +67,13 @@ export const ENDPOINTS = {
     // Report
     report: (sessionId) => `/api/sessions/${sessionId}/report`,
     reportPublic: (sessionId) => `/api/sessions/${sessionId}/report/public`,
+
+    // Submit
+    submit: (sessionId) => `/api/sessions/${sessionId}/submit`,
+
+    // Chat (용의자 심문)
+    suspectChat: (sessionId, suspectId) => `/api/sessions/${sessionId}/suspects/${suspectId}/chat`,
+    suspectChatHistory: (sessionId, suspectId) => `/api/sessions/${sessionId}/suspects/${suspectId}/chats`,
   },
 
   // ========================================
