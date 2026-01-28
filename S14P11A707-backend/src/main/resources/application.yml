@@ -60,10 +60,10 @@ spring:
         api-key: AIzaSyBMw4Wb1KPcC1SlTy_rJ_8EduAOQ5cVQNw
         chat:
           options:
-            model: gemini-2.0-flash-exp
+            model: gemini-2.0-flash
         embedding:
           options:
-            model: text-embedding-004
+            model: gemini-embedding-001
         base-url: https://generativelanguage.googleapis.com
 
 springdoc:
@@ -98,7 +98,13 @@ app:
 server:
   # CloudFront/ALB/Nginx 뒤에서 {baseUrl}의 scheme/host가 꼬일 때 사용
   forward-headers-strategy: framework
+
   servlet:
+    encoding:
+      charset: UTF-8
+      enabled: true
+      force: true
+
     session:
       cookie:
         secure: ${SESSION_COOKIE_SECURE:false}

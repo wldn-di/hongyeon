@@ -85,7 +85,7 @@ public class AiConfig {
     @Bean
     EmbeddingModel embeddingModel(GoogleGenAiEmbeddingConnectionDetails connectionDetails) {
         GoogleGenAiTextEmbeddingOptions options = GoogleGenAiTextEmbeddingOptions.builder()
-                .model(GoogleGenAiTextEmbeddingOptions.DEFAULT_MODEL_NAME)
+                .model("gemini-embedding-001")
                 .taskType(TaskType.RETRIEVAL_DOCUMENT)
                 .build();
 
