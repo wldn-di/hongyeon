@@ -7,10 +7,12 @@ import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.scenario.dto.*;
 import com.ssafy.s14p11a707.scenario.entity.*;
 import com.ssafy.s14p11a707.scenario.repository.*;
+import com.ssafy.s14p11a707.scenario.service.RoomLayoutService; // ★ 추가됨
 import com.ssafy.s14p11a707.scenario.service.ScenarioService;
 import com.ssafy.s14p11a707.user.entity.User;
 import com.ssafy.s14p11a707.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -23,7 +25,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
-
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScenarioServiceImpl implements ScenarioService {
@@ -38,6 +40,9 @@ public class ScenarioServiceImpl implements ScenarioService {
     private final RoomRepository roomRepository;
     private final ScenarioRankingRepository scenarioRankingRepository;
     private final UserRepository userRepository;
+
+    // ★ 랜덤 가구 배치 서비스 주입
+    private final RoomLayoutService roomLayoutService;
 
     @Override
     public ScenarioCreateResponse createScenario(ScenarioCreateRequest request) {
@@ -85,8 +90,6 @@ public class ScenarioServiceImpl implements ScenarioService {
                     }
                     """;
 
-
-
             StringBuilder timelineSb = new StringBuilder();
             chatClient.prompt()
                     .system(timelineSystemMessage)
@@ -99,6 +102,7 @@ public class ScenarioServiceImpl implements ScenarioService {
             String timelineJson = timelineSb.toString();
 
             // 3. 두 번째 AI 호출: 타임라인을 바탕으로 시나리오 전체 생성
+            // ★ 중요: rooms 부분 프롬프트 수정 (room_type을 명확하게 지정)
             String scenarioSystemMessage = """
                     Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다. 이때 당신은 유저가 직접 단서를 통해 사건의 동기, 범인, 범행 수법 등을 스스로 추리하며 알아낼 수 있도록 논리적 근거와 함께 증거물과 시나리오를 구성하여야 합니다.
                     
@@ -112,117 +116,117 @@ public class ScenarioServiceImpl implements ScenarioService {
                     
                     사건 및 타임라인 기반 시나리오 생성 단계 수행 시 다음 규칙을 엄격히 준수하십시오:
                     
-                    	- 타임라인 객체 확장: 1단계에서 생성한 모든 타임라인 항목을 하나도 빠짐없이 story_config_json 내의 timeline 배열에 집어넣으십시오.
+                        - 타임라인 객체 확장: 1단계에서 생성한 모든 타임라인 항목을 하나도 빠짐없이 story_config_json 내의 timeline 배열에 집어넣으십시오.
                     
-                    	- Witness 필드 필수 추가: 각 타임라인 객체는 {"time": "HH:MM", "event": "내용""} 형식을 유지해야 합니다.
+                        - Witness 필드 필수 추가: 각 타임라인 객체는 {"time": "HH:MM", "event": "내용""} 형식을 유지해야 합니다.
                     
-                    	- 데이터 정합성: 1단계의 30분 단위 기록을 요약하지 말고, 엔딩 시점까지의 모든 JSON 배열 원소를 그대로 유지하십시오.
+                        - 데이터 정합성: 1단계의 30분 단위 기록을 요약하지 말고, 엔딩 시점까지의 모든 JSON 배열 원소를 그대로 유지하십시오.
                     
-                    	- Room 정보 생성은 6개 생성으로 고정.
-                    	- 각 층에는 무조건 방 하나씩이 있는 형태.
-                    	- 증거품의 수는 최대 20개를 넘어가지 않도록 제한.
+                        - Room 정보 생성은 6개 생성으로 고정.
+                        - 각 층에는 무조건 방 하나씩이 있는 형태.
+                        - 증거품의 수는 최대 20개를 넘어가지 않도록 제한.
                     
                     시나리오 작성 형식:
                     {
                       "scenario": {
-                        "title": "[시나리오 제목 - 예: 호텔 VIP실의 살인자]",
-                        "synopsis": "[한 줄 요약 - 예: 독가스로 살해된 회장, 용의자는 4명]",
+                        "title": "[시나리오 제목]",
+                        "synopsis": "[한 줄 요약]",
                         "synopsisDetail": "[상세 줄거리 200자 내외]",
                         "thumbnailUrl": "[썸네일 이미지 URL]",
                         "story_config_json": {
-                          "incident_time": "[사건 발생 시각 - 예: 2024-01-15 23:30]",
-                          "twist": "[반전 요소 - 예: 피해자는 자살을 위장했으나 실수로 타살됨]",
-                          "timeline": "[사건 시간순 배열 - 예: [{time, event, witness}, ...]]",
+                          "incident_time": "[사건 발생 시각]",
+                          "twist": "[반전 요소]",
+                          "timeline": "[사건 시간순 배열]",
                           "narration": {
                             "opening": "[게임 시작 나레이션]",
                             "epilogue": "[사건 해결 엔딩 나레이션]",
-                            "culprit_monologue": "[범인으로 지정될 때의 독백]",
-                            "unsolved_monologue": "[미해결 시 독백]"
+                            "culprit_monologue": "[범인 독백]",
+                            "unsolved_monologue": "[미해결 독백]"
                           }
                         },
                         "truth_config_json": {
-                          "culprit_id": "[범인 용의자 ID - suspects 배열의 index 0~N 중 하나]",
-                          "motive": "[범행 동기 상세 설명 - 예: 피해자가 용의자의 사기를 당하게 해 복수]",
-                          "weapon_clue_id": "[흉기 단서 ID - clues 배열의 index 0~N 중 하나]",
-                          "method": "[범행 수법 상세]",
-                          "location_floor": "[범행 발생 층 번호 - 예: 3]",
-                          "cause_of_death": "[사인 상세 설명 - 예: 청산가스 중독으로 인한 질식사]"
+                          "culprit_id": "[범인 ID]",
+                          "motive": "[범행 동기]",
+                          "weapon_clue_id": "[흉기 단서 ID]",
+                          "method": "[범행 수법]",
+                          "location_floor": "[범행 발생 층 번호]",
+                          "cause_of_death": "[사인]"
                         }
                       },
                       "victim": {
-                        "name": "[피해자 이름]",
-                        "age": "[피해자 나이 - 숫자]",
-                        "gender": "[성별 - 남성/여성]",
+                        "name": "[이름]",
+                        "age": "[나이]",
+                        "gender": "[성별]",
                         "occupation": "[직업]",
-                        "background": "[피해자 배경 설명]",
-                        "discovery_location": "[시체 발견 장소]",
-                        "estimated_death_time": "[추정 사망 시각]",
+                        "background": "[배경]",
+                        "discovery_location": "[발견 장소]",
+                        "estimated_death_time": "[사망 시각]",
                         "cause_of_death": "[사인]",
                         "victim_detail_json": {
-                          "secret": "[피해자의 비밀]",
-                          "hidden_info": "[게임 중 공개될 숨겨진 정보]"
+                          "secret": "[비밀]",
+                          "hidden_info": "[숨겨진 정보]"
                         }
                       },
                       "suspects": [
                         {
-                          "name": "[용의자 이름]",
-                          "age": "[나이 - 숫자]",
+                          "name": "[이름]",
+                          "age": "[나이]",
                           "gender": "[성별]",
                           "occupation": "[직업]",
-                          "one_liner": "[한 줄 소개/성격 - 예: 냉정하지만 예민한 비서]",
-                          "is_culprit": "[범인 여부 - true/false]",
-                          "motive": "[범행 동기]",
+                          "one_liner": "[한 줄 소개]",
+                          "is_culprit": "[범인 여부]",
+                          "motive": "[동기]",
                           "ai_config_json": {
-                            "personality": "[성격 특성]",
-                            "relationship": "[피해자와의 관계]",
+                            "personality": "[성격]",
+                            "relationship": "[관계]",
                             "knowledge_scope": {
-                              "knows_about": "[이 용의자가 아는 정보 목록]",
-                              "doesnt_know": "[이 용의자가 모르는 정보 목록]"
+                              "knows_about": [],
+                              "doesnt_know": []
                             },
                             "secret": {
                               "title": "[비밀 제목]",
                               "content": "[비밀 내용]",
                               "weakness_clue": {
-                                "id": "[약점 단서 ID - clues 배열의 index]",
-                                "name": "[단서 이름]",
-                                "description": "[단서 설명]"
+                                "id": "[약점 단서 ID]",
+                                "name": "[이름]",
+                                "description": "[설명]"
                               },
                               "alibi_progression": {
-                                "level1_lie": "[1단계: 완전한 거짓말]",
-                                "level2_partial": "[2단계: 부분적 인정]",
-                                "level3_truth": "[3단계: 진실]"
+                                "level1_lie": "...",
+                                "level2_partial": "...",
+                                "level3_truth": "..."
                               }
                             },
                             "deflection_strategy": {
-                              "target_name": "[혐의 전환 대상 이름]",
-                              "suspicion_point": "[의심을 살 포인트]",
-                              "dialogue_hint": "[대화 힌트]"
+                              "target_name": "...",
+                              "suspicion_point": "...",
+                              "dialogue_hint": "..."
                             },
-                            "timeline_alibi": "[시간대별 알리바이 - 예: [{time, location, activity, is_verified}, ...]]"
+                            "timeline_alibi": "..."
                           }
                         }
                       ],
                       "clues": [
                         {
-                          "name": "[단서 이름]",
-                          "description": "[단서 설명]",
-                          "importance": "[중요도 - LOW/MEDIUM/HIGH/CRITICAL]",
-                          "assistant_comment": "[AI 조력사 코멘트]",
+                          "name": "[이름]",
+                          "description": "[설명]",
+                          "importance": "CRITICAL",
+                          "assistant_comment": "[코멘트]",
                           "clue_detail_json": {
-                            "revealed_truth": "[단서가 밝혀내는 진실]",
-                            "related_suspect_ids": "[관련 용의자 ID 목록]",
-                            "discovery_script": "[단서 발견시 스크립트]",
-                            "is_weakness_clue_for": "[이 단서가 약점인 용의자 ID]"
+                            "revealed_truth": "...",
+                            "related_suspect_ids": "...",
+                            "discovery_script": "...",
+                            "is_weakness_clue_for": "..."
                           }
                         }
                       ],
                       "rooms": [
                         {
                           "floor_number": "[층 번호 - 숫자]",
-                          "room_type": "[방 유형 - 예: 복도, 객실, 레스토랑]",
-                          "room_name": "[방 이름]",
+                          "room_type": "[필수: living, kitchen, bedroom, bathroom, basement 중 하나를 선택]",
+                          "room_name": "[방 이름 - 예: 거실, 부엌]",
                           "description": "[방 설명]",
-                          "assistant_comment": "[AI 조력사 코멘트]"
+                          "assistant_comment": "[코멘트]"
                         }
                       ]
                     }
@@ -239,10 +243,10 @@ public class ScenarioServiceImpl implements ScenarioService {
 
             String scenarioJson = scenarioSb.toString();
 
-            // Markdown 코드 블록 제거 (AI가 ```json ... ``` 형식으로 응답하는 경우)
+            // Markdown 코드 블록 제거
             scenarioJson = scenarioJson.replaceAll("```json\\s*", "")
-                                      .replaceAll("```\\s*$", "")
-                                      .trim();
+                    .replaceAll("```\\s*$", "")
+                    .trim();
 
             // 5. JSON 파싱
             ObjectMapper mapper = new ObjectMapper();
@@ -325,21 +329,27 @@ public class ScenarioServiceImpl implements ScenarioService {
             suspectRepository.saveSuspects(suspects);
 
             // 9. Rooms 저장
-            // 중복된 floor_number 제거 (같은 층의 여러 방 중 첫 번째 것만 저장)
+            // ★ RoomLayoutService를 호출하여 랜덤 가구 배치 적용
             Map<Integer, Room> roomMap = new LinkedHashMap<>();
             for (JsonNode roomNode : root.path("rooms")) {
                 int floorNumber = roomNode.path("floor_number").asInt();
 
                 // 같은 floor_number가 없을 때만 추가
                 if (!roomMap.containsKey(floorNumber)) {
+                    // AI가 생성한 방 타입 (living, kitchen 등)
+                    String roomType = roomNode.path("room_type").asText("living");
+
+                    // ★ 랜덤 배치 서비스 호출
+                    JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
+
                     Room room = Room.builder()
                             .scenario(scenario)
                             .floorNumber(floorNumber)
-                            .roomType(roomNode.path("room_type").asText())
+                            .roomType(roomType) // AI가 준 타입 사용
                             .roomName(roomNode.path("room_name").asText())
                             .description(roomNode.path("description").asText())
                             .assistantComment(roomNode.path("assistant_comment").asText())
-                            .objectJson(mapper.createObjectNode()) // 빈 JSON 객체로 초기화
+                            .objectJson(objectLayout) // ★ 생성된 가구 배치 JSON 저장
                             .build();
                     roomMap.put(floorNumber, room);
                 }
@@ -367,7 +377,7 @@ public class ScenarioServiceImpl implements ScenarioService {
                         .clueDetailJson(clueNode.path("clue_detail_json"))
                         .detailImageUrl("https://example.com/clue.jpg")
                         .assistantComment(null)
-                        .transformJson(mapper.createObjectNode()) // 빈 JSON 객체로 초기화
+                        .transformJson(mapper.createObjectNode()) // 추후 단서 배치 로직 적용 시 변경 필요
                         .build();
                 clues.add(clue);
             }
@@ -385,10 +395,11 @@ public class ScenarioServiceImpl implements ScenarioService {
             );
 
         } catch (Exception e) {
+            log.error("Scenario generation failed", e);
             Scenario scenario = Scenario.builder()
                     .title(request.title())
                     .userSynopsis(request.userSynopsis())
-                    .synopsis(request.userSynopsis())  // 실패 시 userSynopsis를 synopsis로 사용
+                    .synopsis(request.userSynopsis())
                     .genre(request.genre())
                     .suspectCount(request.suspectCount())
                     .generationStatus(Scenario.GenerationStatus.FAILED)
@@ -676,5 +687,4 @@ public class ScenarioServiceImpl implements ScenarioService {
         sb.append("]");
         return sb.toString();
     }
-
 }
