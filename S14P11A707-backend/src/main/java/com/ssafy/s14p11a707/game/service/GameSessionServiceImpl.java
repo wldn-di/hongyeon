@@ -173,29 +173,49 @@ public class GameSessionServiceImpl implements GameSessionService {
                 ? aiConfig.get("speechStyle").asText()
                 : "정중하지만 불안한 말투";
 
-        // 범인 여부에 따른 행동 지침 구성
+        // 용의자 심문을 위한 프롬프트 구성
+        String commonClueRule = """
+                ## 단서(아이템/클루) 대응 전략 - 필수 규칙
+                1. 소유권의 인정과 기만:
+                   - 본인의 소유가 확실한 물건(이름, 흔적 등)이 제시되면 무조건 부인하여 대화를 단절시키지 마세요.
+                   - 대신 "제 것이 맞네요"라고 인정하되, 그것이 왜 사건 현장이나 의심스러운 장소에서 발견되었는지에 대해 '사건과 무관한 그럴싸한 가짜 서사'를 즉흥적으로 만들어 답변하세요. (예: 잃어버렸다, 빌려줬다, 사건 전 방문했다 등)
+                
+                2. 논리적 허점의 배치:
+                   - 변명을 할 때는 타임라인이나 다른 증거와 대조했을 때 찾아낼 수 있는 '미세한 모순'을 포함하세요. 
+                   - 범인이라면 수사를 혼선시키기 위해, 일반 용의자라면 자신의 개인적인 비밀을 감추기 위해 이 방식을 사용하세요.
+                
+                3. 질문에 대한 태도:
+                   - 단서 자체로 범인을 특정하는 결론을 내리지 말고, "이게 왜 거기 있죠?"라며 당황하거나 역질문을 하세요.
+                   - 단서의 주인임을 인정하더라도 "그게 제가 범인이라는 증거는 아니지 않습니까?"라며 논리적으로 방어하세요.
+                
+                4. 점진적 실토(Layered Truth):
+                   - 처음에는 완전한 거짓말을 하고, 사용자가 모순을 지적하면 그제야 '개인적인 비밀'이나 '부분적인 진실'을 말하며 수사 방향을 흐리십시오.
+                   - 명확한 증거가 제시되기 전까지는 "왜 저만 몰아세우죠?", "그 물건이 누군가에 의해 조작되었을 가능성은 없나요?"라며 수사관의 논리를 공격하거나 화제를 전환하세요.
+                
+                """;
+
+// 범인 여부에 따른 행동 지침 수정
         String behaviorGuideline;
         if (suspect.isCulprit()) {
             behaviorGuideline = """
-                    - 당신은 범인입니다. 이 사실을 절대 인정하지 마세요.
-                    - 불안해하고 긴장된 상태를 보이지만, 최대한 평정심을 유지하세요.
-                    - 알리바이를 강하게 주장하고 모순이 드러나지 않도록 주의하세요.
-                    - 흉기나 범행 당시 상황에 대해 묻으면 회피하거나 거짓말을 하세요.
+                    - 당신은 범인입니다. 절대 인정하지 마세요.
+                    - [흉기 대응]: 흉기나 살해 현장의 직접적인 증거가 본인과 연결되면, "누군가 나를 함정에 빠뜨리려 한다"며 음모론을 제기하거나 "그 시간에 나는 다른 곳에 있었다"며 가짜 알리바이를 고수하세요.
+                    - [소지품 대응]: 이름이 적힌 물건 등 부정할 수 없는 증거만 인정하고, 이를 이용해 "이렇게 내 이름이 대놓고 적힌 걸 현장에 흘릴 바보가 어디 있겠냐"며 역으로 무죄를 주장하세요.
+                    - 당신은 영리합니다. 궁지에 몰릴수록 더 논리적으로 반박하며 플레이어를 혼란에 빠뜨리세요.
                     """;
         } else {
             behaviorGuideline = """
-                    - 당신은 무고합니다. 당황하거나 공포스러워할 수 있지만 사실만 말하세요.
-                    - 범행과 무관함을 명확히 하고, 자신의 알리바이를 솔직하게 말하세요.
-                    - 하지만 당신에게 밝혀지면 안 되는 비밀이 있다면, 이를 숨기기 위해 거짓말을 할 수 있습니다.
-                    - 진실을 말하되, 비밀과 관련된 내용은 회피하거나 거짓으로 말해도 됩니다.
-                    - 다른 용의자에 대한 추측은 신중하게 하세요.
+                    - 당신은 무고하지만, 살인보다 더 숨기고 싶은 치명적인 사생활(비리, 추문 등)이 있습니다.
+                    - 단서가 제시될 때 본인의 비밀과 관련이 있다면 극도로 당황하며 횡설수설하거나 거짓말을 하세요.
+                    - 하지만 흉기에 대해서는 "맹세코 처음 보는 물건이다"라며 결백을 주장하십시오.
+                    - 범인으로 의심받는 상황을 견디지 못하고 다른 수상한 인물에 대해 아는 바를 실토할 수 있습니다.
                     """;
         }
 
-        // 용의자별 페르소나 생성
+// 최종 시스템 메시지 결합
         String systemMessage = String.format("""
                 당신은 용의자 '%s'입니다.
-
+                
                 ## 인적 사항
                 - 나이: %d세
                 - 성별: %s
@@ -203,17 +223,19 @@ public class GameSessionServiceImpl implements GameSessionService {
                 - 한 줄 소개: %s
                 - 성격: %s
                 - 말투: %s
-
+                
                 ## 동기
                 %s
-
+                
                 ## 행동 지침
                 %s
-                1. VectorStore에 저장된 시나리오 정보를 참고하여 심문에 응답하세요.
-                2. 자신과 직접 관련된 사실만 말하세요.
-                3. 이전 대화 내용을 기억하고 일관성 있게 답변하세요.
-                4. 범인이나 흉기를 직접적으로 말하지 말고, 알리바이를 주장하세요.
-                5. 당신의 직업과 성격에 맞는 말투를 사용하세요.
+                
+                %s
+                
+                ## 심문 규칙
+                1. VectorStore의 시나리오 정보를 기반으로 답변하되, 자신의 비밀이나 범행을 숨기기 위한 기만적 서사를 생성하세요.
+                2. 이전 대화의 모순을 기억하고, 지적당하면 당황하거나 말을 바꾸는 연기를 하세요.
+                3. 직업과 성격에 맞는 페르소나를 유지하세요.
                 """,
                 suspect.getName(),
                 suspect.getAge() != null ? suspect.getAge() : 30,
@@ -223,8 +245,9 @@ public class GameSessionServiceImpl implements GameSessionService {
                 personality,
                 speechStyle,
                 suspect.getMotive() != null ? suspect.getMotive() : "없음",
-                behaviorGuideline
-        );
+                behaviorGuideline,
+                commonClueRule);
+
 
         String userMessage = request.message() == null ? "" : request.message().trim();
         Long usedClueId = request.usedClueId();
@@ -802,8 +825,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         if (request.motive() != null && !request.motive().isBlank()) {
             // EmbeddingModel로 텍스트 임베딩
             // TODO 오류 수정 필요
-            var embeddingResult = embeddingModel.embed(request.motive());
-            // motiveEmbedding = embeddingResult.getResult().getOutput();
+            motiveEmbedding = embeddingModel.embed(request.motive());
 
             // Scenario의 correctMotiveEmbedding과 유사도 계산
             String correctMotiveEmbeddingStr = scenario.getCorrectMotiveEmbedding();
@@ -835,6 +857,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             weaponCorrect = (request.weaponClueId() == correctWeaponClueId);
             locationCorrect = (request.locationFloor() == correctLocationFloor);
         }
+
 
 
         // 7. 범인 틀림 → 횟수 증가 + 게임화면으로

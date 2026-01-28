@@ -4,6 +4,9 @@ import com.ssafy.s14p11a707.game.entity.ChatMessage;
 import com.ssafy.s14p11a707.game.entity.GameSession;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
@@ -12,4 +15,23 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     int countBySessionAndRole(GameSession session, String role);
 
     List<ChatMessage> findBySessionIdAndSuspectIdOrderByCreatedAtAsc(long sessionId, long suspectId);
+
+    // conversationId 형식: "session-{sessionId}-suspect-{suspectId}"
+    @Query("""
+        SELECT cm FROM ChatMessage cm
+        WHERE cm.session.id = :sessionId
+        AND cm.suspect.id = :suspectId
+        ORDER BY cm.createdAt DESC
+        """)
+    List<ChatMessage> findBySessionIdAndSuspectIdOrderByCreatedAtDesc(
+            @Param("sessionId") long sessionId,
+            @Param("suspectId") long suspectId);
+
+    @Modifying
+    @Query("""
+        DELETE FROM ChatMessage cm
+        WHERE cm.session.id = :sessionId
+        AND cm.suspect.id = :suspectId
+        """)
+    void deleteBySessionIdAndSuspectId(@Param("sessionId") long sessionId, @Param("suspectId") long suspectId);
 }
