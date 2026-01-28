@@ -232,6 +232,27 @@ export const mapScenarioRankingResponse = (response) => {
 }
 
 /**
+ * ScenarioCreateResponse → 시나리오 생성 응답
+ * @param {ScenarioCreateResponse} response
+ * @returns {Object} 시나리오 생성 응답
+ */
+export const mapScenarioCreateResponse = (response) => {
+  if (!response) return null
+  return {
+    scenarioId: response.scenarioId,
+    status: response.status,
+    estimatedTime: response.estimatedTime,
+    errorMessage: response.errorMessage,
+    originalRequest: response.originalRequest ? {
+      title: response.originalRequest.title,
+      synopsis: response.originalRequest.synopsis,
+      genre: response.originalRequest.genre,
+      suspectCount: response.originalRequest.suspectCount,
+    } : null,
+  }
+}
+
+/**
  * ScenarioStatusResponse → 시나리오 생성 상태
  * @param {ScenarioStatusResponse} response
  * @returns {Object} 시나리오 생성 상태
@@ -255,6 +276,7 @@ export default {
   mapRoomListResponse,
   mapVictimResponse,
   mapScenarioRankingResponse,
+  mapScenarioCreateResponse,
   mapScenarioStatusResponse,
   mapVictim,
   mapSuspect,

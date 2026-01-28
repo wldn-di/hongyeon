@@ -353,7 +353,7 @@ export const fetchPublicReport = async (sessionId) => {
 /**
  * 최종 정답 제출 (POST /api/sessions/{sessionId}/submit)
  * @param {number} sessionId
- * @param {SubmitRequest} data - { culpritId, weaponClueId, locationFloor, motive}
+ * @param {SubmitRequest} data - { culpritId, weaponClueId, locationFloor, motive, causeOfDeath }
  * @returns {Promise<SubmitResponse>}
  * @throws {ApiError}
  */

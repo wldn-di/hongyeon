@@ -1,8 +1,9 @@
 import React, { useState } from 'react'
 import { Link, useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
-import { ArrowLeft, Sparkles, Users, BookOpen, Layers } from 'lucide-react'
+import { ArrowLeft, Sparkles, Users, BookOpen, Layers, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useCreateScenario } from '@/features/scenarios/hooks/useCreateScenario'
 
 // 장르 옵션
 const genreOptions = [
@@ -19,13 +20,14 @@ const suspectCountOptions = [4, 5]
 
 export default function CreateScenario() {
   const [, setLocation] = useLocation()
+  const { createScenario, isGenerating, progress, message } = useCreateScenario()
+
   const [formData, setFormData] = useState({
     title: '',
     synopsis: '',
     suspectCount: 4,
     genre: 'crime',
   })
-  const [isGenerating, setIsGenerating] = useState(false)
 
   const handleChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }))
@@ -35,22 +37,20 @@ export default function CreateScenario() {
     e.preventDefault()
 
     if (!formData.title.trim()) {
-      alert('제목을 입력해주세요.')
+      toast.error('제목을 입력해주세요.')
       return
     }
     if (!formData.synopsis.trim()) {
-      alert('스토리 내용을 입력해주세요.')
+      toast.error('스토리 내용을 입력해주세요.')
       return
     }
 
-    setIsGenerating(true)
+    const result = await createScenario(formData)
 
-    // 시나리오 생성 시뮬레이션 (실제로는 AI API 호출)
-    setTimeout(() => {
-      setIsGenerating(false)
-      alert('시나리오가 생성되었습니다! (더미)')
+    if (result.success) {
+      // 성공 시 목록 페이지로 이동
       setLocation('/scenarios')
-    }, 2000)
+    }
   }
 
   return (
@@ -73,6 +73,23 @@ export default function CreateScenario() {
             </p>
           </div>
 
+          {/* 생성 중 진행 상태 */}
+          {isGenerating && (
+            <div className="mb-6 bg-card border border-primary/30 rounded-lg p-6">
+              <div className="flex items-center gap-3 mb-4">
+                <Loader2 className="w-5 h-5 text-primary animate-spin" />
+                <span className="font-bold text-primary">AI가 시나리오 생성 중...</span>
+              </div>
+              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
+                <div
+                  className="h-full bg-primary transition-all duration-300"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+              <p className="text-sm text-muted-foreground mt-2">{message}</p>
+            </div>
+          )}
+
           {/* 폼 */}
           <form onSubmit={handleSubmit} className="space-y-6">
             {/* 제목 */}
@@ -87,6 +104,7 @@ export default function CreateScenario() {
                 onChange={(e) => handleChange('title', e.target.value)}
                 placeholder="시나리오의 제목을 입력하세요"
                 className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-primary"
+                disabled={isGenerating}
               />
               <p className="text-xs text-muted-foreground mt-2">
                 * 제목은 AI 스토리 생성에 반영되지 않습니다
@@ -105,6 +123,7 @@ export default function CreateScenario() {
                 placeholder="대략적인 스토리를 적어주세요&#10;&#10;예시:&#10;- 폐쇄된 섬에서 일어난 연쇄 살인&#10;- 키워드: 복수, 유산 분쟁, 과거의 비밀&#10;- 반전: 피해자가 실은 범인이었다"
                 rows={6}
                 className="w-full bg-muted border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
+                disabled={isGenerating}
               />
               <p className="text-xs text-muted-foreground mt-2">
                 간단한 스토리, 키워드, 원하는 반전 등을 자유롭게 작성해주세요
@@ -127,8 +146,10 @@ export default function CreateScenario() {
                       "flex-1 py-3 rounded-lg border-2 font-bold transition-all",
                       formData.suspectCount === count
                         ? "border-primary bg-primary/10 text-primary"
-                        : "border-border hover:border-primary/50"
+                        : "border-border hover:border-primary/50",
+                      isGenerating && "opacity-50 cursor-not-allowed"
                     )}
+                    disabled={isGenerating}
                   >
                     {count}명
                   </button>
@@ -152,8 +173,10 @@ export default function CreateScenario() {
                       "py-3 px-4 rounded-lg border-2 transition-all text-left",
                       formData.genre === genre.value
                         ? "border-primary bg-primary/10"
-                        : "border-border hover:border-primary/50"
+                        : "border-border hover:border-primary/50",
+                      isGenerating && "opacity-50 cursor-not-allowed"
                     )}
+                    disabled={isGenerating}
                   >
                     <span className="text-xl mr-2">{genre.icon}</span>
                     <span className="text-sm font-medium">{genre.label}</span>
@@ -165,7 +188,12 @@ export default function CreateScenario() {
             {/* 제출 버튼 */}
             <div className="flex gap-4">
               <Link href="/scenarios" className="flex-1">
-                <Button type="button" variant="outline" className="w-full py-6">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full py-6"
+                  disabled={isGenerating}
+                >
                   취소
                 </Button>
               </Link>
@@ -177,8 +205,8 @@ export default function CreateScenario() {
               >
                 {isGenerating ? (
                   <>
-                    <span className="animate-spin mr-2">⏳</span>
-                    AI가 시나리오 생성 중...
+                    <Loader2 className="w-5 h-5 mr-2 animate-spin" />
+                    생성 중...
                   </>
                 ) : (
                   <>

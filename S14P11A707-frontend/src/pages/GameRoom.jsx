@@ -688,39 +688,44 @@ export default function GameRoom() {
         )
       )
 
-      // 첫 번째 장소의 floorNumber 사용
-      const locationFloor = locations[0]?.floorNumber || rooms?.[0]?.floorNumber || 1
+      // 장소의 floorNumber (첫 번째 장소 또는 기본값 1)
+      const locationFloor = locations[0]?.floorNumber || locations[0]?.id || 1
 
+      // 백엔드 SubmitRequest DTO에 맞춤 (victimId 없음, causeOfDeath는 빈 문자열)
       const submitData = {
-        culpritId: culpritItem?.suspectId || culpritItem?.targetId || parseInt(String(culpritItem?.id).replace('suspect-', '')) || 1,
-        weaponClueId: culpritConnectedEvidence?.evidenceId || culpritConnectedEvidence?.targetId || parseInt(String(culpritConnectedEvidence?.id).replace('evidence-', '')) || 1,
-        locationFloor,
-        motive: motive || '범행 동기 추리',
-        causeOfDeath: '사인 추리', // 추후 입력 폼 추가 가능
+        culpritId:
+          (culpritItem?.suspectId ?? parseInt(String(culpritItem?.id || "0").replace("suspect-", ""))) || 0,
+        weaponClueId:
+          (culpritConnectedEvidence?.evidenceId ??
+            parseInt(String(culpritConnectedEvidence?.id || "0").replace("evidence-", ""))) || 0,
+        locationFloor: Number(locationFloor) || 1,
+        motive: motive?.trim() || '',
+        causeOfDeath: '' // 미사용 (빈 문자열)
       }
-
-      setSubmitAnswerOpen(false)
 
       // 최종 제출 API 호출
       const result = await submitAnswer(sessionId, submitData)
 
       if (result.status === 'COMPLETED') {
+        // 성공: 모달 닫고 리뷰 모달 오픈
+        setSubmitAnswerOpen(false)
         toast.success(`사건 해결! 랭크: ${result.rankGrade}, 점수: ${result.finalScore}`)
         setReviewModalOpen(true)
       } else if (result.status === 'WRONG_ANSWER') {
+        // 범인 틀림: 횟수 감소, 모달 유지
         toast.error(`틀렸습니다. 남은 기회: ${result.remainingAttempts}회`)
-        if (result.remainingAttempts > 0) {
-          setSubmitAnswerOpen(true)
-        }
+        // 모달은 계속 열려있음
       } else if (result.status === 'FAILED') {
+        // 게임 오버: 모달 닫음
+        setSubmitAnswerOpen(false)
         toast.error('게임 오버! 기회를 모두 소진했습니다.')
       } else if (result.status === 'BOARD_INVALID') {
+        // 보드 검증 실패: 횟수 감소 없음, 모달 유지
         toast.error(result.errorMessage || '추리보드가 유효하지 않습니다.')
-        setSubmitAnswerOpen(true)
+        // 모달은 계속 열려있음
       }
     } catch (err) {
       toast.error(err.message || '제출에 실패했습니다.')
-      setSubmitAnswerOpen(true)
     }
   }
 
