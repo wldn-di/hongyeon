@@ -15,7 +15,7 @@ const genreOptions = [
 ]
 
 // 용의자 수 옵션
-const suspectCountOptions = [3, 4, 5, 6]
+const suspectCountOptions = [4, 5]
 
 export default function CreateScenario() {
   const [, setLocation] = useLocation()
