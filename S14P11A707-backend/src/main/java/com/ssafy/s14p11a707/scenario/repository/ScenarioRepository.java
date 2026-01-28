@@ -20,5 +20,8 @@ public interface ScenarioRepository extends JpaRepository<Scenario, Long> {
 
     @Query(value = "SELECT * FROM scenarios WHERE title LIKE %:keyword%", nativeQuery = true)
     List<Scenario> findByTitleContainingOrSynopsisContaining(@Param("keyword") String keyword);
+
+    // 유저 ID로 시나리오 목록 조회
+    List<Scenario> findByCreatorId(long creatorId);
 }
 
