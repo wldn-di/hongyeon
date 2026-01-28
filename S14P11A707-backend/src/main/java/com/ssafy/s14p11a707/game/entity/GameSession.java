@@ -2,11 +2,9 @@ package com.ssafy.s14p11a707.game.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ssafy.s14p11a707.common.entity.BaseEntity;
-import com.ssafy.s14p11a707.common.jpa.PgVectorConverter;
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.user.entity.User;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -27,7 +25,6 @@ import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
 @Getter
-@Setter
 @Entity
 @Table(name = "game_sessions")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -61,7 +58,7 @@ public class GameSession extends BaseEntity {
     private Integer submitAttempts;
 
     @Column(name = "is_first_play")
-    private Boolean firstPlay;
+    private Boolean firstPlay; // TRUE:
 
     private Integer finalScore;
 
@@ -73,13 +70,8 @@ public class GameSession extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private JsonNode resultReportJson;
 
-    @Convert(converter = PgVectorConverter.class)
-    @Column(name = "submitted_motive_embedding", columnDefinition = "vector(1536)")
-    private float[] submittedMotiveEmbedding;
-
-    @Convert(converter = PgVectorConverter.class)
-    @Column(name = "submitted_cause_of_death_embedding", columnDefinition = "vector(1536)")
-    private float[] submittedCauseOfDeathEmbedding;
+    @Column(name = "submitted_motive_embedding", columnDefinition = "text")
+    private String submittedMotiveEmbedding;
 
     private Instant startedAt;
 
@@ -104,8 +96,7 @@ public class GameSession extends BaseEntity {
             Integer finalScore,
             RankGrade rankGrade,
             JsonNode resultReportJson,
-            float[] submittedMotiveEmbedding,
-            float[] submittedCauseOfDeathEmbedding,
+            String submittedMotiveEmbedding,
             Instant startedAt,
             Instant completedAt,
             Long playTime,
@@ -124,7 +115,6 @@ public class GameSession extends BaseEntity {
         this.rankGrade = rankGrade;
         this.resultReportJson = resultReportJson;
         this.submittedMotiveEmbedding = submittedMotiveEmbedding;
-        this.submittedCauseOfDeathEmbedding = submittedCauseOfDeathEmbedding;
         this.startedAt = startedAt;
         this.completedAt = completedAt;
         this.playTime = playTime;
@@ -137,8 +127,7 @@ public class GameSession extends BaseEntity {
         this.visitedFloorsJson = visitedFloorsJson;
         this.health = health;
         this.playTime = playTime;
-        this.lastSavedAt = Instant.now();
-        this.expiresAt = this.lastSavedAt.plusSeconds(7 * 24 * 60 * 60); // 7일 후 만료
+        markSaved();
     }
 
     public void moveFloor(int floor, JsonNode visitedFloorsJson) {
@@ -146,11 +135,22 @@ public class GameSession extends BaseEntity {
         this.visitedFloorsJson = visitedFloorsJson;
     }
 
-    public void endGame(Status status, boolean success, int finalScore, RankGrade rankGrade) {
-        this.status = status;
+    public void failGame() {
+        this.status = Status.FAILED;
+        this.completedAt = Instant.now();
+    }
+
+    public void completeGame(int finalScore, RankGrade rankGrade, boolean isFirstPlay) {
+        this.status = Status.COMPLETED;
         this.finalScore = finalScore;
         this.rankGrade = rankGrade;
+        this.firstPlay = isFirstPlay;
         this.completedAt = Instant.now();
+        this.expiresAt = null; // 완료된 세션은 만료되지 않음
+    }
+
+    public void incrementSubmitAttempts() {
+        this.submitAttempts = (this.submitAttempts == null ? 0 : this.submitAttempts) + 1;
     }
 
     public void markSaved() {

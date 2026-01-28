@@ -21,15 +21,14 @@ import com.ssafy.s14p11a707.game.repository.ChatMessageRepository;
 import com.ssafy.s14p11a707.game.repository.DiscoveredClueRepository;
 import com.ssafy.s14p11a707.game.repository.EventLogRepository;
 import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
+import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
+import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.scenario.entity.*;
 import com.ssafy.s14p11a707.scenario.repository.*;
 import com.ssafy.s14p11a707.user.entity.User;
 import com.ssafy.s14p11a707.user.repository.UserRepository;
 import java.time.Instant;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+import java.util.*;
 import java.util.stream.Collectors;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -41,9 +40,11 @@ import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 @Transactional(readOnly = true)
 public class GameSessionServiceImpl implements GameSessionService {
@@ -60,13 +61,14 @@ public class GameSessionServiceImpl implements GameSessionService {
     private final BoardNodeRepository boardNodeRepository;
     private final BoardConnectionRepository boardConnectionRepository;
     private final ChatMessageRepository chatMessageRepository;
+    private final ScenarioRankingRepository scenarioRankingRepository;
     private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
     private final VectorStore vectorStore;
     private final EmbeddingModel embeddingModel;
     private final ChatMemory chatMemory;
 
-    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ObjectMapper objectMapper, ChatClient chatClient, VectorStore vectorStore, EmbeddingModel embeddingModel, ChatMemoryRepository chatMemoryRepository) {
+    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, VectorStore vectorStore, EmbeddingModel embeddingModel, ChatMemoryRepository chatMemoryRepository) {
         this.gameSessionRepository = gameSessionRepository;
         this.scenarioRepository = scenarioRepository;
         this.userRepository = userRepository;
@@ -79,6 +81,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         this.boardNodeRepository = boardNodeRepository;
         this.boardConnectionRepository = boardConnectionRepository;
         this.chatMessageRepository = chatMessageRepository;
+        this.scenarioRankingRepository = scenarioRankingRepository;
         this.objectMapper = objectMapper;
         this.chatClient = chatClient;
         this.vectorStore = vectorStore;
@@ -86,22 +89,23 @@ public class GameSessionServiceImpl implements GameSessionService {
         this.chatMemory = MessageWindowChatMemory.builder()
                 .maxMessages(20) // 최근 20개 대화 기억
                 .chatMemoryRepository(chatMemoryRepository) // PostgreSQL 저장소 사용
-                .build();    }
+                .build();
+    }
 
     @Override
     @Transactional
     public GameStartResponse startGame(long scenarioId, OidcUser oidcUser) {
+        log.info("=== 게임 시작 요청 === scenarioId: {}", scenarioId);
+
         User user = getUser(oidcUser);
+        log.info("1. 유저 조회 완료: userId={}", user.getId());
 
         Scenario scenario = scenarioRepository.findById(scenarioId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
+        log.info("2. 시나리오 조회 완료: title={}, status={}", scenario.getTitle(), scenario.getGenerationStatus());
 
         if (scenario.getGenerationStatus() != Scenario.GenerationStatus.COMPLETED) {
             throw new BaseException(ErrorCode.SCENARIO_NOT_READY);
-        }
-
-        if (gameSessionRepository.existsByScenarioIdAndUserIdAndStatus(scenarioId, user.getId(), Status.PLAYING)) {
-            throw new BaseException(ErrorCode.SESSION_ALREADY_PLAYING);
         }
 
         GameSession session = GameSession.builder()
@@ -112,11 +116,12 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .visitedFloorsJson(objectMapper.valueToTree(List.of(1)))
                 .health(100)
                 .submitAttempts(0)
-                .firstPlay(true)
+                .firstPlay(false)  // 기본값 false, 첫 클리어 시에만 true로 설정
                 .startedAt(Instant.now())
                 .playTime(0L)
                 .build();
         gameSessionRepository.save(session);
+        log.info("4. 게임 세션 저장 완료: sessionId={}", session.getId());
 
         EventLog startLog = EventLog.builder()
                 .session(session)
@@ -125,13 +130,31 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .displayMessage("사건 파일이 열렸습니다.")
                 .build();
         eventLogRepository.save(startLog);
+        log.info("5. 이벤트 로그 저장 완료");
+
+        // 시나리오 플레이 횟수 증가
+        scenario.incrementPlayCount();
+        log.info("6. 시나리오 플레이 횟수 증가");
+
+        // 유저 시도 횟수 증가
+        user.incrementTotalAttempts();
+        log.info("7. 유저 시도 횟수 증가");
 
         session.markSaved();
+        log.info("8. 세션 저장 마킹 완료");
 
         Victim victim = victimRepository.findByScenarioId(scenarioId).orElse(null);
-        Room room = roomRepository.findByScenarioIdAndFloorNumber(scenarioId, 1).orElse(null);
+        log.info("9. 피해자 조회 완료: victim={}", victim != null ? victim.getName() : "null");
 
-        return GameStartResponse.from(session, scenario, victim, room, startLog);
+        // TODO: 룸 확인
+        Room room = roomRepository.findByScenarioIdAndFloorNumber(scenarioId, 1).orElse(null);
+        log.info("10. 방 조회 완료: room={}", room != null ? room.getRoomName() : "null");
+
+        log.info("11. GameStartResponse 생성 시작");
+        GameStartResponse response = GameStartResponse.from(session, scenario, victim, room, startLog);
+        log.info("12. GameStartResponse 생성 완료");
+
+        return response;
     }
 
     @Override
@@ -264,6 +287,24 @@ public class GameSessionServiceImpl implements GameSessionService {
                 revealedClueId
         );
 
+    }
+
+    @Override
+    public ChatHistoryResponse getChatHistory(long sessionId, long suspectId) {
+        List<ChatMessage> messages = chatMessageRepository.findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
+
+        List<ChatHistoryResponse.Message> messageDtos = messages.stream()
+                .map(msg -> new ChatHistoryResponse.Message(
+                        msg.getRole(),
+                        msg.getContent(),
+                        msg.getCreatedAt(),
+                        msg.isKeyTalk(),
+                        msg.getUsedClueId(),
+                        msg.getResponseLevel()
+                ))
+                .toList();
+
+        return new ChatHistoryResponse(sessionId, suspectId, messageDtos);
     }
 
     @Override
@@ -417,7 +458,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         List<EventLog> logs = eventLogRepository.findBySessionOrderByCreatedAtAsc(session);
         return EventLogListResponse.from(sessionId, logs);
     }
-
+    // TODO : 확인필요
     @Override
     @Transactional
     public GameSaveResponse saveGame(long sessionId, GameSaveRequest request, OidcUser oidcUser) {
@@ -635,21 +676,6 @@ public class GameSessionServiceImpl implements GameSessionService {
         return getBoard(sessionId, oidcUser);
     }
 
-    @Override
-    @Transactional
-    public GameEndResponse endGame(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-
-        if (session.getStatus() != Status.COMPLETED && session.getStatus() != Status.FAILED) {
-            int score = calculateScore(session);
-            RankGrade rankGrade = calculateRankGrade(score);
-            session.endGame(Status.ABANDONED, false, score, rankGrade);
-        }
-
-        return GameEndResponse.from(session);
-    }
-
     private User getUser(OidcUser oidcUser) {
         if (oidcUser == null) {
             throw new BaseException(ErrorCode.UNAUTHORIZED);
@@ -716,13 +742,58 @@ public class GameSessionServiceImpl implements GameSessionService {
     }
 
     @Override
-    public SubmitResponse submit(long sessionId, SubmitRequest request) {
-        // 1. GameSession 조회
-        GameSession gameSession = gameSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("GameSession not found: " + sessionId));
+    @Transactional
+    public SubmitResponse submit(long sessionId, SubmitRequest request, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+        int attempts = session.getSubmitAttempts() != null ? session.getSubmitAttempts() : 0;
 
-        // 2. Scenario 조회
-        Scenario scenario = gameSession.getScenario();
+        // 1. 게임 상태 확인
+        if (session.getStatus() != Status.PLAYING) {
+            return SubmitResponse.boardInvalid(sessionId, "NOT_PLAYING",
+                    "진행 중인 게임이 아닙니다.", attempts);
+        }
+
+        // 2. 제출 횟수 확인 (>= 3이면 FAIL)
+        if (attempts >= 3) {
+            session.failGame();
+            // 유저 플레이 시간 누적
+            long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
+            user.addPlayTime(playTime);
+            return SubmitResponse.failed(sessionId, session.getCompletedAt(),
+                    "최대 제출 횟수를 초과하여 게임이 종료되었습니다.");
+        }
+
+        // 3. 보드 검증: RED 연결 개수 확인 (정확히 4개)
+        int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
+        if (redCount != 4) {
+            return SubmitResponse.boardInvalid(sessionId, "INVALID_RED_COUNT",
+                    "붉은 실 연결이 4개여야 합니다. (현재: " + redCount + "개)", attempts);
+        }
+
+        // 4. 보드 검증: 5가지 타입 모두 RED로 연결되어 있는지 확인
+        List<BoardConnection> redConnections = boardConnectionRepository
+                .findBySessionAndConnectionType(session, ConnectionType.RED);
+
+        Set<ItemType> connectedTypes = new HashSet<>();
+        for (BoardConnection conn : redConnections) {
+            connectedTypes.add(conn.getFromNode().getItemType());
+            connectedTypes.add(conn.getToNode().getItemType());
+        }
+
+        Set<ItemType> requiredTypes = EnumSet.of(
+                ItemType.VICTIM, ItemType.SUSPECT, ItemType.MEMO, ItemType.LOCATION, ItemType.CLUE
+        );
+
+        if (!connectedTypes.containsAll(requiredTypes)) {
+            Set<ItemType> missingTypes = EnumSet.copyOf(requiredTypes);
+            missingTypes.removeAll(connectedTypes);
+            return SubmitResponse.boardInvalid(sessionId, "INCOMPLETE_BOARD",
+                    "모든 타입이 연결되어야 합니다. (미연결: " + missingTypes + ")", attempts);
+        }
+
+        //  Scenario 조회
+        Scenario scenario = session.getScenario();
 
         // 3. motive 임베딩
         float[] motiveEmbedding = null;
@@ -735,16 +806,16 @@ public class GameSessionServiceImpl implements GameSessionService {
             // motiveEmbedding = embeddingResult.getResult().getOutput();
 
             // Scenario의 correctMotiveEmbedding과 유사도 계산
-            float[] correctMotiveEmbedding = scenario.getCorrectMotiveEmbedding();
-            if (correctMotiveEmbedding != null) {
+            String correctMotiveEmbeddingStr = scenario.getCorrectMotiveEmbedding();
+            if (correctMotiveEmbeddingStr != null) {
+                float[] correctMotiveEmbedding = parseVectorString(correctMotiveEmbeddingStr);
                 motiveSimilarity = cosineSimilarity(motiveEmbedding, correctMotiveEmbedding);
             }
         }
 
-
         // 5. GameSession에 임베딩 저장
-        gameSession.setSubmittedMotiveEmbedding(motiveEmbedding);
-        gameSessionRepository.save(gameSession);
+        gameSessionRepository.save(session);
+
 
         // 6. truthConfigJson에서 정답 확인
         JsonNode truthConfig = scenario.getTruthConfigJson();
@@ -765,25 +836,71 @@ public class GameSessionServiceImpl implements GameSessionService {
             locationCorrect = (request.locationFloor() == correctLocationFloor);
         }
 
-        // 7. AI 코멘트 생성
-        String aiComment = buildAiComment(culpritCorrect, weaponCorrect, locationCorrect,
-                motiveSimilarity);
 
-        // 8. 결과 반환
-        return new SubmitResponse(
+        // 7. 범인 틀림 → 횟수 증가 + 게임화면으로
+        if (!culpritCorrect) {
+            session.incrementSubmitAttempts();
+            int newAttempts = session.getSubmitAttempts();
+
+            // 3회 다 썼으면 FAILED
+            if (newAttempts >= 3) {
+                session.failGame();
+                // 유저 플레이 시간 누적
+                long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
+                user.addPlayTime(playTime);
+                return SubmitResponse.failed(sessionId, session.getCompletedAt(),
+                        "범인이 틀렸습니다. 최대 제출 횟수를 초과하여 게임이 종료되었습니다.");
+            }
+
+            return SubmitResponse.wrongAnswer(sessionId, newAttempts,
+                    "범인이 틀렸습니다. (남은 기회: " + (3 - newAttempts) + ")");
+        }
+
+        // 8. 범인 맞음 → 성공 처리
+        session.incrementSubmitAttempts();
+        int newAttempts = session.getSubmitAttempts();
+
+        // 첫 클리어 여부 확인
+        boolean isFirstClear = !gameSessionRepository.existsByScenarioIdAndUserIdAndStatus(
+                scenario.getId(), user.getId(), Status.COMPLETED
+        );
+
+        // 점수 계산 및 게임 완료 처리
+        int finalScore = calculateScore(session);
+        RankGrade rankGrade = calculateRankGrade(finalScore);
+        session.completeGame(finalScore, rankGrade, isFirstClear);
+
+        // 첫 클리어 시 랭킹 저장
+        if (isFirstClear) {
+            long clearTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
+            ScenarioRanking ranking = ScenarioRanking.builder()
+                    .scenario(scenario)
+                    .user(user)
+                    .session(session)
+                    .score(finalScore)
+                    .clearTime(clearTime)
+                    .rankGrade(ScenarioRanking.RankGrade.valueOf(rankGrade.name()))
+                    .build();
+            scenarioRankingRepository.save(ranking);
+        }
+
+        // 유저 클리어 통계 누적
+        long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
+        user.addClearStats(playTime, finalScore);
+
+        // AI 코멘트 생성
+        String aiComment = buildAiComment(culpritCorrect, weaponCorrect, locationCorrect, motiveSimilarity);
+
+        // 성공 응답 반환
+        int motiveSimilarityPercent = Math.round(motiveSimilarity * 100);
+        return SubmitResponse.success(
                 sessionId,
-                "COMPLETED",
-                gameSession.getSubmitAttempts() != null ? gameSession.getSubmitAttempts() + 1 : 1,
-                Instant.now(),
-                0, // finalScore - 추후 계산 필요
-                "C", // rankGrade - 추후 계산 필요
-                new SubmitResponse.Evaluation(
-                        culpritCorrect,
-                        weaponCorrect,
-                        locationCorrect,
-                        motiveSimilarity,
-                        aiComment
-                )
+                newAttempts,
+                session.getCompletedAt(),
+                finalScore,
+                rankGrade.name(),
+                isFirstClear,
+                new SubmitResponse.Evaluation(culpritCorrect, weaponCorrect, locationCorrect, motiveSimilarityPercent, aiComment)
         );
     }
 
@@ -809,6 +926,34 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         return String.join(" ", comments);
     }
+
+    /**
+     * pgvector 문자열 형식을 float[] 배열로 변환
+     * @param vectorString "[0.1,0.2,0.3]" 형식의 문자열
+     * @return float[] 배열
+     */
+    private float[] parseVectorString(String vectorString) {
+        if (vectorString == null || vectorString.isBlank()) {
+            return null;
+        }
+
+        String trimmed = vectorString.trim();
+        if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+            trimmed = trimmed.substring(1, trimmed.length() - 1).trim();
+        }
+
+        if (trimmed.isEmpty()) {
+            return new float[0];
+        }
+
+        String[] parts = trimmed.split(",");
+        float[] result = new float[parts.length];
+        for (int i = 0; i < parts.length; i++) {
+            result[i] = Float.parseFloat(parts[i].trim());
+        }
+        return result;
+    }
+
     /**
      * 코사인 유사도 계산
      * @param vec1 첫 번째 벡터

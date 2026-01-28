@@ -1,7 +1,8 @@
-import React, { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'wouter'
+
 import { Button } from '@/components/ui/Button'
-import { completedScenarios, imcompletedScenarios, failedScenarios } from '@/data/dummyData'
+import { useBookshelf } from '@/features/user/hooks/useBookshelf'
 import {
   Trophy, XCircle, ChevronLeft, ChevronRight, Clock, Award,
   X, Share2, FileText
@@ -13,6 +14,9 @@ const gradeStyles = {
   S: 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/50',
   A: 'bg-purple-500/20 text-purple-400 border border-purple-500/50',
   B: 'bg-blue-500/20 text-blue-400 border border-blue-500/50',
+  C: 'bg-green-500/20 text-green-400 border border-green-500/50',
+  D: 'bg-gray-500/20 text-gray-400 border border-gray-500/50',
+  F: 'bg-red-500/20 text-red-400 border border-red-500/50',
 }
 
 // =========================
@@ -60,26 +64,26 @@ function ReportModal({ isOpen, onClose, book }) {
 
   if (!isOpen || !book) return null
 
-  // 더미 보고서 데이터 (현재 book 기반)
+  // API 데이터 기반 보고서 (실제 API 연동 시 fetchMyReport 사용)
   const report = {
     playerName: "탐정",
     scenarioTitle: book.title,
-    playTime: `${book.playTime}:00`,
-    grade: book.grade,
-    accuracy: book.grade === 'S' ? 95 : book.grade === 'A' ? 85 : 75,
-    hintsUsed: book.grade === 'S' ? 0 : book.grade === 'A' ? 1 : 2,
-    interrogations: 5,
-    summary: book.grade === 'S'
+    playTime: book.playTime ? `${Math.floor(book.playTime / 60)}:${String(book.playTime % 60).padStart(2, '0')}` : '--:--',
+    grade: book.rankGrade || 'F',
+    accuracy: book.rankGrade === 'S' ? 95 : book.rankGrade === 'A' ? 85 : 75,
+    hintsUsed: 0, // API에서 제공 시 사용
+    interrogations: 5, // API에서 제공 시 사용
+    summary: book.rankGrade === 'S'
       ? "완벽한 추리력을 보여주셨습니다! 모든 증거를 정확하게 분석하고 범인을 정확히 특정했습니다."
-      : book.grade === 'A'
+      : book.rankGrade === 'A'
         ? "훌륭한 추리력을 보여주셨습니다. 대부분의 증거를 정확하게 분석했으며, 범인의 동기를 정확히 파악했습니다."
-        : "좋은 추리력을 보여주셨습니다. 일부 증거 분석에 오류가 있었지만 결국 사건을 해결했습니다.",
+        : "나쁘지 않은 추리력을 보여주셨습니다. 사건을 해결했습니다.",
     timeline: [
       { time: "00:05", event: "첫 번째 증거 발견" },
       { time: "00:15", event: "용의자 심문 시작" },
       { time: "00:25", event: "핵심 단서 발견" },
       { time: "00:35", event: "범인 특정" },
-      { time: `00:${book.playTime}`, event: "사건 해결" },
+      { time: book.playTime ? `${Math.floor(book.playTime / 60)}:${String(book.playTime % 60).padStart(2, '0')}` : "00:00", event: "사건 해결" },
     ]
   }
 
@@ -231,10 +235,10 @@ function BookCard({ book, mode, isActive, onViewReport }) {
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-1 text-xs text-gray-400">
                 <Clock className="w-3 h-3" />
-                <span>{book.playTime}분</span>
+                <span>{book.playTime ? `${Math.floor(book.playTime / 60)}:${String(book.playTime % 60).padStart(2, '0')}` : '--:--'}</span>
               </div>
-              <span className={cn("px-2 py-0.5 rounded text-xs font-bold", gradeStyles[book.grade] || gradeStyles.B)}>
-                {book.grade}
+              <span className={cn("px-2 py-0.5 rounded text-xs font-bold", gradeStyles[book.rankGrade] || gradeStyles.F)}>
+                {book.rankGrade || 'F'}
               </span>
             </div>
           )}
@@ -242,14 +246,11 @@ function BookCard({ book, mode, isActive, onViewReport }) {
           {isProgress && (
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-gray-400">
-                <span>진척도</span>
-                <span className="text-primary font-bold">{book.progress ?? 0}%</span>
+                <span>남은 시간</span>
+                <span className="text-primary font-bold">7일</span>
               </div>
-              <div className="h-1 bg-black/50 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-yellow-500 to-yellow-300 rounded-full"
-                  style={{ width: `${book.progress ?? 0}%` }}
-                />
+              <div className="text-xs text-gray-400">
+                {book.expiresAt && `만료: ${new Date(book.expiresAt).toLocaleDateString('ko-KY')}`}
               </div>
             </div>
           )}
@@ -283,8 +284,8 @@ function BookCard({ book, mode, isActive, onViewReport }) {
                 수사보고서 열람
               </Button>
             ) : (
-              // 진행중/실패 둘 다 “이어하기”로 처리(실패는 재도전 개념)
-              <Link href={`/scenario/${book.scenarioId}`}>
+              // 진행중/실패 둘 다 "이어하기"로 처리(실패는 재도전 개념)
+              <Link href={`/board/${book.scenarioId}`}>
                 <Button variant="neon" size="sm" className="shadow-lg">
                   이어하기
                 </Button>
@@ -298,7 +299,7 @@ function BookCard({ book, mode, isActive, onViewReport }) {
 }
 
 // =========================
-// 섹션 헤더(사진처럼)
+// 섹션 헤더
 // =========================
 function ShelfHeader({ title, count }) {
   return (
@@ -321,12 +322,11 @@ function BookShelf({ books, mode, title, onViewReport }) {
   const handlePrev = () => setActiveIndex(prev => Math.max(0, prev - 1))
   const handleNext = () => setActiveIndex(prev => Math.min(count - 1, prev + 1))
 
-  const visibleBooks = useMemo(() => {
-    const prev = activeIndex > 0 ? safeBooks[activeIndex - 1] : null
-    const current = safeBooks[activeIndex]
-    const next = activeIndex < count - 1 ? safeBooks[activeIndex + 1] : null
-    return [prev, current, next]
-  }, [activeIndex, safeBooks, count])
+  const visibleBooks = [
+    activeIndex > 0 ? safeBooks[activeIndex - 1] : null,
+    safeBooks[activeIndex],
+    activeIndex < count - 1 ? safeBooks[activeIndex + 1] : null,
+  ]
 
   return (
     <div className="mb-16">
@@ -434,13 +434,18 @@ export default function MyBookshelf() {
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [selectedBook, setSelectedBook] = useState(null)
 
-  const solvedCount = completedScenarios.length
-  const inProgressCount = imcompletedScenarios.length
-  const failedCount = failedScenarios.length
-  const sGradeCount = completedScenarios.filter(s => s.grade === 'S').length
-
-  const totalCount = solvedCount + inProgressCount + failedCount
-  const solveRate = totalCount > 0 ? Math.round((solvedCount / totalCount) * 100) : 0
+  // API 기반 데이터 조회
+  const {
+    completedSessions,
+    playingSessions,
+    failedSessions,
+    totalAttempts,
+    totalClears,
+    clearRatePercent,
+    sRankCount,
+    loading,
+    error,
+  } = useBookshelf()
 
   const handleViewReport = (book) => {
     setSelectedBook(book)
@@ -457,36 +462,55 @@ export default function MyBookshelf() {
             <p className="text-muted-foreground">당신의 추리 기록이 책으로 남아있습니다</p>
           </div>
 
-          {/* ✅ 통계 (사진처럼 5칸 한 줄) */}
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-12">
-            <StatCard label="해결" value={solvedCount} tone="gold" />
-            <StatCard label="미해결" value={inProgressCount} tone="red" />
-            <StatCard label="미제" value={failedCount} tone="red" />
-            <StatCard label="S등급" value={sGradeCount} tone="gold" />
-            <StatCard label="사건 해결률" value={`${solveRate}%`} tone="gold" />
-          </div>
+          {/* 로딩 상태 */}
+          {loading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-muted-foreground">책장 데이터를 불러오는 중...</p>
+              </div>
+            </div>
+          ) : error ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <p className="text-red-400 mb-4">책장 데이터를 불러오는데 실패했습니다.</p>
+                <Button onClick={() => window.location.reload()}>다시 시도</Button>
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* 통계 */}
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-12">
+                <StatCard label="해결" value={totalClears} tone="gold" />
+                <StatCard label="진행중" value={playingSessions.length} tone="red" />
+                <StatCard label="미제" value={failedSessions.length} tone="red" />
+                <StatCard label="S등급" value={sRankCount} tone="gold" />
+                <StatCard label="사건 해결률" value={`${clearRatePercent}%`} tone="gold" />
+              </div>
 
-          {/* 섹션들 (사진처럼 제목) */}
-          <BookShelf
-            books={completedScenarios}
-            mode="solved"
-            title="해결한 사건들"
-            onViewReport={handleViewReport}
-          />
+              {/* 섹션들 */}
+              <BookShelf
+                books={completedSessions}
+                mode="solved"
+                title="해결한 사건들"
+                onViewReport={handleViewReport}
+              />
 
-          <BookShelf
-            books={imcompletedScenarios}
-            mode="progress"
-            title="미해결 사건들"
-            onViewReport={handleViewReport}
-          />
+              <BookShelf
+                books={playingSessions}
+                mode="progress"
+                title="진행중인 사건들"
+                onViewReport={handleViewReport}
+              />
 
-          <BookShelf
-            books={failedScenarios}
-            mode="failed"
-            title="미제 사건들"
-            onViewReport={handleViewReport}
-          />
+              <BookShelf
+                books={failedSessions}
+                mode="failed"
+                title="미제 사건들"
+                onViewReport={handleViewReport}
+              />
+            </>
+          )}
         </div>
       </main>
 
@@ -508,7 +532,7 @@ export default function MyBookshelf() {
 }
 
 // =========================
-// 통계 카드 (재사용)
+// 통계 카드
 // =========================
 function StatCard({ label, value, tone = "gold" }) {
   const valueClass =

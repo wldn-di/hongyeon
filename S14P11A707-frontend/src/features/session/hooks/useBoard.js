@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchBoard, fetchClues, fetchSuspects, updateBoardNodePosition } from '../api/sessionApi'
+import { fetchBoard, fetchClues, moveBoardNode } from '../api/sessionApi'
+import { fetchScenarioSuspects } from '@/features/scenarios/api/scenariosApi'
 import {
   normalizeBoardResponse,
   normalizeClueListResponse,
@@ -48,7 +49,7 @@ export const useBoard = (sessionId, scenarioId) => {
       // Fetch suspects if scenarioId is provided
       if (scenarioId) {
         try {
-          const suspectsResponse = await fetchSuspects(scenarioId)
+          const suspectsResponse = await fetchScenarioSuspects(scenarioId)
           const normalizedSuspects = normalizeSuspectListResponse(suspectsResponse)
           setSuspects(normalizedSuspects.suspects)
 
@@ -97,7 +98,7 @@ export const useBoard = (sessionId, scenarioId) => {
 
     setIsSaving(true)
     try {
-      await updateBoardNodePosition(sessionId, { nodeId, x, y })
+      await moveBoardNode(sessionId, { nodeId, x, y })
     } catch (err) {
       console.error('Board node position update failed:', err)
       // Revert on error

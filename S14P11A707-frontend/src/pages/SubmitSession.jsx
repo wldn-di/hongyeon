@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React from 'react'
 import { useRoute, useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -12,83 +12,33 @@ export default function SubmitSession() {
   const sessionId = params?.sessionId ? parseInt(params.sessionId) : null
   const [, navigate] = useLocation()
 
-  const [motive, setMotive] = useState('')
-  const [causeOfDeath, setCauseOfDeath] = useState('')
-
   const {
-    validation,
     submitResult,
-    isValidating,
     isSubmitting,
     error,
-    validate,
     submit,
     reset,
   } = useSubmit(sessionId)
 
   const {
     selection,
-    clear,
     isComplete: isSelectionComplete,
   } = useBoardSelection(sessionId)
 
-  // Validate when selection or text changes
-  useEffect(() => {
-    if (validation?.submittable === false) {
-      validate()
-    }
-  }, [selection, motive, causeOfDeath, validate])
-
   // Handle submit
   const handleSubmit = async () => {
-    // Check if all fields are filled
+    // Check if all required fields are selected
     if (!selection.culpritId || !selection.weaponClueId || selection.locationFloor === null) {
       alert('보드에서 범인, 흉기, 장소를 선택해주세요.')
       return
     }
 
-    if (!motive.trim() || !causeOfDeath.trim()) {
-      alert('동기와 사인을 모두 입력해주세요.')
-      return
-    }
-
-    // Validate first
-    const validationResult = await validate()
-    if (!validationResult?.submittable) {
-      const missing = validationResult?.missing || []
-      if (missing.length > 0) {
-        alert(`제출할 수 없습니다:\n${missing.join('\n')}`)
-      }
-      return
-    }
-
-    // Submit
-    const result = await submit({
-      culpritId: selection.culpritId,
-      weaponClueId: selection.weaponClueId,
-      locationFloor: selection.locationFloor,
-      motive: motive.trim(),
-      causeOfDeath: causeOfDeath.trim(),
-    })
+    // Submit (end game) - backend evaluates the board state
+    const result = await submit()
 
     if (result) {
-      // Show result
       console.log('Submit result:', result)
     }
-  }
-
-  // Loading state
-  if (isValidating && !validation) {
-    return (
-      <div className="min-h-screen flex flex-col bg-background">
-        <main className="flex-1 py-12 flex items-center justify-center">
-          <div className="text-center">
-            <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-            <p className="text-muted-foreground">제출 가능 여부를 확인하는 중...</p>
-          </div>
-        </main>
-      </div>
-    )
   }
 
   // Show result after submit
@@ -99,50 +49,12 @@ export default function SubmitSession() {
           <div className="container max-w-3xl">
             <Card className="p-8">
               <div className="text-center mb-8">
-                <h1 className="text-4xl font-bold gold-glow mb-4">제출 완료</h1>
+                <h1 className="text-4xl font-bold gold-glow mb-4">
+                  {submitResult.isSuccess ? '사건 해결!' : '추리 실패'}
+                </h1>
                 <p className="text-2xl">등급: {submitResult.rankGrade}</p>
                 <p className="text-lg text-muted-foreground">점수: {submitResult.finalScore}</p>
               </div>
-
-              {submitResult.evaluation && (
-                <div className="space-y-4 mb-8">
-                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                    <span>범인</span>
-                    <span className={submitResult.evaluation.culpritCorrect ? 'text-green-500' : 'text-red-500'}>
-                      {submitResult.evaluation.culpritCorrect ? '정답' : '오답'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                    <span>흉기</span>
-                    <span className={submitResult.evaluation.weaponCorrect ? 'text-green-500' : 'text-red-500'}>
-                      {submitResult.evaluation.weaponCorrect ? '정답' : '오답'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                    <span>장소</span>
-                    <span className={submitResult.evaluation.locationCorrect ? 'text-green-500' : 'text-red-500'}>
-                      {submitResult.evaluation.locationCorrect ? '정답' : '오답'}
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                    <span>동기 유사도</span>
-                    <span>{Math.round(submitResult.evaluation.motiveSimilarity * 100)}%</span>
-                  </div>
-                  <div className="flex items-center justify-between p-4 bg-muted/50 rounded-lg">
-                    <span>사인 유사도</span>
-                    <span>{Math.round(submitResult.evaluation.causeOfDeathSimilarity * 100)}%</span>
-                  </div>
-                </div>
-              )}
-
-              {submitResult.evaluation?.aiComment && (
-                <div className="bg-muted/30 rounded-lg p-6 mb-8">
-                  <h3 className="font-bold mb-2 bracket-left">AI 평가</h3>
-                  <p className="text-sm text-muted-foreground leading-relaxed">
-                    {submitResult.evaluation.aiComment}
-                  </p>
-                </div>
-              )}
 
               <div className="flex gap-4">
                 <Button variant="outline" className="flex-1" onClick={() => navigate('/')}>
@@ -160,7 +72,7 @@ export default function SubmitSession() {
   }
 
   // Error state
-  if (error && !validation) {
+  if (error) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <main className="flex-1 py-12 flex items-center justify-center">
@@ -170,9 +82,6 @@ export default function SubmitSession() {
               <Button variant="outline" onClick={() => navigate(createPath.boardSession(sessionId))}>
                 보드로 돌아가기
               </Button>
-              <Button onClick={validate}>
-                다시 시도
-              </Button>
             </div>
           </div>
         </main>
@@ -180,12 +89,9 @@ export default function SubmitSession() {
     )
   }
 
-  const canSubmit = validation?.submittable &&
-    selection.culpritId &&
+  const canSubmit = selection.culpritId &&
     selection.weaponClueId &&
-    selection.locationFloor !== null &&
-    motive.trim() &&
-    causeOfDeath.trim()
+    selection.locationFloor !== null
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -213,22 +119,11 @@ export default function SubmitSession() {
                 [WARNING] 최종 정답은 1회만 제출 가능합니다
               </p>
               <p className="text-sm text-muted-foreground">
-                제출 후에는 수정할 수 없으며, 즉시 결과가 확인됩니다. 신중하게 작성해주세요.
+                제출 후에는 수정할 수 없으며, 즉시 결과가 확인됩니다.
+                추리 보드의 확정(빨간선) 연결 상태를 바탕으로 평가됩니다.
               </p>
             </div>
           </div>
-
-          {/* Validation errors */}
-          {validation && !validation.submittable && (
-            <div className="mb-8 p-4 bg-orange-500/10 border border-orange-500/30 rounded-lg">
-              <p className="font-bold text-orange-400 mb-2">제출할 수 없습니다:</p>
-              <ul className="list-disc list-inside text-sm text-muted-foreground space-y-1">
-                {validation.missing?.map((item, idx) => (
-                  <li key={idx}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           {/* Form */}
           <div className="space-y-6">
@@ -265,28 +160,12 @@ export default function SubmitSession() {
               </div>
             </div>
 
-            {/* Motive */}
-            <div className="bg-card/50 border border-border rounded-lg p-6">
-              <h3 className="font-bold mb-2 bracket-left text-primary">범행 동기</h3>
-              <p className="text-sm text-muted-foreground mb-4">범인의 동기를 설명하세요</p>
-              <textarea
-                value={motive}
-                onChange={(e) => setMotive(e.target.value)}
-                placeholder="범행 동기를 설명해주세요..."
-                className="w-full bg-muted rounded-lg px-4 py-3 min-h-[120px] focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-              />
-            </div>
-
-            {/* Cause of death */}
-            <div className="bg-card/50 border border-border rounded-lg p-6">
-              <h3 className="font-bold mb-2 bracket-left text-primary">범행 방법 (사인)</h3>
-              <p className="text-sm text-muted-foreground mb-4">범행이 어떻게 이루어졌는지 설명하세요</p>
-              <textarea
-                value={causeOfDeath}
-                onChange={(e) => setCauseOfDeath(e.target.value)}
-                placeholder="범행 방법을 상세히 설명해주세요..."
-                className="w-full bg-muted rounded-lg px-4 py-3 min-h-[120px] focus:outline-none focus:ring-2 focus:ring-primary resize-none"
-              />
+            {/* Info message */}
+            <div className="bg-blue-500/10 border border-blue-500/30 rounded-lg p-4">
+              <p className="text-sm text-blue-300">
+                ℹ️ 제출 시 보드의 현재 상태(노드, 연결선)가 서버로 전송되어 평가됩니다.
+                확정(빨간선) 연결을 완성한 후 제출하세요.
+              </p>
             </div>
           </div>
 

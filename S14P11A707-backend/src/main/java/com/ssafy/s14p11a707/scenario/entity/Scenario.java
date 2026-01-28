@@ -2,10 +2,8 @@ package com.ssafy.s14p11a707.scenario.entity;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.ssafy.s14p11a707.common.entity.BaseEntity;
-import com.ssafy.s14p11a707.common.jpa.PgVectorConverter;
 import com.ssafy.s14p11a707.user.entity.User;
 import jakarta.persistence.Column;
-import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
@@ -44,10 +42,11 @@ public class Scenario extends BaseEntity {
     private String title;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "text")
     private String userSynopsis;
 
     @Lob
+    @Column(columnDefinition = "text")
     private String synopsis;
 
     private Integer suspectCount;
@@ -56,6 +55,7 @@ public class Scenario extends BaseEntity {
     private String genre;
 
     @Lob
+    @Column(columnDefinition = "text")
     private String synopsisDetail;
 
     @Column(length = 500)
@@ -66,6 +66,7 @@ public class Scenario extends BaseEntity {
     private GenerationStatus generationStatus;
 
     @Lob
+    @Column(columnDefinition = "text")
     private String generationError;
 
     @JdbcTypeCode(SqlTypes.JSON)
@@ -76,13 +77,8 @@ public class Scenario extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private JsonNode truthConfigJson;
 
-    @Convert(converter = PgVectorConverter.class)
-    @Column(name = "correct_motive_embedding", columnDefinition = "vector(1536)")
-    private float[] correctMotiveEmbedding;
-
-    @Convert(converter = PgVectorConverter.class)
-    @Column(name = "correct_cause_of_death_embedding", columnDefinition = "vector(1536)")
-    private float[] correctCauseOfDeathEmbedding;
+    @Column(name = "correct_motive_embedding", columnDefinition = "text")
+    private String correctMotiveEmbedding;
 
     @Column(nullable = false)
     private int playCount;
@@ -105,8 +101,7 @@ public class Scenario extends BaseEntity {
             String generationError,
             JsonNode storyConfigJson,
             JsonNode truthConfigJson,
-            float[] correctMotiveEmbedding,
-            float[] correctCauseOfDeathEmbedding,
+            String correctMotiveEmbedding,
             int playCount,
             BigDecimal avgRating,
             BigDecimal avgDifficulty
@@ -124,7 +119,6 @@ public class Scenario extends BaseEntity {
         this.storyConfigJson = storyConfigJson;
         this.truthConfigJson = truthConfigJson;
         this.correctMotiveEmbedding = correctMotiveEmbedding;
-        this.correctCauseOfDeathEmbedding = correctCauseOfDeathEmbedding;
         this.playCount = playCount;
         this.avgRating = avgRating;
         this.avgDifficulty = avgDifficulty;
@@ -133,6 +127,10 @@ public class Scenario extends BaseEntity {
     public void updateAverages(BigDecimal avgRating, BigDecimal avgDifficulty) {
         this.avgRating = avgRating;
         this.avgDifficulty = avgDifficulty;
+    }
+
+    public void incrementPlayCount() {
+        this.playCount++;
     }
 
     public enum GenerationStatus {

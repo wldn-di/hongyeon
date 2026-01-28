@@ -3,7 +3,7 @@ import { React, useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
 // 조력자 대화용 휴대폰 UI 컴포넌트
-export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistories, onSendMessage, currentChat, setCurrentChat }) {
+export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistories, onSendMessage, currentChat, setCurrentChat, onContactSelect }) {
   const [message, setMessage] = useState('')
   const [selectedContact, setSelectedContact] = useState(null)
   const chatEndRef = useRef(null)
@@ -123,7 +123,10 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
               return (
                 <button
                   key={contact.id}
-                  onClick={() => setSelectedContact(contact)}
+                  onClick={() => {
+                    setSelectedContact(contact)
+                    onContactSelect?.(contact)
+                  }}
                   className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors border-b border-gray-800"
                 >
                   <div className="relative">

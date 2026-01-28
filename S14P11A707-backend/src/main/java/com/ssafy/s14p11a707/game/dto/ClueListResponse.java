@@ -29,7 +29,7 @@ public record ClueListResponse(
             int floorNumber,
             String name,
             String importance,
-            String thumbnailUrl,
+            String detailImageUrl,
             boolean discovered,
             Instant discoveredAt
     ) {

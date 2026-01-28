@@ -7,9 +7,19 @@ export default function ScenarioDetail() {
   const [, params] = useRoute('/scenario/:id')
   const scenarioId = params?.id ? parseInt(params.id, 10) : 0
 
-  const scenario = useScenarioById(scenarioId)
+  const { scenario, loading, error } = useScenarioById(scenarioId)
 
-  if (!scenario) {
+  if (loading) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <main className="flex-1 flex items-center justify-center">
+          <p className="text-muted-foreground">로딩 중...</p>
+        </main>
+      </div>
+    )
+  }
+
+  if (error || !scenario) {
     return (
       <div className="min-h-screen flex flex-col bg-background">
         <main className="flex-1 flex items-center justify-center">
@@ -22,18 +32,10 @@ export default function ScenarioDetail() {
   return (
     <div className="min-h-screen flex flex-col bg-background">
       <main className="flex-1 py-12">
-        <div className="container max-w-4xl">
+        <div className="container max-w-6xl">
           <ScenarioDetailCard scenario={scenario} />
         </div>
       </main>
-
-      <footer className="border-t border-border py-8 bg-card/30">
-        <div className="container text-center">
-          <p className="error-code">
-            [SYSTEM_STATUS: OPERATIONAL] | DETECTIVE v2.0 | [COPYRIGHT_2024]
-          </p>
-        </div>
-      </footer>
     </div>
   )
 }

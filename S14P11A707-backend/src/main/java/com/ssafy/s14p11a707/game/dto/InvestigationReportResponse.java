@@ -10,8 +10,11 @@ public record InvestigationReportResponse(
         long sessionId,
         long scenarioId,
         long userId,
+        String playerName,
+        String scenarioTitle,
         String rankGrade,
         int finalScore,
+        long playTimeMinutes,
         String summary,
         String aiComment,
         Stats stats,
@@ -24,9 +27,13 @@ public record InvestigationReportResponse(
             int cluesCollected,
             List<ChatMessage> keyTalkMessages
     ) {
-        String rankGrade = session.getRankGrade() != null ? session.getRankGrade().name() : "F";
+        String rankGradeStr = session.getRankGrade() != null ? session.getRankGrade().name() : "F";
         int score = session.getFinalScore() != null ? session.getFinalScore() : 0;
         String scenarioTitle = session.getScenario().getTitle();
+        String playerName = session.getUser().getNickname() != null
+                ? session.getUser().getNickname()
+                : "익명 탐정";
+        long playTimeMinutes = session.getPlayTime() != null ? session.getPlayTime() / 60 : 0;
 
         String summary = session.getStatus() == Status.COMPLETED
                 ? "사건 해결: " + scenarioTitle + " — 결정적 단서들을 연결해 진실에 도달했습니다."
@@ -41,8 +48,11 @@ public record InvestigationReportResponse(
                 session.getId(),
                 session.getScenario().getId(),
                 session.getUser().getId(),
-                rankGrade,
+                playerName,
+                scenarioTitle,
+                rankGradeStr,
                 score,
+                playTimeMinutes,
                 summary,
                 aiComment,
                 new Stats(totalInterrogations, cluesCollected),

@@ -3,60 +3,118 @@ import { ENDPOINTS } from '@/api/endpoints'
 import { ApiError } from '@/api/errors/ApiError'
 
 /**
- * Board data types
- * @typedef {Object} BoardResponse
- * @property {number} sessionId
- * @property {Array} nodes
- * @property {Array} connections
- * @property {number} redConnectionCount
+ * Session API Module
+ * OpenAPI spec 기반으로 작성됨
  */
 
-/**
- * Clue data types
- * @typedef {Object} ClueListResponse
- * @property {number} sessionId
- * @property {number} scenarioId
- * @property {Array} clues
- */
+// ========================================
+// Game Start/Resume/End API
+// ========================================
 
 /**
- * Submit validation types
- * @typedef {Object} SubmitValidateResponse
- * @property {number} sessionId
- * @property {boolean} submittable
- * @property {Array<string>} missing
- * @property {Array} requiredRedConnections
+ * 게임 시작 (POST /api/sessions/{scenarioId})
+ * @param {number} scenarioId
+ * @returns {Promise<GameStartResponse>}
+ * @throws {ApiError}
  */
+export const startGame = async (scenarioId) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.sessions.start(scenarioId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('게임 시작에 실패했습니다.')
+  }
+}
 
 /**
- * Submit response types
- * @typedef {Object} SubmitResponse
- * @property {number} sessionId
- * @property {string} status
- * @property {number} attemptsUsed
- * @property {string} completedAt
- * @property {number} finalScore
- * @property {string} rankGrade
- * @property {Object} evaluation
+ * 이어하기 (GET /api/sessions/{sessionId}/resume)
+ * @param {number} sessionId
+ * @returns {Promise<GameResumeResponse>}
+ * @throws {ApiError}
  */
+export const fetchResume = async (sessionId) => {
+  try {
+    const response = await apiClient.get(ENDPOINTS.sessions.resume(sessionId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('이어하기 데이터를 불러오는데 실패했습니다.')
+  }
+}
+
+/**
+ * 게임 저장 (PATCH /api/sessions/{sessionId})
+ * @param {number} sessionId
+ * @param {GameSaveRequest} data - { currentFloor, visitedFloors, health, playTime }
+ * @returns {Promise<GameSaveResponse>}
+ * @throws {ApiError}
+ */
+export const saveGame = async (sessionId, data) => {
+  try {
+    const response = await apiClient.patch(ENDPOINTS.sessions.save(sessionId), data)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('게임 저장에 실패했습니다.')
+  }
+}
+
+/**
+ * 게임 종료 (POST /api/sessions/{sessionId}/end)
+ * @param {number} sessionId
+ * @returns {Promise<GameEndResponse>}
+ * @throws {ApiError}
+ */
+export const endGame = async (sessionId) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.sessions.end(sessionId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('게임 종료에 실패했습니다.')
+  }
+}
+
+/**
+ * 층 이동 (POST /api/sessions/{sessionId}/move-floor)
+ * @param {number} sessionId
+ * @returns {Promise<FloorMoveResponse>}
+ * @throws {ApiError}
+ */
+export const moveFloor = async (sessionId) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.sessions.moveFloor(sessionId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('층 이동에 실패했습니다.')
+  }
+}
 
 // ========================================
 // Board API
 // ========================================
 
 /**
- * Fetch board data for a session
+ * 보드 조회 (GET /api/sessions/{sessionId}/board)
  * @param {number} sessionId
  * @returns {Promise<BoardResponse>}
  * @throws {ApiError}
  */
 export const fetchBoard = async (sessionId) => {
   try {
-    const response = await apiClient.get(ENDPOINTS.sessions.board(sessionId), {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+    const response = await apiClient.get(ENDPOINTS.sessions.board(sessionId))
     return response.data
   } catch (error) {
     if (error.response?.data) {
@@ -67,29 +125,98 @@ export const fetchBoard = async (sessionId) => {
 }
 
 /**
- * Update board node position
+ * 보드 노드 추가 (POST /api/sessions/{sessionId}/board/nodes)
  * @param {number} sessionId
- * @param {Object} data - { nodeId, x, y }
+ * @param {BoardNodeAddRequest} data - { type, targetId, memoContent, x, y }
  * @returns {Promise<BoardResponse>}
  * @throws {ApiError}
  */
-export const updateBoardNodePosition = async (sessionId, { nodeId, x, y }) => {
+export const addBoardNode = async (sessionId, data) => {
   try {
-    const response = await apiClient.patch(
-      ENDPOINTS.sessions.boardNodePosition(sessionId),
-      { nodeId, x, y },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    )
+    const response = await apiClient.post(ENDPOINTS.sessions.boardNodes(sessionId), data)
     return response.data
   } catch (error) {
     if (error.response?.data) {
       throw ApiError.fromAxiosError(error)
     }
-    throw new ApiError('보드 노드 위치 업데이트에 실패했습니다.')
+    throw new ApiError('보드 노드 추가에 실패했습니다.')
+  }
+}
+
+/**
+ * 보드 노드 위치 이동 (PATCH /api/sessions/{sessionId}/board/nodes/position)
+ * @param {number} sessionId
+ * @param {BoardItemMoveRequest} data - { nodeId, x, y }
+ * @returns {Promise<BoardResponse>}
+ * @throws {ApiError}
+ */
+export const moveBoardNode = async (sessionId, data) => {
+  try {
+    const response = await apiClient.patch(ENDPOINTS.sessions.boardNodePosition(sessionId), data)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('보드 노드 이동에 실패했습니다.')
+  }
+}
+
+/**
+ * 보드 메모 수정 (PATCH /api/sessions/{sessionId}/board/nodes/{nodeId})
+ * @param {number} sessionId
+ * @param {number} nodeId
+ * @param {BoardMemoUpdateRequest} data - { memoContent }
+ * @returns {Promise<BoardResponse>}
+ * @throws {ApiError}
+ */
+export const updateBoardMemo = async (sessionId, nodeId, data) => {
+  try {
+    const response = await apiClient.patch(ENDPOINTS.sessions.boardNodeUpdate(sessionId, nodeId), data)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('메모 수정에 실패했습니다.')
+  }
+}
+
+/**
+ * 보드 연결선 추가 (POST /api/sessions/{sessionId}/board/connections)
+ * @param {number} sessionId
+ * @param {BoardConnectionAddRequest} data - { fromNodeId, toNodeId, type }
+ * @returns {Promise<BoardResponse>}
+ * @throws {ApiError}
+ */
+export const addBoardConnection = async (sessionId, data) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.sessions.boardConnections(sessionId), data)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('연결선 추가에 실패했습니다.')
+  }
+}
+
+/**
+ * 보드 삭제 (DELETE /api/sessions/{sessionId}/board)
+ * @param {number} sessionId
+ * @param {BoardDeleteRequest} data - { nodeIds, connectionIds }
+ * @returns {Promise<BoardResponse>}
+ * @throws {ApiError}
+ */
+export const deleteBoard = async (sessionId, data) => {
+  try {
+    const response = await apiClient.delete(ENDPOINTS.sessions.board(sessionId), { data })
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('보드 삭제에 실패했습니다.')
   }
 }
 
@@ -98,50 +225,98 @@ export const updateBoardNodePosition = async (sessionId, { nodeId, x, y }) => {
 // ========================================
 
 /**
- * Fetch clues for a session
+ * 단서 목록 조회 (GET /api/sessions/{sessionId}/clues)
  * @param {number} sessionId
  * @returns {Promise<ClueListResponse>}
  * @throws {ApiError}
  */
 export const fetchClues = async (sessionId) => {
   try {
-    const response = await apiClient.get(ENDPOINTS.sessions.clues(sessionId), {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+    const response = await apiClient.get(ENDPOINTS.sessions.clues(sessionId))
     return response.data
   } catch (error) {
     if (error.response?.data) {
       throw ApiError.fromAxiosError(error)
     }
-    throw new ApiError('단서 데이터를 불러오는데 실패했습니다.')
+    throw new ApiError('단서 목록을 불러오는데 실패했습니다.')
+  }
+}
+
+/**
+ * 단서 상세 조회 (GET /api/sessions/{sessionId}/clues/{clueId})
+ * @param {number} sessionId
+ * @param {number} clueId
+ * @returns {Promise<ClueDetailResponse>}
+ * @throws {ApiError}
+ */
+export const fetchClueDetail = async (sessionId, clueId) => {
+  try {
+    const response = await apiClient.get(ENDPOINTS.sessions.clueDetail(sessionId, clueId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('단서 상세 정보를 불러오는데 실패했습니다.')
+  }
+}
+
+/**
+ * 단서 획득 (POST /api/sessions/{sessionId}/clues/{clueId})
+ * @param {number} sessionId
+ * @param {number} clueId
+ * @returns {Promise<DiscoveredClueResponse>}
+ * @throws {ApiError}
+ */
+export const discoverClue = async (sessionId, clueId) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.sessions.clueDetail(sessionId, clueId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('단서 획득에 실패했습니다.')
   }
 }
 
 // ========================================
-// Suspects API
+// Report API
 // ========================================
 
 /**
- * Fetch suspects for a scenario
- * @param {number} scenarioId
- * @returns {Promise<SuspectListResponse>}
+ * 내 수사보고서 조회 (GET /api/sessions/{sessionId}/report)
+ * @param {number} sessionId
+ * @returns {Promise<InvestigationReportResponse>}
  * @throws {ApiError}
  */
-export const fetchSuspects = async (scenarioId) => {
+export const fetchMyReport = async (sessionId) => {
   try {
-    const response = await apiClient.get(ENDPOINTS.scenarios.suspects(scenarioId), {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+    const response = await apiClient.get(ENDPOINTS.sessions.report(sessionId))
     return response.data
   } catch (error) {
     if (error.response?.data) {
       throw ApiError.fromAxiosError(error)
     }
-    throw new ApiError('용의자 데이터를 불러오는데 실패했습니다.')
+    throw new ApiError('수사보고서를 불러오는데 실패했습니다.')
+  }
+}
+
+/**
+ * 타인 수사보고서 조회 (GET /api/sessions/{sessionId}/report/public)
+ * @param {number} sessionId
+ * @returns {Promise<InvestigationReportResponse>}
+ * @throws {ApiError}
+ */
+export const fetchPublicReport = async (sessionId) => {
+  try {
+    const response = await apiClient.get(ENDPOINTS.sessions.reportPublic(sessionId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('수사보고서를 불러오는데 실패했습니다.')
   }
 }
 
@@ -150,91 +325,91 @@ export const fetchSuspects = async (scenarioId) => {
 // ========================================
 
 /**
- * Validate submit requirements for a session
+ * 최종 정답 제출 (POST /api/sessions/{sessionId}/submit)
  * @param {number} sessionId
- * @returns {Promise<SubmitValidateResponse>}
- * @throws {ApiError}
- */
-export const validateSubmit = async (sessionId) => {
-  try {
-    const response = await apiClient.get(ENDPOINTS.sessions.validate(sessionId), {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
-    return response.data
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error)
-    }
-    throw new ApiError('제출 검증에 실패했습니다.')
-  }
-}
-
-/**
- * Submit final answer
- * @param {number} sessionId
- * @param {Object} data - { culpritId, weaponClueId, locationFloor, motive, causeOfDeath }
+ * @param {SubmitRequest} data - { culpritId, weaponClueId, locationFloor, motive, causeOfDeath }
  * @returns {Promise<SubmitResponse>}
  * @throws {ApiError}
  */
-export const submitFinalAnswer = async (sessionId, { culpritId, weaponClueId, locationFloor, motive, causeOfDeath }) => {
+export const submitAnswer = async (sessionId, data) => {
   try {
-    const response = await apiClient.post(
-      ENDPOINTS.sessions.submit(sessionId),
-      { culpritId, weaponClueId, locationFloor, motive, causeOfDeath },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      }
-    )
+    const response = await apiClient.post(ENDPOINTS.sessions.submit(sessionId), data)
     return response.data
   } catch (error) {
     if (error.response?.data) {
       throw ApiError.fromAxiosError(error)
     }
-    throw new ApiError('제출에 실패했습니다.')
+    throw new ApiError('정답 제출에 실패했습니다.')
   }
 }
 
 // ========================================
-// Resume API
+// Chat API (용의자 심문)
 // ========================================
 
 /**
- * Fetch game resume data
+ * 용의자 심문 (POST /api/sessions/{sessionId}/suspects/{suspectId}/chat)
  * @param {number} sessionId
- * @returns {Promise<GameResumeResponse>}
+ * @param {number} suspectId
+ * @param {SuspectChatRequest} data - { message, usedClueId }
+ * @returns {Promise<SuspectChatResponse>}
  * @throws {ApiError}
  */
-export const fetchResume = async (sessionId) => {
+export const chatWithSuspect = async (sessionId, suspectId, data) => {
   try {
-    const response = await apiClient.get(ENDPOINTS.sessions.resume(sessionId), {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+    const response = await apiClient.post(ENDPOINTS.sessions.suspectChat(sessionId, suspectId), data)
     return response.data
   } catch (error) {
     if (error.response?.data) {
       throw ApiError.fromAxiosError(error)
     }
-    throw new ApiError('이어하기 데이터를 불러오는데 실패했습니다.')
+    throw new ApiError('심문에 실패했습니다.')
+  }
+}
+
+/**
+ * 용의자 심문 기록 조회 (GET /api/sessions/{sessionId}/suspects/{suspectId}/chats)
+ * @param {number} sessionId
+ * @param {number} suspectId
+ * @returns {Promise<ChatHistoryResponse>}
+ * @throws {ApiError}
+ */
+export const fetchChatHistory = async (sessionId, suspectId) => {
+  try {
+    const response = await apiClient.get(ENDPOINTS.sessions.suspectChatHistory(sessionId, suspectId))
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('심문 기록을 불러오는데 실패했습니다.')
   }
 }
 
 export default {
+  // Game lifecycle
+  startGame,
+  fetchResume,
+  saveGame,
+  endGame,
+  moveFloor,
   // Board
   fetchBoard,
-  updateBoardNodePosition,
+  addBoardNode,
+  moveBoardNode,
+  updateBoardMemo,
+  addBoardConnection,
+  deleteBoard,
   // Clues
   fetchClues,
-  // Suspects
-  fetchSuspects,
+  fetchClueDetail,
+  discoverClue,
+  // Report
+  fetchMyReport,
+  fetchPublicReport,
   // Submit
-  validateSubmit,
-  submitFinalAnswer,
-  // Resume
-  fetchResume,
+  submitAnswer,
+  // Chat
+  chatWithSuspect,
+  fetchChatHistory,
 }

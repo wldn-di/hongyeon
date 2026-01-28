@@ -12,7 +12,6 @@ import Board from '../pages/Board'
 import BoardSession from '../pages/BoardSession'
 import MyBookshelf from '../pages/MyBookshelf'
 import GameRoom from '../pages/GameRoom'
-import CoopLobby from '../pages/CoopLobby'
 import Submit from '../pages/Submit'
 import SubmitSession from '../pages/SubmitSession'
 import NotFound from '../pages/NotFound'
@@ -32,9 +31,9 @@ export function AppRoutes() {
       <Route path={ROUTES.BOARD} component={Board} />
       <Route path={ROUTES.BOARD_SESSION} component={BoardSession} />
       <Route path={ROUTES.MY_BOOKSHELF} component={MyBookshelf} />
-      <Route path={ROUTES.ROOM_SOLO} component={GameRoom} />
-      <Route path={ROUTES.ROOM_MULTI} component={GameRoom} />
-      <Route path={ROUTES.COOP_LOBBY} component={CoopLobby} />
+      <Route path={ROUTES.GAME} component={GameRoom} />
+      <Route path={ROUTES.GAME_SOLO} component={GameRoom} />
+      <Route path={ROUTES.GAME_RESUME} component={GameRoom} />
       <Route path={ROUTES.SUBMIT} component={Submit} />
       <Route path={ROUTES.SUBMIT_SESSION} component={SubmitSession} />
       <Route path={ROUTES.NOT_FOUND} component={NotFound} />

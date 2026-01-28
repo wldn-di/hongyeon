@@ -92,6 +92,23 @@ public class User extends BaseEntity {
         this.email = email;
     }
 
+    // 게임 시작 시 호출
+    public void incrementTotalAttempts() {
+        this.totalAttempts++;
+    }
+
+    // 게임 완료 시 호출
+    public void addClearStats(long playTime, int score) {
+        this.totalPlayTime += playTime;
+        this.totalScore += score;
+        this.totalClears++;
+    }
+
+    // 게임 실패 시 호출
+    public void addPlayTime(long playTime) {
+        this.totalPlayTime += playTime;
+    }
+
     public enum UserRole {
         GENERAL,
         ADMIN

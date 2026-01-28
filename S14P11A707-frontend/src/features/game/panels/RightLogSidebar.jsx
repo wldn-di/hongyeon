@@ -3,7 +3,7 @@ import { FileText } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // 오른쪽 수사 로그 사이드바
-export default function RightLogSidebar({ isOpen, onToggle, logs }) {
+export default function RightLogSidebar({ isOpen, onToggle, logs = [] }) {
   return (
     <div className={cn(
       "fixed top-16 right-0 h-[calc(100%-140px)] bg-card/95 backdrop-blur border-l border-border transition-transform duration-300 z-30",

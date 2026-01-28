@@ -37,9 +37,9 @@ public interface GameSessionService {
 
     BoardResponse deleteBoard(long sessionId, BoardDeleteRequest request, OidcUser oidcUser);
 
-    GameEndResponse endGame(long sessionId, OidcUser oidcUser);
-
     SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
 
-    SubmitResponse submit(long sessionId, SubmitRequest request);
+    ChatHistoryResponse getChatHistory(long sessionId, long suspectId);
+
+    SubmitResponse submit(long sessionId, SubmitRequest request, OidcUser oidcUser);
 }

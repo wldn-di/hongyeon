@@ -10,4 +10,6 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     List<ChatMessage> findBySessionAndKeyTalkTrueOrderByCreatedAtDesc(GameSession session);
 
     int countBySessionAndRole(GameSession session, String role);
+
+    List<ChatMessage> findBySessionIdAndSuspectIdOrderByCreatedAtAsc(long sessionId, long suspectId);
 }

@@ -32,6 +32,9 @@ spring:
       ddl-auto: ${JPA_DDL_AUTO}
     database-platform: org.hibernate.dialect.PostgreSQLDialect
 
+  flyway:
+    enabled: false
+
   security:
     oauth2:
       client:
@@ -57,7 +60,7 @@ spring:
         api-key: AIzaSyBMw4Wb1KPcC1SlTy_rJ_8EduAOQ5cVQNw
         chat:
           options:
-            model: gemini-3.0-pro
+            model: gemini-2.0-flash-exp
         embedding:
           options:
             model: text-embedding-004

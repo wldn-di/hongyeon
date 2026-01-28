@@ -13,12 +13,87 @@ export const NodeType = {
 }
 
 /**
- * Connection type enum
+ * Connection type enum (백엔드 값 기준)
  */
 export const ConnectionType = {
-  CONFIRMED: 'confirmed',
-  SUSPECTED: 'suspected',
-  CONTRADICTION: 'contradiction',
+  RED: 'RED',
+  YELLOW: 'YELLOW',
+}
+
+// ========================================
+// Bookshelf Mappers
+// ========================================
+
+/**
+ * Map bookshelf session item from API response
+ * @param {Object} item - API bookshelf item (Item type)
+ * @returns {Object} Mapped bookshelf item
+ */
+export const mapBookshelfItem = (item) => {
+  if (!item) return null
+
+  return {
+    id: item.reviewId || item.id,
+    scenarioId: item.scenarioId,
+    scenarioTitle: item.scenarioTitle || '알 수 없는 시나리오',
+    userId: item.userId,
+    nickname: item.nickname || '익명',
+    status: item.status || 'UNKNOWN',
+    playTime: item.playTime || 0,
+    rankGrade: item.rankGrade || null,
+    hasReport: item.hasReport || false,
+    lastSavedAt: item.lastSavedAt || null,
+    expiresAt: item.expiresAt || null,
+    createdAt: item.createdAt || null,
+  }
+}
+
+/**
+ * Map bookshelf stats response from API
+ * @param {Object} response - API BookshelfStatsResponse
+ * @returns {Object} Mapped bookshelf stats
+ */
+export const mapBookshelfStatsResponse = (response) => {
+  if (!response) {
+    return {
+      totalAttempts: 0,
+      totalClears: 0,
+      clearRate: 0,
+      sRankCount: 0,
+    }
+  }
+
+  return {
+    totalAttempts: response.totalAttempts || 0,
+    totalClears: response.totalClears || 0,
+    clearRate: response.clearRate || 0,
+    sRankCount: response.sRankCount || 0,
+  }
+}
+
+/**
+ * Map bookshelf session response from API
+ * @param {Object} response - API BookshelfSessionResponse
+ * @returns {Object} Mapped bookshelf session data
+ */
+export const mapBookshelfSessionResponse = (response) => {
+  if (!response) {
+    return {
+      content: [],
+      totalPages: 0,
+      totalElements: 0,
+      currentPage: 0,
+    }
+  }
+
+  return {
+    content: Array.isArray(response.content)
+      ? response.content.map(mapBookshelfItem).filter(Boolean)
+      : [],
+    totalPages: response.totalPages || 0,
+    totalElements: response.totalElements || 0,
+    currentPage: response.currentPage || 0,
+  }
 }
 
 // ========================================
@@ -115,6 +190,9 @@ export const normalizeClue = (clue) => {
     floorNumber: clue.floorNumber,
     name: clue.name || '',
     importance: clue.importance || '',
+    description: clue.description || '',
+    detailImageUrl: clue.detailImageUrl || '',
+    assistantComment: clue.assistantComment || '',
     discovered: clue.discovered || false,
     discoveredAt: clue.discoveredAt || null,
   }
@@ -126,6 +204,15 @@ export const normalizeClue = (clue) => {
  * @returns {Object} Normalized clue list data
  */
 export const normalizeClueListResponse = (response) => {
+  // 응답이 직접 배열인 경우
+  if (Array.isArray(response)) {
+    return {
+      sessionId: null,
+      scenarioId: null,
+      clues: response.map(normalizeClue).filter(Boolean),
+    }
+  }
+
   if (!response || typeof response !== 'object') {
     console.error('Invalid clue list response:', response)
     return {
@@ -135,9 +222,14 @@ export const normalizeClueListResponse = (response) => {
     }
   }
 
-  const clues = Array.isArray(response.clues)
-    ? response.clues.map(normalizeClue).filter(Boolean)
-    : []
+  // clues 필드가 있는 경우
+  let clues = []
+  if (Array.isArray(response.clues)) {
+    clues = response.clues.map(normalizeClue).filter(Boolean)
+  } else if (Array.isArray(response.content)) {
+    // 페이징 응답인 경우
+    clues = response.content.map(normalizeClue).filter(Boolean)
+  }
 
   return {
     sessionId: response.sessionId || null,
@@ -265,7 +357,6 @@ export const normalizeEvaluation = (evaluation) => {
     weaponCorrect: evaluation.weaponCorrect || false,
     locationCorrect: evaluation.locationCorrect || false,
     motiveSimilarity: evaluation.motiveSimilarity || 0,
-    causeOfDeathSimilarity: evaluation.causeOfDeathSimilarity || 0,
     aiComment: evaluation.aiComment || '',
   }
 }
@@ -485,6 +576,365 @@ export const createBoardItems = (boardData, suspects = [], clues = []) => {
     .filter(Boolean)
 }
 
+// ========================================
+// Event Log Mappers
+// ========================================
+
+/**
+ * Normalize event log from API response
+ * @param {Object} log - API event log
+ * @returns {Object} Normalized event log
+ */
+export const normalizeEventLog = (log) => {
+  if (!log || typeof log !== 'object') {
+    return null
+  }
+
+  return {
+    type: log.type || '',
+    message: log.message || '',
+    createdAt: log.createdAt || null,
+  }
+}
+
+/**
+ * Normalize event log list response from API
+ * @param {Object} response - API event log list response
+ * @returns {Object} Normalized event log list data
+ */
+export const normalizeEventLogListResponse = (response) => {
+  // 응답이 직접 배열인 경우
+  if (Array.isArray(response)) {
+    return {
+      sessionId: null,
+      logs: response.map(normalizeEventLog).filter(Boolean),
+    }
+  }
+
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid event log list response:', response)
+    return {
+      sessionId: null,
+      logs: [],
+    }
+  }
+
+  // logs 필드가 있는 경우
+  let logs = []
+  if (Array.isArray(response.logs)) {
+    logs = response.logs.map(normalizeEventLog).filter(Boolean)
+  } else if (Array.isArray(response.eventLogs)) {
+    logs = response.eventLogs.map(normalizeEventLog).filter(Boolean)
+  } else if (Array.isArray(response.content)) {
+    // 페이징 응답인 경우
+    logs = response.content.map(normalizeEventLog).filter(Boolean)
+  }
+
+  return {
+    sessionId: response.sessionId || null,
+    logs,
+  }
+}
+
+// ========================================
+// Investigation Report Mappers
+// ========================================
+
+/**
+ * Normalize key talk from API response
+ * @param {Object} keyTalk - API key talk
+ * @returns {Object} Normalized key talk
+ */
+export const normalizeKeyTalk = (keyTalk) => {
+  if (!keyTalk || typeof keyTalk !== 'object') {
+    return null
+  }
+
+  return {
+    suspectId: keyTalk.suspectId,
+    content: keyTalk.content || '',
+    createdAt: keyTalk.createdAt || null,
+  }
+}
+
+/**
+ * Normalize stats from API response
+ * @param {Object} stats - API stats
+ * @returns {Object} Normalized stats
+ */
+export const normalizeStats = (stats) => {
+  if (!stats || typeof stats !== 'object') {
+    return null
+  }
+
+  return {
+    totalInterrogations: stats.totalInterrogations || 0,
+    cluesCollected: stats.cluesCollected || 0,
+  }
+}
+
+/**
+ * Normalize investigation report response from API
+ * @param {Object} response - API investigation report response
+ * @returns {Object} Normalized investigation report
+ */
+export const normalizeInvestigationReportResponse = (response) => {
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid investigation report response:', response)
+    return {
+      sessionId: null,
+      scenarioId: null,
+      userId: null,
+      playerName: '',
+      scenarioTitle: '',
+      rankGrade: '',
+      finalScore: 0,
+      playTimeMinutes: 0,
+      summary: '',
+      aiComment: '',
+      stats: null,
+      keyTalks: [],
+    }
+  }
+
+  return {
+    sessionId: response.sessionId || null,
+    scenarioId: response.scenarioId || null,
+    userId: response.userId || null,
+    playerName: response.playerName || '',
+    scenarioTitle: response.scenarioTitle || '',
+    rankGrade: response.rankGrade || '',
+    finalScore: response.finalScore || 0,
+    playTimeMinutes: response.playTimeMinutes || 0,
+    summary: response.summary || '',
+    aiComment: response.aiComment || '',
+    stats: response.stats ? normalizeStats(response.stats) : null,
+    keyTalks: Array.isArray(response.keyTalks)
+      ? response.keyTalks.map(normalizeKeyTalk).filter(Boolean)
+      : [],
+  }
+}
+
+// ========================================
+// Game Start/End Mappers
+// ========================================
+
+/**
+ * Normalize current room from API response
+ * @param {Object} room - API current room
+ * @returns {Object} Normalized current room
+ */
+export const normalizeCurrentRoom = (room) => {
+  if (!room || typeof room !== 'object') {
+    return null
+  }
+
+  return {
+    floorNumber: room.floorNumber || 0,
+    roomName: room.roomName || '',
+    roomType: room.roomType || '',
+    objects: room.objects || null,
+  }
+}
+
+/**
+ * Normalize game start response from API
+ * @param {Object} response - API game start response
+ * @returns {Object} Normalized game start data
+ */
+export const normalizeGameStartResponse = (response) => {
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid game start response:', response)
+    return {
+      sessionId: null,
+      scenarioId: null,
+      userId: null,
+      status: '',
+      startedAt: null,
+      scenario: null,
+      victim: null,
+      currentRoom: null,
+      eventLog: null,
+    }
+  }
+
+  return {
+    sessionId: response.sessionId || null,
+    scenarioId: response.scenarioId || null,
+    userId: response.userId || null,
+    status: response.status || '',
+    startedAt: response.startedAt || null,
+    scenario: response.scenario || null,
+    victim: response.victim || null,
+    currentRoom: response.currentRoom ? normalizeCurrentRoom(response.currentRoom) : null,
+    eventLog: response.eventLog ? normalizeEventLog(response.eventLog) : null,
+  }
+}
+
+/**
+ * Normalize game end response from API
+ * @param {Object} response - API game end response
+ * @returns {Object} Normalized game end data
+ */
+export const normalizeGameEndResponse = (response) => {
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid game end response:', response)
+    return {
+      sessionId: null,
+      status: '',
+      isSuccess: false,
+      completedAt: null,
+      finalScore: 0,
+      rankGrade: '',
+    }
+  }
+
+  return {
+    sessionId: response.sessionId || null,
+    status: response.status || '',
+    isSuccess: response.isSuccess || false,
+    completedAt: response.completedAt || null,
+    finalScore: response.finalScore || 0,
+    rankGrade: response.rankGrade || '',
+  }
+}
+
+/**
+ * Normalize floor move response from API
+ * @param {Object} response - API floor move response
+ * @returns {Object} Normalized floor move data
+ */
+export const normalizeFloorMoveResponse = (response) => {
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid floor move response:', response)
+    return {
+      sessionId: null,
+      currentFloor: 0,
+      isFirstVisit: false,
+      room: null,
+      eventLog: null,
+    }
+  }
+
+  return {
+    sessionId: response.sessionId || null,
+    currentFloor: response.currentFloor || 0,
+    isFirstVisit: response.isFirstVisit || false,
+    room: response.room ? normalizeCurrentRoom(response.room) : null,
+    eventLog: response.eventLog ? normalizeEventLog(response.eventLog) : null,
+  }
+}
+
+// ========================================
+// Clue Detail Mappers
+// ========================================
+
+/**
+ * Normalize clue detail from API response
+ * @param {Object} clue - API clue detail
+ * @returns {Object} Normalized clue detail
+ */
+export const normalizeClueDetail = (clue) => {
+  if (!clue || typeof clue !== 'object') {
+    return null
+  }
+
+  return {
+    ...normalizeClue(clue),
+    description: clue.description || '',
+    detailImageUrl: clue.detailImageUrl || '',
+    assistantComment: clue.assistantComment || '',
+    clueDetail: clue.clueDetail || null,
+    transform: clue.transform || null,
+  }
+}
+
+/**
+ * Normalize clue detail response from API
+ * @param {Object} response - API clue detail response
+ * @returns {Object} Normalized clue detail data
+ */
+export const normalizeClueDetailResponse = (response) => {
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid clue detail response:', response)
+    return null
+  }
+
+  return normalizeClueDetail(response)
+}
+
+/**
+ * Normalize discovered clue response from API
+ * @param {Object} response - API discovered clue response
+ * @returns {Object} Normalized discovered clue data
+ */
+export const normalizeDiscoveredClueResponse = (response) => {
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid discovered clue response:', response)
+    return {
+      sessionId: null,
+      clue: null,
+      discoveredAt: null,
+    }
+  }
+
+  return {
+    sessionId: response.sessionId || null,
+    clue: response.clue ? normalizeClue(response.clue) : null,
+    discoveredAt: response.discoveredAt || null,
+  }
+}
+
+// ========================================
+// Room Mappers
+// ========================================
+
+/**
+ * Normalize room from API response
+ * @param {Object} room - API room
+ * @returns {Object} Normalized room
+ */
+export const normalizeRoom = (room) => {
+  if (!room || typeof room !== 'object') {
+    return null
+  }
+
+  return {
+    id: room.roomId,
+    floorNumber: room.floorNumber,
+    roomType: room.roomType,
+    name: room.roomName,
+    description: room.description,
+    assistantComment: room.assistantComment,
+    objects: room.objects,
+    unlocked: true, // 기본값
+  }
+}
+
+/**
+ * Normalize room list response from API
+ * @param {Object} response - API room list response
+ * @returns {Object} Normalized room list data
+ */
+export const normalizeRoomListResponse = (response) => {
+  if (!response || typeof response !== 'object') {
+    console.error('Invalid room list response:', response)
+    return {
+      scenarioId: null,
+      scenarioTitle: '',
+      rooms: [],
+    }
+  }
+
+  return {
+    scenarioId: response.scenarioId || null,
+    scenarioTitle: response.scenarioTitle || '',
+    rooms: Array.isArray(response.rooms)
+      ? response.rooms.map(normalizeRoom).filter(Boolean)
+      : [],
+  }
+}
+
 export default {
   // Board
   normalizeBoardNode,
@@ -495,6 +945,9 @@ export default {
   // Clues
   normalizeClue,
   normalizeClueListResponse,
+  normalizeClueDetail,
+  normalizeClueDetailResponse,
+  normalizeDiscoveredClueResponse,
   // Suspects
   normalizeSuspect,
   normalizeSuspectListResponse,
@@ -507,6 +960,25 @@ export default {
   normalizeInventoryClue,
   normalizeResumeBoard,
   normalizeResumeResponse,
+  // Event Logs
+  normalizeEventLog,
+  normalizeEventLogListResponse,
+  // Investigation Report
+  normalizeKeyTalk,
+  normalizeStats,
+  normalizeInvestigationReportResponse,
+  // Game Start/End
+  normalizeCurrentRoom,
+  normalizeGameStartResponse,
+  normalizeGameEndResponse,
+  normalizeFloorMoveResponse,
+  // Room
+  normalizeRoom,
+  normalizeRoomListResponse,
+  // Bookshelf
+  mapBookshelfItem,
+  mapBookshelfStatsResponse,
+  mapBookshelfSessionResponse,
   // Enums
   NodeType,
   ConnectionType,
