@@ -5,8 +5,6 @@ import com.google.genai.types.HttpOptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
-import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepository;
-import org.springframework.ai.chat.memory.repository.jdbc.JdbcChatMemoryRepositoryDialect;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -21,10 +19,6 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.Ordered;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.transaction.PlatformTransactionManager;
-
-import javax.sql.DataSource;
 
 @Configuration
 public class AiConfig {
@@ -37,22 +31,6 @@ public class AiConfig {
 
     @Value("${spring.ai.google.genai.project-id:unused}")
     private String genAiProjectId;
-
-    @Bean
-    public JdbcChatMemoryRepository jdbcChatMemoryRepository(
-            JdbcTemplate jdbcTemplate,
-            DataSource dataSource,
-            PlatformTransactionManager transactionManager) {
-        JdbcChatMemoryRepositoryDialect dialect =
-                JdbcChatMemoryRepositoryDialect.from(dataSource);
-
-        return JdbcChatMemoryRepository.builder()
-                .jdbcTemplate(jdbcTemplate)
-                .dialect(dialect)
-                .transactionManager(transactionManager)
-                .build();
-
-    }
 
     @Bean
     ChatModel googleGenAiChatModel() {
@@ -85,7 +63,7 @@ public class AiConfig {
     @Bean
     EmbeddingModel embeddingModel(GoogleGenAiEmbeddingConnectionDetails connectionDetails) {
         GoogleGenAiTextEmbeddingOptions options = GoogleGenAiTextEmbeddingOptions.builder()
-                .model(GoogleGenAiTextEmbeddingOptions.DEFAULT_MODEL_NAME)
+                .model("gemini-embedding-001")
                 .taskType(TaskType.RETRIEVAL_DOCUMENT)
                 .build();
 

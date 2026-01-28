@@ -60,10 +60,10 @@ spring:
         api-key: AIzaSyBMw4Wb1KPcC1SlTy_rJ_8EduAOQ5cVQNw
         chat:
           options:
-            model: gemini-2.0-flash-exp
+            model: gemini-2.0-flash
         embedding:
           options:
-            model: text-embedding-004
+            model: gemini-embedding-001
         base-url: https://generativelanguage.googleapis.com
 
 springdoc:
