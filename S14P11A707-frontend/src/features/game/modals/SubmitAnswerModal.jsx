@@ -3,10 +3,15 @@ import { Button } from '@/components/ui/Button'
 import { InvestigationBoard } from "@/features/game/components/InvestigationBoard"
 
 // 최종 정답 제출: 추리보드(확정선) 기반 자동 추출
-export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioId }) {
+export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioId, victim = null }) {
   const [submitInitialItems, setSubmitInitialItems] = useState([])
   const [submitInitialConnections, setSubmitInitialConnections] = useState([])
   const [submitBoardState, setSubmitBoardState] = useState({ items: [], connections: [] })
+  const [motive, setMotive] = useState('') // 범행동기 입력
+
+  // 보드의 중앙 위치 계산 (보드 크기: 너비 약 800px, 높이 600px, 카드 크기: 너비 176px, 높이 200px)
+  const CENTER_X = 312 // (800 - 176) / 2
+  const CENTER_Y = 200 // (600 - 200) / 2
 
   useEffect(() => {
     if (!isOpen) return
@@ -73,6 +78,16 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
           return { id: nextId, patch: { locationId: item?.locationId ?? inferredId } }
         }
 
+        if (type === 'victim') {
+          const inferredId = item?.victimId ?? parseFromPrefix('victim-') ?? parseNumeric(originalId)
+          const nextId = originalIdStr.startsWith('victim-')
+            ? originalIdStr
+            : inferredId != null
+              ? `victim-${inferredId}`
+              : `victim-${Date.now()}-${index}`
+          return { id: nextId, patch: { victimId: item?.victimId ?? inferredId } }
+        }
+
         if (type === 'note') {
           const nextId = originalIdStr.startsWith('note-')
             ? originalIdStr
@@ -110,6 +125,11 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
           if (item.locationId != null) return `location:${item.locationId}`
           if (item.name) return `locationName:${item.name}`
           return `locationId:${item.id}`
+        }
+        if (item.type === 'victim') {
+          if (item.victimId != null) return `victim:${item.victimId}`
+          if (item.name) return `victimName:${item.name}`
+          return `victimId:${item.id}`
         }
         if (item.type === 'note') return `note:${item.id}`
         return `${item.type ?? 'item'}:${item.id}`
@@ -182,8 +202,9 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
 
     const confirmedConnections = normalized.connections.filter((conn) => conn.type === 'confirmed')
     const nodeIdSet = new Set(confirmedConnections.flatMap((c) => [c.from, c.to]))
+    // 빨간선으로 연결된 카드들만 포함 (메모 제외, victim 포함)
     const submitItems = normalized.items.filter((item) => (
-      nodeIdSet.has(item.id) && ['suspect', 'evidence', 'location'].includes(item.type)
+      nodeIdSet.has(item.id) && ['suspect', 'evidence', 'location', 'victim'].includes(item.type)
     ))
 
     const submitItemIdSet = new Set(submitItems.map((item) => item.id))
@@ -221,9 +242,14 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
 
   const handleSubmit = () => {
     if (!readyToSubmit) return
+    if (!motive.trim()) {
+      // 범행동기 입력 요청
+      return
+    }
     onSubmit?.({
       submissionItems: submitBoardState.items,
       confirmedConnections: submitBoardState.connections,
+      motive: motive.trim(),
     })
   }
 
@@ -263,11 +289,36 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
               <span className="font-bold">용의자/증거/장소</span>를 최소 1개씩 연결하세요.
             </div>
           )}
+
+          {/* 범행동기 입력 폼 */}
+          {readyToSubmit && (
+            <div className="bg-muted/20 border border-border rounded-xl p-4">
+              <label className="block text-sm font-semibold mb-2">
+                범행 동기 <span className="text-red-400">*</span>
+              </label>
+              <textarea
+                value={motive}
+                onChange={(e) => setMotive(e.target.value)}
+                placeholder="범인의 범행 동기를 추론하여 입력해주세요..."
+                className="w-full min-h-[80px] p-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                maxLength={500}
+              />
+              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                <span>최종 정답 제출 전에 범행 동기를 입력해주세요</span>
+                <span>{motive.length}/500</span>
+              </div>
+            </div>
+          )}
         </div>
 
         <div className="p-4 border-t border-border flex gap-3">
           <Button variant="outline" className="flex-1" onClick={onClose}>취소</Button>
-          <Button variant="neon" className="flex-1" onClick={handleSubmit} disabled={!readyToSubmit}>
+          <Button
+            variant="neon"
+            className="flex-1"
+            onClick={handleSubmit}
+            disabled={!readyToSubmit || !motive.trim()}
+          >
             최종 제출하기
           </Button>
         </div>

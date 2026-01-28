@@ -12,6 +12,7 @@ export default function BottomBoardPanel({
   rightOffsetPx = 0,
   pendingAddItem = null,
   onConsumePendingAddItem = null,
+  victim = null, // scenario.victim 전달받음
 }) {
   const containerRef = useRef(null)
 
@@ -65,6 +66,7 @@ export default function BottomBoardPanel({
             <InvestigationBoard
               scenarioId={scenarioId}
               title="개인 추리보드"
+              victim={victim}
               isModal={false}
               onClose={() => onOpenChange?.(false)}
               acceptExternalDrop={true}

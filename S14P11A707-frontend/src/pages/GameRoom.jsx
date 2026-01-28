@@ -657,7 +657,7 @@ export default function GameRoom() {
     setSubmitAnswerOpen(true)
   }
 
-  const handleAnswerSubmit = async ({ submissionItems, confirmedConnections }) => {
+  const handleAnswerSubmit = async ({ submissionItems, confirmedConnections, motive }) => {
     if (!sessionId) return
 
     try {
@@ -695,7 +695,7 @@ export default function GameRoom() {
         culpritId: culpritItem?.suspectId || culpritItem?.targetId || parseInt(String(culpritItem?.id).replace('suspect-', '')) || 1,
         weaponClueId: culpritConnectedEvidence?.evidenceId || culpritConnectedEvidence?.targetId || parseInt(String(culpritConnectedEvidence?.id).replace('evidence-', '')) || 1,
         locationFloor,
-        motive: '범행 동기 추리', // 추후 입력 폼 추가 가능
+        motive: motive || '범행 동기 추리',
         causeOfDeath: '사인 추리', // 추후 입력 폼 추가 가능
       }
 
@@ -931,6 +931,7 @@ export default function GameRoom() {
 	        isOpen={boardPanelOpen}
 	        onOpenChange={setBoardPanelOpen}
 	        scenarioId={activeScenarioId}
+	        victim={scenario?.victim || null}
 	        leftOffsetPx={leftPanelOpen ? SIDE_PANEL_WIDTH_PX : 0}
 	        rightOffsetPx={rightLogOpen ? SIDE_PANEL_WIDTH_PX : 0}
 	        pendingAddItem={pendingAddItem}
@@ -986,6 +987,7 @@ export default function GameRoom() {
 	        onClose={() => setSubmitAnswerOpen(false)}
 	        onSubmit={handleAnswerSubmit}
 	        scenarioId={activeScenarioId}
+	        victim={scenario?.victim || null}
 	      />
       <ReviewModal isOpen={reviewModalOpen} onSubmit={handleReviewSubmit} />
       <ReportModal isOpen={reportModalOpen} onClose={() => setReportModalOpen(false)} report={report} />

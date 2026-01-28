@@ -6,6 +6,7 @@ import { MemoInputModal } from '@/features/game/modals'
 
 export function InvestigationBoard({ 
   scenarioId = 1,
+  victim = null, 
   isModal = false,
   onClose = null,
   readOnly = false,
@@ -127,6 +128,16 @@ export function InvestigationBoard({
           return { id: nextId, patch: { locationId: item?.locationId ?? inferredId } }
         }
 
+        if (type === 'victim') {
+          const inferredId = item?.victimId ?? parseFromPrefix('victim-') ?? parseNumeric(originalId)
+          const nextId = originalIdStr.startsWith('victim-')
+            ? originalIdStr
+            : inferredId != null
+              ? `victim-${inferredId}`
+              : `victim-${Date.now()}-${index}`
+          return { id: nextId, patch: { victimId: item?.victimId ?? inferredId } }
+        }
+
         if (type === 'note') {
           const nextId = originalIdStr.startsWith('note-')
             ? originalIdStr
@@ -164,6 +175,11 @@ export function InvestigationBoard({
           if (item.locationId != null) return `location:${item.locationId}`
           if (item.name) return `locationName:${item.name}`
           return `locationId:${item.id}`
+        }
+        if (item.type === 'victim') {
+          if (item.victimId != null) return `victim:${item.victimId}`
+          if (item.name) return `victimName:${item.name}`
+          return `victimId:${item.id}`
         }
         if (item.type === 'note') return `note:${item.id}`
         return `${item.type ?? 'item'}:${item.id}`
@@ -436,6 +452,44 @@ export function InvestigationBoard({
     })
   }, [readOnly])
 
+const addVictimItem = useCallback((victimData, { x, y } = {}) => {
+  if (readOnly) return
+  if (!victimData || victimData.id == null) return
+
+  const rect = boardRef.current?.getBoundingClientRect()
+  const fallbackX = rect ? rect.width / 2 - 88 : 350
+  const fallbackY = rect ? rect.height / 2 - 100 : 200
+  const maxX = rect ? Math.max(0, rect.width - 176) : 750
+  const maxY = rect ? Math.max(0, rect.height - 200) : 500
+
+  const nextX = Number.isFinite(x) ? x : fallbackX
+  const nextY = Number.isFinite(y) ? y : fallbackY
+
+  const nextItemId = `victim-${victimData.id}`
+  const nextItem = {
+    id: nextItemId,
+    type: 'victim',
+    victimId: victimData.id,
+    name: victimData.name ?? '피해자',
+    x: clamp(nextX, 0, maxX),
+    y: clamp(nextY, 0, maxY),
+    image: victimData.portraitUrl ?? null,
+    note: victimData.occupation || '', // 원하면 background 같은 걸로 바꿔도 됨
+  }
+
+  setBoardItems((prev) => {
+    const victimIdStr = String(victimData.id)
+    const exists = prev.some((it) =>
+      it?.type === 'victim' && (String(it.victimId ?? '') === victimIdStr || String(it.id) === nextItemId)
+    )
+    if (exists) return prev
+
+    setSelectedItem(nextItemId)
+    return [...prev, nextItem]
+  })
+}, [readOnly])
+
+
   const upsertConnection = useCallback((fromId, toId, type) => {
     if (readOnly) return
     if (!fromId || !toId) return
@@ -461,6 +515,18 @@ export function InvestigationBoard({
     if (!keyToRemove) return
     setConnections((prev) => prev.filter((conn) => getConnectionKey(conn.from, conn.to) !== keyToRemove))
   }, [readOnly])
+
+  const removeItemById = useCallback((itemId) => {
+  if (readOnly) return
+  if (!itemId) return
+
+  setBoardItems((prev) => prev.filter((it) => it.id !== itemId))
+  setConnections((prev) => prev.filter((c) => c.from !== itemId && c.to !== itemId))
+
+  setSelectedItem((prev) => (prev === itemId ? null : prev))
+  setPendingConnectFrom((prev) => (prev === itemId ? null : prev))
+}, [readOnly])
+
 
   const addNoteItem = useCallback((text, { x, y } = {}) => {
     if (readOnly || isSubmitMode || !allowMemo) return
@@ -721,18 +787,36 @@ export function InvestigationBoard({
   }
 
   useEffect(() => {
+  if (readOnly) return
+  if (!victim || victim.id == null) return
+
+  // submit 모드/개인 모드 둘 다 victim은 떠도 됨 (원하면 submit만/개인만 조건 걸어도 됨)
+  const hasVictim = boardItems.some((it) => it?.type === 'victim' && String(it.victimId ?? '') === String(victim.id))
+  if (hasVictim) return
+
+  // 보드가 아직 초기화 전이면(빈 배열로 잠깐) 여기서 넣어버리면 중복될 수 있어서,
+  // "초기화 완료 후" 느낌으로 한번만 넣고 싶으면 조건을 하나 더 둬도 됨.
+  // 지금은 단순하게: victim 없으면 삽입.
+  addVictimItem(victim)
+}, [victim?.id, readOnly, boardItems, addVictimItem])
+
+
+  useEffect(() => {
     if (!isSubmitMode) return
     setFilter('all')
   }, [isSubmitMode])
 
   const filteredItems = boardItems.filter((item) => {
     if (isSubmitMode && item.type === 'note') return false
+    // 피해자 카드는 항상 표시
+    if (item.type === 'victim') return true
     if (filter === 'all') return true
     return item.type === filter
   })
 
   const filterOptions = [
     { value: 'all', label: '전체 보기' },
+    { value: 'victim', label: '피해자' },
     { value: 'suspect', label: '용의자' },
     { value: 'evidence', label: '증거' },
     { value: 'location', label: '장소' },
@@ -1047,6 +1131,25 @@ export function InvestigationBoard({
                   </div>
                 )}
               </div>
+
+              {/* 삭제 버튼 (피해자 제외) */}
+              {!readOnly && selectedItem === item.id && item.type !== 'victim' && (
+                <button
+                  type="button"
+                  aria-label="카드 삭제"
+                  title="삭제"
+                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    removeItemById(item.id)
+                  }}
+                  className="absolute -top-2 -right-2 w-7 h-7 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 flex items-center justify-center text-sm border border-white/20"
+                  style={{ zIndex: 20 }}
+                >
+                  ✕
+                </button>
+              )}
             </div>
           ))}
         </div>
