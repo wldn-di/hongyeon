@@ -14,7 +14,7 @@ public enum ErrorCode {
 
     SCENARIO_NOT_FOUND(HttpStatus.NOT_FOUND, "SCENARIO-001", "시나리오를 찾을 수 없습니다."),
     SCENARIO_NOT_READY(HttpStatus.BAD_REQUEST, "SCENARIO-002", "시나리오가 아직 준비되지 않았습니다."),
-    SCENARIO_ALREADY_GENERATING(HttpStatus.CONFLICT,"SCENARIO-003", "시나리오가 생성 중입니다."),
+    SCENARIO_ALREADY_GENERATING(HttpStatus.CONFLICT,"SCENARIO-003", "이미 생성중인 시나리오가 존재합니다."),
 
 
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION-001", "게임 세션을 찾을 수 없습니다."),

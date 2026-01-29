@@ -8,6 +8,7 @@ import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.scenario.dto.*;
 import com.ssafy.s14p11a707.scenario.entity.*;
+import com.ssafy.s14p11a707.scenario.helper.ScenarioTransactionHelper;
 import com.ssafy.s14p11a707.scenario.repository.*;
 import com.ssafy.s14p11a707.scenario.service.RoomLayoutService; // ??추�???
 import com.ssafy.s14p11a707.scenario.service.ScenarioService;
@@ -56,6 +57,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     private final RoomRepository roomRepository;
     private final ScenarioRankingRepository scenarioRankingRepository;
     private final UserRepository userRepository;
+    private final ScenarioTransactionHelper transactionHelper;
 
     // ★ 랜덤 가구 배치 서비스 주입
     private final RoomLayoutService roomLayoutService;
@@ -561,7 +563,8 @@ public class ScenarioServiceImpl implements ScenarioService {
 
         } catch (Exception e) {
             log.error("Scenario generation failed", e);
-            scenario.failGeneration(e.getMessage());
+
+            transactionHelper.markFailed(scenario.getId(), e.getMessage());
 
             return new ScenarioCreateResponse(
                     -1L,
