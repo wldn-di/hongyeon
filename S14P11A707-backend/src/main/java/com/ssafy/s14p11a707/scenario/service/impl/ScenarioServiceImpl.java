@@ -451,12 +451,13 @@ public class ScenarioServiceImpl implements ScenarioService {
             // ★ RoomLayoutService를 호출하여 랜덤 가구 배치 적용
             Map<Integer, Room> roomMap = new LinkedHashMap<>();
             for (JsonNode roomNode : root.path("rooms")) {
-                int floorNumber = roomNode.path("floor_number").asInt();
+                String roomType = roomNode.path("room_type").asText("living");
+                int rawFloor = roomNode.path("floor_number").asInt();
+                int floorNumber = normalizeFloorNumber(roomType, rawFloor, roomMap);
 
                 // 같은 floor_number가 없을 때만 추가
                 if (!roomMap.containsKey(floorNumber)) {
                     // AI가 생성한 방 타입 (living, kitchen 등)
-                    String roomType = roomNode.path("room_type").asText("living");
 
                     // ★ 랜덤 배치 서비스 호출
                     JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
@@ -471,6 +472,24 @@ public class ScenarioServiceImpl implements ScenarioService {
                             .objectJson(objectLayout) // ★ 생성된 가구 배치 JSON 저장
                             .build();
                     roomMap.put(floorNumber, room);
+                }
+            }
+            if (roomMap.size() < 6) {
+                String[] defaultTypes = {"living", "kitchen", "bedroom", "bathroom", "living", "basement"};
+                for (int floor = 1; floor <= 6; floor++) {
+                    if (roomMap.containsKey(floor)) continue;
+                    String roomType = defaultTypes[floor - 1];
+                    JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
+                    Room room = Room.builder()
+                            .scenario(scenario)
+                            .floorNumber(floor)
+                            .roomType(roomType)
+                            .roomName("Floor " + floor)
+                            .description("")
+                            .assistantComment("")
+                            .objectJson(objectLayout)
+                            .build();
+                    roomMap.put(floor, room);
                 }
             }
             List<Room> savedRooms = roomRepository.saveRooms(new ArrayList<>(roomMap.values()));
@@ -687,6 +706,25 @@ public class ScenarioServiceImpl implements ScenarioService {
                 .toList();
 
         return new ScenarioListResponse(items, 1, items.size(), 0);
+    }
+
+    private int normalizeFloorNumber(String roomType, int rawFloor, Map<Integer, Room> roomMap) {
+        int normalized = rawFloor;
+        if ("basement".equalsIgnoreCase(roomType)) {
+            normalized = 6;
+        }
+        if (normalized < 1 || normalized > 6) {
+            normalized = Math.min(6, Math.max(1, normalized));
+        }
+        if (!roomMap.containsKey(normalized)) {
+            return normalized;
+        }
+        for (int floor = 1; floor <= 6; floor++) {
+            if (!roomMap.containsKey(floor)) {
+                return floor;
+            }
+        }
+        return normalized;
     }
 
     private ScenarioListResponse.Item toScenarioListItem(ScenarioListProjection scenario) {

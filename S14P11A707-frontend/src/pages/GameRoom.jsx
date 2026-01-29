@@ -178,6 +178,44 @@ const getHelperInitialMessage = (scenarioTitle) => ({
   }),
 })
 
+const clampFloor = (value, fallback = 1) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.min(6, Math.max(1, Math.trunc(num)))
+}
+
+const hashString = (value) => {
+  const str = String(value ?? "")
+  let hash = 5381
+  for (let i = 0; i < str.length; i += 1) {
+    hash = ((hash << 5) + hash) ^ str.charCodeAt(i)
+  }
+  return Math.abs(hash)
+}
+
+const getCluePosition = (roomIndex, clueId) => {
+  // Stable positions per clue id so removing one clue doesn't move others
+  const seed = hashString(`${roomIndex}-${clueId}`)
+  const slots = [
+    { localX: 62, localY: 176 },
+    { localX: 228, localY: 188 },
+    { localX: 132, localY: 238 },
+    { localX: 86, localY: 262 },
+    { localX: 206, localY: 248 },
+    { localX: 168, localY: 172 },
+    { localX: 112, localY: 210 },
+    { localX: 246, localY: 226 },
+  ]
+  const slot = slots[seed % slots.length]
+  // Small per-room drift to avoid identical placement across floors
+  const driftX = ((roomIndex * 23) % 19) - 9
+  const driftY = ((roomIndex * 17) % 21) - 10
+  return {
+    localX: Math.max(40, Math.min(250, slot.localX + driftX)),
+    localY: Math.max(140, Math.min(280, slot.localY + driftY)),
+  }
+}
+
 
 export default function GameRoom() {
   const [, setLocation] = useLocation()
@@ -258,7 +296,7 @@ export default function GameRoom() {
   const [reportModalOpen, setReportModalOpen] = useState(false)
 
   // 방문한 층 (첫 방문 여부 체크용)
-  const [visitedFloors, setVisitedFloors] = useState(new Set([0]))
+  const [visitedFloors, setVisitedFloors] = useState(new Set([1]))
 
   const SIDE_PANEL_WIDTH_PX = 288
 
@@ -270,19 +308,22 @@ export default function GameRoom() {
   // 현재 방
   const currentRoom = rooms?.[currentRoomIndex] || rooms?.[0] || null
 
-  const currentFloorNumber = Number.isFinite(currentRoom?.floorNumber) ? currentRoom.floorNumber : (currentRoomIndex + 1)
+  const currentFloorNumber = clampFloor(
+    Number.isFinite(currentRoom?.floorNumber) ? currentRoom.floorNumber : (currentRoomIndex + 1),
+    1,
+  )
 
   const getRoomIndexFromFloor = useCallback((floorNumber) => {
-    if (!Number.isFinite(floorNumber)) return 0
+    const safeFloor = clampFloor(floorNumber, 1)
 
     if (rooms && rooms.length > 0) {
-      const foundIndex = rooms.findIndex(r => r.floorNumber === floorNumber)
+      const foundIndex = rooms.findIndex(r => r.floorNumber === safeFloor)
       if (foundIndex >= 0) return foundIndex
-      const fallbackIndex = floorNumber - 1
+      const fallbackIndex = safeFloor - 1
       return Math.max(0, Math.min(fallbackIndex, rooms.length - 1))
     }
 
-    return Math.max(0, floorNumber - 1)
+    return Math.max(0, safeFloor - 1)
   }, [rooms])
   useEffect(() => {
     if (!sessionId) return
@@ -305,34 +346,20 @@ export default function GameRoom() {
     if (roomsLoading) return []
     if (!apiClues || apiClues.length === 0) return []
 
-    // 방 내 단서 위치 (방마다 최대 3개 단서 배치용)
-    const positionsPerRoom = [
-      { localX: 90, localY: 200 },
-      { localX: 235, localY: 220 },
-      { localX: 150, localY: 260 },
-    ]
-
     const undiscoveredClues = apiClues.filter(clue => !clue.discovered)
-
-    // 방별로 단서를 그룹화하여 인덱스 관리
-    const clueCountByRoom = {}
 
     return undiscoveredClues.map((clue) => {
       // rooms가 비어있으면 floorNumber를 roomIndex로 사용
       let roomIndex = 0
       if (rooms && rooms.length > 0) {
-        const foundIndex = rooms.findIndex(r => r.floorNumber === clue.floorNumber)
-        roomIndex = foundIndex >= 0 ? foundIndex : (clue.floorNumber || 0)
+        const clueFloor = clampFloor(clue.floorNumber, 1)
+        const foundIndex = rooms.findIndex(r => r.floorNumber === clueFloor)
+        roomIndex = foundIndex >= 0 ? foundIndex : (clueFloor - 1)
       } else {
-        roomIndex = clue.floorNumber || 0
+        roomIndex = clampFloor(clue.floorNumber, 1) - 1
       }
-
-      // 해당 방에서 몇 번째 단서인지 계산
-      const countInRoom = clueCountByRoom[roomIndex] || 0
-      clueCountByRoom[roomIndex] = countInRoom + 1
-
-      // 방 내에서의 위치 (최대 3개까지, 그 이후는 순환)
-      const pos = positionsPerRoom[countInRoom % positionsPerRoom.length]
+      // 방/단서 ID 기반 고정 위치
+      const pos = getCluePosition(roomIndex, clue.id)
 
       return {
         clueId: clue.id,
@@ -389,12 +416,15 @@ export default function GameRoom() {
       setHealth(100)
       setPlayTimeSeconds(0)
       setHintsUsed(0)
-      const startFloorNumber = Number.isFinite(normalized.currentFloor)
-        ? normalized.currentFloor
-        : (normalized.currentRoom?.floorNumber ?? 1)
+      const startFloorNumber = clampFloor(
+        Number.isFinite(normalized.currentFloor)
+          ? normalized.currentFloor
+          : (normalized.currentRoom?.floorNumber ?? 1),
+        1,
+      )
       const startIndex = getRoomIndexFromFloor(startFloorNumber)
       setCurrentRoomIndex(startIndex)
-      setVisitedFloors(new Set([startIndex]))
+      setVisitedFloors(new Set([startFloorNumber]))
       if (normalized.eventLog) {
         addLog('system', '수사가 시작되었습니다.')
       }
@@ -423,12 +453,15 @@ export default function GameRoom() {
       setHealth(normalized.health || 100)
       setPlayTimeSeconds(normalized.playTime || 0)
       setHintsUsed(0)
-      const resumeFloorNumber = Number.isFinite(normalized.currentFloor)
-        ? normalized.currentFloor
-        : (normalized.currentRoom?.floorNumber ?? 1)
+      const resumeFloorNumber = clampFloor(
+        Number.isFinite(normalized.currentFloor)
+          ? normalized.currentFloor
+          : (normalized.currentRoom?.floorNumber ?? 1),
+        1,
+      )
       const resumeIndex = getRoomIndexFromFloor(resumeFloorNumber)
       setCurrentRoomIndex(resumeIndex)
-      setVisitedFloors(new Set([resumeIndex]))
+      setVisitedFloors(new Set([resumeFloorNumber]))
       if (normalized.scenarioId) {
         setActiveScenarioId(normalized.scenarioId)
       }
@@ -579,7 +612,10 @@ export default function GameRoom() {
     }
 
     const room = rooms[validIndex]
-    const targetFloor = Number.isFinite(room?.floorNumber) ? room.floorNumber : (validIndex + 1)
+    const targetFloor = clampFloor(
+      Number.isFinite(room?.floorNumber) ? room.floorNumber : (validIndex + 1),
+      validIndex + 1,
+    )
 
     if (sessionId && hasChanged) {
       try {
@@ -589,24 +625,15 @@ export default function GameRoom() {
         console.error('층 이동 API 오류:', err)
       }
     }
-    const isFirstVisit = !visitedFloors.has(validIndex)
+    const isFirstVisit = !visitedFloors.has(targetFloor)
     if (isFirstVisit) {
-      setVisitedFloors(prev => new Set([...prev, validIndex]))
+      setVisitedFloors(prev => new Set([...prev, targetFloor]))
 
       const room = rooms[validIndex]
       if (room) {
         // 로그 추가
         addLog('system', `${room.name}에 도착했습니다.`)
 
-        // 백엔드에 층 이동 알림 (첫 방문 시)
-        if (sessionId) {
-          try {
-            await moveFloor(sessionId)
-            refetchLogs?.()
-          } catch (err) {
-            console.error('층 이동 API 오류:', err)
-          }
-        }
       }
     }
   }, [rooms, visitedFloors, addLog, sessionId, refetchLogs])

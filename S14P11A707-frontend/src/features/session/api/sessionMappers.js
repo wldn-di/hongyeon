@@ -20,6 +20,12 @@ export const ConnectionType = {
   YELLOW: 'YELLOW',
 }
 
+const clampFloor = (value, fallback = 1) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.min(6, Math.max(1, Math.trunc(num)))
+}
+
 // ========================================
 // Bookshelf Mappers
 // ========================================
@@ -187,7 +193,7 @@ export const normalizeClue = (clue) => {
   return {
     id: clue.clueId,
     roomId: clue.roomId,
-    floorNumber: clue.floorNumber,
+    floorNumber: clampFloor(clue.floorNumber, 1),
     name: clue.name || '',
     importance: clue.importance || '',
     description: clue.description || '',
@@ -455,7 +461,7 @@ export const normalizeResumeResponse = (response) => {
       scenarioId: null,
       userId: null,
       status: '',
-      currentFloor: 0,
+      currentFloor: 1,
       visitedFloors: [],
       health: 0,
       submitAttempts: 0,
@@ -478,8 +484,10 @@ export const normalizeResumeResponse = (response) => {
     scenarioId: response.scenarioId || null,
     userId: response.userId || null,
     status: response.status || '',
-    currentFloor: response.currentFloor || 0,
-    visitedFloors: Array.isArray(response.visitedFloors) ? response.visitedFloors : [],
+    currentFloor: clampFloor(response.currentFloor ?? response.currentRoom?.floorNumber, 1),
+    visitedFloors: Array.isArray(response.visitedFloors)
+      ? response.visitedFloors.map((floor) => clampFloor(floor, 1))
+      : [],
     health: response.health || 0,
     submitAttempts: response.submitAttempts || 0,
     playTime: response.playTime || 0,
@@ -730,7 +738,7 @@ export const normalizeCurrentRoom = (room) => {
   }
 
   return {
-    floorNumber: room.floorNumber || 0,
+    floorNumber: clampFloor(room.floorNumber, 1),
     roomName: room.roomName || '',
     roomType: room.roomType || '',
     objects: room.objects || null,
@@ -753,7 +761,7 @@ export const normalizeGameStartResponse = (response) => {
       startedAt: null,
       scenario: null,
       victim: null,
-      currentFloor: 0,
+      currentFloor: 1,
       currentRoom: null,
       eventLog: null,
     }
@@ -767,7 +775,7 @@ export const normalizeGameStartResponse = (response) => {
     startedAt: response.startedAt || null,
     scenario: response.scenario || null,
     victim: response.victim || null,
-    currentFloor: response.currentFloor ?? response.currentRoom?.floorNumber ?? 0,
+    currentFloor: clampFloor(response.currentFloor ?? response.currentRoom?.floorNumber, 1),
     currentRoom: response.currentRoom ? normalizeCurrentRoom(response.currentRoom) : null,
     eventLog: response.eventLog ? normalizeEventLog(response.eventLog) : null,
   }
@@ -811,7 +819,7 @@ export const normalizeFloorMoveResponse = (response) => {
     console.error('Invalid floor move response:', response)
     return {
       sessionId: null,
-      currentFloor: 0,
+      currentFloor: 1,
       isFirstVisit: false,
       room: null,
       eventLog: null,
@@ -820,7 +828,7 @@ export const normalizeFloorMoveResponse = (response) => {
 
   return {
     sessionId: response.sessionId || null,
-    currentFloor: response.currentFloor || 0,
+    currentFloor: clampFloor(response.currentFloor ?? response.currentRoom?.floorNumber, 1),
     isFirstVisit: response.isFirstVisit || false,
     room: response.room ? normalizeCurrentRoom(response.room) : null,
     eventLog: response.eventLog ? normalizeEventLog(response.eventLog) : null,
@@ -903,7 +911,7 @@ export const normalizeRoom = (room) => {
 
   return {
     id: room.roomId,
-    floorNumber: room.floorNumber,
+    floorNumber: clampFloor(room.floorNumber, 1),
     roomType: room.roomType,
     name: room.roomName,
     description: room.description,

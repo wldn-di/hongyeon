@@ -3,6 +3,12 @@ import { fetchScenarioRooms, fetchScenarioVictim } from '../../scenarios/api/sce
 import { mapRoomListResponse, mapVictimResponse } from '../../scenarios/api/scenarioMappers'
 import { toast } from 'sonner'
 
+const clampFloor = (value, fallback = 1) => {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.min(6, Math.max(1, Math.trunc(num)))
+}
+
 /**
  * 시나리오 방 정보 조회 Hook
  * @param {number} scenarioId - 시나리오 ID
@@ -38,7 +44,7 @@ export function useGameRooms(scenarioId) {
         // 응답이 직접 배열인 경우
         mappedRooms = roomsResponse.map((room, idx) => ({
           id: room.roomId || room.id || idx,
-          floorNumber: room.floorNumber ?? idx,
+          floorNumber: clampFloor(room.floorNumber, idx + 1),
           roomType: room.roomType || 'default',
           name: room.roomName || room.name || `${idx + 1}층`,
           description: room.description || '',
@@ -48,7 +54,10 @@ export function useGameRooms(scenarioId) {
           image: `/images/rooms/room-${room.roomId || idx}.png`,
         }))
       } else {
-        mappedRooms = mapRoomListResponse(roomsResponse)
+        mappedRooms = mapRoomListResponse(roomsResponse).map((room, idx) => ({
+          ...room,
+          floorNumber: clampFloor(room?.floorNumber, idx + 1),
+        }))
       }
 
       setRooms(mappedRooms)

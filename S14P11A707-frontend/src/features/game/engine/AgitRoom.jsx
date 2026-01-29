@@ -45,6 +45,13 @@ export default function AgitRoom({
     }, [initialRoomIndex]);
 
     useEffect(() => {
+        if (!gameInstance.current) return;
+        const scene = gameInstance.current.scene?.getScene("AgitScene");
+        if (!scene || !scene.setClues) return;
+        scene.setClues(Array.isArray(clues) ? clues : []);
+    }, [clues]);
+
+    useEffect(() => {
         if (gameInstance.current) return;
 
         const initialClues = Array.isArray(clues) ? clues : [];
@@ -1131,6 +1138,19 @@ export default function AgitRoom({
                         body: c?.body ?? "",
                     });
                 });
+            }
+
+            clearClues() {
+                if (!Array.isArray(this.clues) || this.clues.length === 0) return;
+                this.clues.forEach((clue) => {
+                    if (clue && clue.destroy) clue.destroy();
+                });
+                this.clues = [];
+            }
+
+            setClues(nextClues) {
+                this.clearClues();
+                this.spawnClues(nextClues);
             }
 
             getNearestClue(maxDist) {
