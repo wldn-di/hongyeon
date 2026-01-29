@@ -181,8 +181,8 @@ public class GameSession extends BaseEntity {
         this.startedAt = Instant.now();
         this.completedAt = null;
         this.playTime = 0L;
-        this.lastSavedAt = null;
-        this.expiresAt = null;
+        this.lastSavedAt = Instant.now();
+        this.expiresAt = Instant.now().plusSeconds(7 * 24 * 60 * 60);
     }
 
     public enum Status {
