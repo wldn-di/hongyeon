@@ -19,7 +19,6 @@ public enum ErrorCode {
 
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION-001", "게임 세션을 찾을 수 없습니다."),
     SESSION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SESSION-002", "이미 진행 중인 게임이 있습니다."),
-    SESSION_ALREADY_COMPLETED(HttpStatus.CONFLICT, "SESSION-003", "이미 완료한 시나리오입니다. 수사보고서만 열람 가능합니다."),
 
     CLUE_NOT_FOUND(HttpStatus.NOT_FOUND, "CLUE-001", "단서를 찾을 수 없습니다."),
     CLUE_ALREADY_DISCOVERED(HttpStatus.CONFLICT, "CLUE-002", "이미 획득한 단서입니다."),

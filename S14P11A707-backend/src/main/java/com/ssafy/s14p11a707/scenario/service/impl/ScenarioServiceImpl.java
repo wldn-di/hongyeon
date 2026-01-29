@@ -2,6 +2,8 @@ package com.ssafy.s14p11a707.scenario.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ssafy.s14p11a707.exception.BaseException;
+import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.scenario.dto.*;
@@ -62,10 +64,34 @@ public class ScenarioServiceImpl implements ScenarioService {
     private final PlatformTransactionManager transactionManager;
 
     @Override
-    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request) {
+    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request, OidcUser user){
+
+        User creator = userRepository.findByGoogleId(user.getSubject())
+                .orElseThrow(()-> new BaseException(ErrorCode.UNAUTHORIZED));
+
+        // 이미 생성 중인 시나리오가 있는지 확인
+        boolean hasGenerating = scenarioRepository.existsByCreatorIdAndGenerationStatus(
+                creator.getId(), Scenario.GenerationStatus.GENERATING);
+
+        if (hasGenerating) {
+            throw new BaseException(ErrorCode.SCENARIO_ALREADY_GENERATING);
+        }
+
         int estimatedSeconds = Math.max(20, Math.min(120, 25 + request.suspectCount() * 10));
 
         ScenarioCreateResponse.OriginalRequest originalRequest = new ScenarioCreateResponse.OriginalRequest(request.title(), request.userSynopsis(), request.genre(), request.suspectCount());
+
+        // GENERATING 상태로 먼저 저장
+        Scenario scenario = Scenario.builder()
+                .creator(creator)
+                .title(request.title())
+                .userSynopsis(request.userSynopsis())
+                .genre(request.genre())
+                .suspectCount(request.suspectCount())
+                .generationStatus(Scenario.GenerationStatus.GENERATING)
+                .build();
+        scenarioRepository.saveScenario(scenario);
+
         try {
             // 1. 사용자 입력 메시지
             String userMessage = String.format("""
@@ -395,7 +421,8 @@ public class ScenarioServiceImpl implements ScenarioService {
             arrayToVectorString(causeEmbedding);
 
             TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-            Scenario scenario = transactionTemplate.execute(status -> persistScenarioData(
+            Scenario finalScenario = transactionTemplate.execute(status -> persistScenarioData(
+                    scenario,       //  이미 위에서 만든 scenario 객체 전달
                     request,
                     root,
                     title,
@@ -405,7 +432,7 @@ public class ScenarioServiceImpl implements ScenarioService {
                     truthConfig,
                     motiveEmbeddingStr
             ));
-            if (scenario == null) {
+            if (finalScenario == null) {
                 throw new IllegalStateException("persistScenarioData returned null");
             }
 
@@ -413,7 +440,7 @@ public class ScenarioServiceImpl implements ScenarioService {
 
             // 11. 응답 반환
             return new ScenarioCreateResponse(
-                    scenario.getId(),
+                    finalScenario.getId(),
                     "COMPLETED",
                     estimatedSeconds,
                     null,
@@ -422,16 +449,8 @@ public class ScenarioServiceImpl implements ScenarioService {
 
         } catch (Exception e) {
             log.error("Scenario generation failed", e);
-            Scenario scenario = Scenario.builder()
-                    .title(request.title())
-                    .userSynopsis(request.userSynopsis())
-                    .synopsis(request.userSynopsis())
-                    .genre(request.genre())
-                    .suspectCount(request.suspectCount())
-                    .generationStatus(Scenario.GenerationStatus.FAILED)
-                    .generationError(e.getMessage())
-                    .build();
-            scenarioRepository.saveScenario(scenario);
+
+            scenario.failGeneration(e.getMessage());
 
             return new ScenarioCreateResponse(
                     -1L,
@@ -452,6 +471,7 @@ public class ScenarioServiceImpl implements ScenarioService {
      * </p>
      */
     private Scenario persistScenarioData(
+            Scenario scenario,
             ScenarioCreateRequest request,
             JsonNode root,
             String title,
@@ -464,21 +484,7 @@ public class ScenarioServiceImpl implements ScenarioService {
         ObjectMapper mapper = new ObjectMapper();
 
         // 6. Scenario 엔티티 저장
-        Scenario scenario = Scenario.builder()
-                .title(title)
-                .userSynopsis(request.userSynopsis())
-                .synopsis(synopsis)
-                .synopsisDetail(synopsisDetail)
-                .genre(request.genre())
-                .suspectCount(request.suspectCount())
-                .playCount(0)
-                .generationStatus(Scenario.GenerationStatus.COMPLETED)
-                .generationError(null)
-                .storyConfigJson(storyConfig)
-                .truthConfigJson(truthConfig)
-                .correctMotiveEmbedding(motiveEmbeddingStr)
-                .build();
-        scenarioRepository.saveScenario(scenario);
+        scenario.completeGeneration(title, synopsis, synopsisDetail, storyConfig, truthConfig, motiveEmbeddingStr);
 
         // 7. Victim 저장
         JsonNode victimNode = root.path("victim");
@@ -725,7 +731,8 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Override
     @Transactional(readOnly = true)
     public ScenarioListResponse listScenarios() {
-        List<ScenarioListProjection> scenarios = scenarioRepository.findAllProjectedBy();
+        List<ScenarioListProjection> scenarios = scenarioRepository
+                .findAllByGenerationStatus(Scenario.GenerationStatus.COMPLETED);
 
         List<ScenarioListResponse.Item> items = scenarios.stream()
                 .map(this::toScenarioListItem)
