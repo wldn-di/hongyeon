@@ -141,6 +141,8 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .firstPlay(true)
                 .startedAt(Instant.now())
                 .playTime(0L)
+                .lastSavedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(7 * 24 * 60 * 60))
                 .build();
         gameSessionRepository.save(session);
         return session;
@@ -701,7 +703,6 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      * 제출 세션
      */
-
     @Override
     @Transactional
     public SubmitResponse submit(long sessionId, SubmitRequest request, OidcUser oidcUser) {
@@ -725,14 +726,14 @@ public class GameSessionServiceImpl implements GameSessionService {
                     "최대 제출 횟수를 초과하여 게임이 종료되었습니다.");
         }
 
-        // 3. 보드 검증: RED 연결 개수 확인 (정확히 4개)
+        // 3. 보드 검증: RED 연결 개수 확인 (정확히 3개)
         int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
-        if (redCount != 4) {
+        if (redCount <= 3) {
             return SubmitResponse.boardInvalid(sessionId, "INVALID_RED_COUNT",
-                    "붉은 실 연결이 4개여야 합니다. (현재: " + redCount + "개)", attempts);
+                    "붉은 실 연결이 3개여야 합니다. (현재: " + redCount + "개)", attempts);
         }
 
-        // 4. 보드 검증: 5가지 타입 모두 RED로 연결되어 있는지 확인
+        // 4. 보드 검증: 4가지 타입 모두 RED로 연결되어 있는지 확인
         List<BoardConnection> redConnections = boardConnectionRepository
                 .findBySessionAndConnectionType(session, ConnectionType.RED);
 
@@ -743,7 +744,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         }
 
         Set<ItemType> requiredTypes = EnumSet.of(
-                ItemType.VICTIM, ItemType.SUSPECT, ItemType.MEMO, ItemType.LOCATION, ItemType.CLUE
+                ItemType.VICTIM, ItemType.SUSPECT, ItemType.LOCATION, ItemType.CLUE
         );
 
         if (!connectedTypes.containsAll(requiredTypes)) {
