@@ -112,7 +112,7 @@ public class GameSessionServiceImpl implements GameSessionService {
 
             if (session.getStatus() == Status.PLAYING) {
                 // TODO: 프론트에서 resumeGame API 호출
-                throw new BaseException(ErrorCode.SESSION_ALREADY_EXISTS);
+                return GameStartResponse.alreadyPlaying(session);
             } else {
                 // COMPLETED | FAILED -> 세션 초기화
                 resetSession(session);
