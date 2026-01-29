@@ -14,8 +14,6 @@ import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
 import com.ssafy.s14p11a707.game.dto.FloorMoveRequest;
 import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
 import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
-import com.ssafy.s14p11a707.game.dto.GameSaveRequest;
-import com.ssafy.s14p11a707.game.dto.GameSaveResponse;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
 import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
 import com.ssafy.s14p11a707.game.dto.SubmitRequest;
@@ -214,31 +212,6 @@ public interface SessionApiDoc {
             )
     })
     ResponseEntity<EventLogListResponse> getLogs(long sessionId, OidcUser oidcUser);
-
-    @Operation(summary = "게임 저장", description = "세션 진행 내용을 저장합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "저장 성공",
-                    content = @Content(schema = @Schema(implementation = GameSaveResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "인증 필요",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "403",
-                    description = "접근 권한 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "세션을 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<GameSaveResponse> saveGame(long sessionId, GameSaveRequest request, OidcUser oidcUser);
 
     @Operation(summary = "이어하기", description = "세션을 이어하기 위한 정보를 조회합니다.")
     @ApiResponses({
@@ -498,5 +471,5 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ChatHistoryResponse> getChatHistory(long sessionId, long suspectId);
+    ResponseEntity<ChatHistoryResponse> getChatHistory(long sessionId, long suspectId, OidcUser oidcUser);
 }

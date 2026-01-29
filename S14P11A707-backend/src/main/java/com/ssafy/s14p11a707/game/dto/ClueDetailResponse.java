@@ -5,6 +5,7 @@ import com.ssafy.s14p11a707.game.entity.DiscoveredClue;
 import com.ssafy.s14p11a707.scenario.entity.Clue;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
+
 import java.time.Instant;
 
 public record ClueDetailResponse(
@@ -20,11 +21,10 @@ public record ClueDetailResponse(
         JsonNode clueDetail,
         @ArraySchema(schema = @Schema(implementation = Object.class))
         JsonNode transform,
-        boolean discovered,
         Instant discoveredAt
 ) {
-
-    public static ClueDetailResponse from(Clue entity, DiscoveredClue dc) {
+    public static ClueDetailResponse from(DiscoveredClue dc) {
+        Clue entity = dc.getClue();
         return new ClueDetailResponse(
                 entity.getId(),
                 entity.getRoom() != null ? entity.getRoom().getId() : 0,
@@ -36,8 +36,7 @@ public record ClueDetailResponse(
                 entity.getAssistantComment(),
                 entity.getClueDetailJson(),
                 entity.getTransformJson(),
-                dc != null,
-                dc != null ? dc.getDiscoveredAt() : null
+                dc.getDiscoveredAt()
         );
     }
 }

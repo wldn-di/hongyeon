@@ -7,7 +7,10 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface BoardNodeRepository extends JpaRepository<BoardNode, Long> {
 
-    List<BoardNode> findBySession(GameSession session);
+    List<BoardNode> findBySessionId(long sessionId);
 
-    void deleteBySessionAndIdIn(GameSession session, List<Long> ids);
+    void deleteBySessionIdAndIdIn(long sessionId, List<Long> ids);
+
+    void deleteBySessionId(long sessionId);
+
 }
