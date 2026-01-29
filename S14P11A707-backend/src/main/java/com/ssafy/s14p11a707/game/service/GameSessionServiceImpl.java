@@ -44,6 +44,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static com.ssafy.s14p11a707.game.entity.EventLog.EventType.*;
+
 @Slf4j
 @Service
 @Transactional(readOnly = true)
@@ -92,22 +94,42 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .build();
     }
 
+    /**
+     * 게임 시작 및 관리 섹션
+     */
     @Override
     @Transactional
     public GameStartResponse startGame(long scenarioId, OidcUser oidcUser) {
-        log.info("=== 게임 시작 요청 === scenarioId: {}", scenarioId);
-
         User user = getUser(oidcUser);
-        log.info("1. 유저 조회 완료: userId={}", user.getId());
+        Scenario scenario = getValidScenario(scenarioId);
 
-        Scenario scenario = scenarioRepository.findById(scenarioId)
-                .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
-        log.info("2. 시나리오 조회 완료: title={}, status={}", scenario.getTitle(), scenario.getGenerationStatus());
+        Optional<GameSession> existingSession = gameSessionRepository
+                .findByUserIdAndScenarioId(user.getId(), scenarioId);
 
-        if (scenario.getGenerationStatus() != Scenario.GenerationStatus.COMPLETED) {
-            throw new BaseException(ErrorCode.SCENARIO_NOT_READY);
+        if (existingSession.isPresent()) {
+            GameSession session = existingSession.get();
+
+            if (session.getStatus() == Status.PLAYING) {
+                // TODO: 프론트에서 resumeGame API 호출
+                throw new BaseException(ErrorCode.SESSION_ALREADY_EXISTS);
+            } else {
+                // COMPLETED | FAILED -> 세션 초기화
+                resetSession(session);
+                EventLog startLog = saveEventLog(session, GAME_START, null);
+                return buildStartResponse(session, scenario, startLog);
+            }
         }
 
+        // 첫 플레이 - 새 세션 생성
+        GameSession session = createNewSession(user, scenario);
+        EventLog startLog = saveEventLog(session, GAME_START, null);
+        scenario.incrementPlayCount();
+        user.incrementTotalAttempts();
+
+        return buildStartResponse(session, scenario, startLog);
+    }
+
+    private GameSession createNewSession(User user, Scenario scenario) {
         GameSession session = GameSession.builder()
                 .scenario(scenario)
                 .user(user)
@@ -116,47 +138,129 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .visitedFloorsJson(objectMapper.valueToTree(List.of(1)))
                 .health(100)
                 .submitAttempts(0)
-                .firstPlay(false)  // 기본값 false, 첫 클리어 시에만 true로 설정
+                .firstPlay(true)
                 .startedAt(Instant.now())
                 .playTime(0L)
                 .build();
         gameSessionRepository.save(session);
-        log.info("4. 게임 세션 저장 완료: sessionId={}", session.getId());
-
-        EventLog startLog = EventLog.builder()
-                .session(session)
-                .eventType(EventLog.EventType.GAME_START)
-                .eventName("게임 시작")
-                .displayMessage("사건 파일이 열렸습니다.")
-                .build();
-        eventLogRepository.save(startLog);
-        log.info("5. 이벤트 로그 저장 완료");
-
-        // 시나리오 플레이 횟수 증가
-        scenario.incrementPlayCount();
-        log.info("6. 시나리오 플레이 횟수 증가");
-
-        // 유저 시도 횟수 증가
-        user.incrementTotalAttempts();
-        log.info("7. 유저 시도 횟수 증가");
-
-        session.markSaved();
-        log.info("8. 세션 저장 마킹 완료");
-
-        Victim victim = victimRepository.findByScenarioId(scenarioId).orElse(null);
-        log.info("9. 피해자 조회 완료: victim={}", victim != null ? victim.getName() : "null");
-
-        // TODO: 룸 확인
-        Room room = roomRepository.findByScenarioIdAndFloorNumber(scenarioId, 1).orElse(null);
-        log.info("10. 방 조회 완료: room={}", room != null ? room.getRoomName() : "null");
-
-        log.info("11. GameStartResponse 생성 시작");
-        GameStartResponse response = GameStartResponse.from(session, scenario, victim, room, startLog);
-        log.info("12. GameStartResponse 생성 완료");
-
-        return response;
+        return session;
     }
 
+    private void resetSession(GameSession session) {
+        // 연관 데이터 삭제
+        boardConnectionRepository.deleteBySessionId(session.getId());
+        boardNodeRepository.deleteBySessionId(session.getId());
+        discoveredClueRepository.deleteBySessionId(session.getId());
+        chatMessageRepository.deleteBySessionId(session.getId());
+        eventLogRepository.deleteBySessionId(session.getId());
+
+        // 세션 초기화
+        session.reset(objectMapper.valueToTree(List.of(1)));
+    }
+
+    private GameStartResponse buildStartResponse(GameSession session, Scenario scenario, EventLog startLog) {
+        Victim victim = victimRepository.findByScenarioId(scenario.getId()).orElse(null);
+        Room room = roomRepository.findByScenarioIdAndFloorNumber(scenario.getId(), 1).orElse(null);
+        return GameStartResponse.from(session, scenario, victim, room, startLog);
+    }
+
+    // TODO: 프론트 호출 흐름: 세션 기본정보(현) + 인벤토리, 보드, 로그, 채팅내역
+    @Override
+    public GameResumeResponse resumeGame(long sessionId, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+
+        List<Integer> visitedFloors = parseVisitedFloors(session.getVisitedFloorsJson());
+
+        return GameResumeResponse.from(session, visitedFloors);
+    }
+
+    /**
+     * 단서 섹션
+     */
+    @Override
+    @Transactional
+    public DiscoveredClueResponse discoverClue(long sessionId, long clueId, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+        validatePlaying(session);
+
+        Clue clue = clueRepository.findById(clueId)
+                .orElseThrow(() -> new BaseException(ErrorCode.CLUE_NOT_FOUND));
+
+        log.info("clue.getScenario().getId(): {}, session.getScenario().getId(): {}",
+                clue.getScenario().getId(),session.getScenario().getId());
+
+        if (clue.getScenario().getId() != session.getScenario().getId()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+
+        if (clue.getRoom() != null) {
+            int currentFloor = session.getCurrentFloor() != null ? session.getCurrentFloor() : 1;
+            if (clue.getRoom().getFloorNumber() != currentFloor) {
+                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+            }
+        }
+        // 이미 발견된 단서면 기존 정보 반환
+        Optional<DiscoveredClue> existing = discoveredClueRepository.findBySessionIdAndClueId(sessionId, clueId);
+        if (existing.isPresent()) {
+            return DiscoveredClueResponse.from(sessionId, clue, existing.get().getDiscoveredAt());
+        }
+
+        Instant now = Instant.now();
+        saveDiscoveredClue(session,clue,now);
+        saveEventLog(session,CLUE_FOUND, clue.getName());
+        session.updateProgress(session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                session.getHealth(),
+                session.getPlayTime());
+
+        return DiscoveredClueResponse.from(sessionId, clue, now);
+    }
+
+    private void saveDiscoveredClue(GameSession session, Clue clue, Instant now) {
+        DiscoveredClue discoveredClue = DiscoveredClue.builder()
+                .session(session)
+                .clue(clue)
+                .discoveredAt(now)
+                .build();
+        try {
+            discoveredClueRepository.save(discoveredClue);
+        } catch (DataIntegrityViolationException ex) {
+            // 동시 요청으로 이미 저장됐으면 무시
+            if (discoveredClueRepository.findBySessionIdAndClueId(session.getId(), clue.getId()).isEmpty()) {
+                throw ex;
+            }
+        }
+    }
+
+    @Override
+    public ClueListResponse getDiscoveredClues(long sessionId, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+
+        List<DiscoveredClue> discoveredClues = discoveredClueRepository
+                .findBySessionIdWithClue(sessionId);
+
+        return ClueListResponse.from(sessionId, session.getScenario().getId(), discoveredClues);
+    }
+
+    @Override
+    public ClueDetailResponse getDiscoveredClue(long sessionId, long clueId, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+
+        DiscoveredClue discoveredClue = discoveredClueRepository
+                .findBySessionIdAndClueIdWithClue(sessionId, clueId)
+                .orElseThrow(() -> new BaseException(ErrorCode.CLUE_NOT_FOUND));
+
+        return ClueDetailResponse.from(discoveredClue);
+    }
+
+    /**
+     *  채팅/심문 섹션
+     */
+    // TODO : session.updateProgress(), saveEventLog() 필요
     @Override
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
         // 용의자 정보 조회
@@ -286,209 +390,35 @@ public class GameSessionServiceImpl implements GameSessionService {
                 health,
                 revealedClueId
         );
-
     }
-
+    // TODO : 테스트 필요
     @Override
-    public ChatHistoryResponse getChatHistory(long sessionId, long suspectId) {
-        List<ChatMessage> messages = chatMessageRepository.findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
-
-        List<ChatHistoryResponse.Message> messageDtos = messages.stream()
-                .map(msg -> new ChatHistoryResponse.Message(
-                        msg.getRole(),
-                        msg.getContent(),
-                        msg.getCreatedAt(),
-                        msg.isKeyTalk(),
-                        msg.getUsedClueId(),
-                        msg.getResponseLevel()
-                ))
-                .toList();
-
-        return new ChatHistoryResponse(sessionId, suspectId, messageDtos);
-    }
-
-    @Override
-    public InvestigationReportResponse getInvestigationReport(long sessionId, OidcUser oidcUser) {
+    public ChatHistoryResponse getChatHistory(long sessionId, long suspectId, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
-        int cluesCollected = discoveredClueRepository.countBySession(session);
-        int totalInterrogations = chatMessageRepository.countBySessionAndRole(session, "user");
+        List<ChatMessage> messages = chatMessageRepository
+                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
 
-        // TODO: keyTalk은 용의자 심문 API에서 설정됨. 심문 API 담당자가 ChatMessage.keyTalk 플래그 설정 필요
-        List<ChatMessage> keyTalks = chatMessageRepository.findBySessionAndKeyTalkTrueOrderByCreatedAtDesc(session);
-
-        return InvestigationReportResponse.from(session, totalInterrogations, cluesCollected, keyTalks);
+        return ChatHistoryResponse.from(sessionId, suspectId, messages);
     }
 
-    @Override
-    public InvestigationReportResponse getOtherInvestigationReport(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSession(sessionId);
-
-        // 타인 수사보고서 열람: COMPLETED 세션을 가진 유저만 열람 가능
-        if (session.getStatus() != Status.COMPLETED) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
-        boolean hasCompletedSession = gameSessionRepository.existsByScenarioIdAndUserIdAndStatus(
-                session.getScenario().getId(), user.getId(), Status.COMPLETED
-        );
-
-        if (!hasCompletedSession) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
-        int cluesCollected = discoveredClueRepository.countBySession(session);
-        int totalInterrogations = chatMessageRepository.countBySessionAndRole(session, "user");
-        List<ChatMessage> keyTalks = chatMessageRepository.findBySessionAndKeyTalkTrueOrderByCreatedAtDesc(session);
-
-        return InvestigationReportResponse.from(session, totalInterrogations, cluesCollected, keyTalks);
-    }
-
-    @Override
-    @Transactional
-    public DiscoveredClueResponse discoverClue(long sessionId, long clueId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-        validatePlaying(session);
-
-        Clue clue = clueRepository.findById(clueId)
-                .orElseThrow(() -> new BaseException(ErrorCode.CLUE_NOT_FOUND));
-
-        if (clue.getScenario().getId() != session.getScenario().getId()) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
-        }
-
-        if (clue.getRoom() != null) {
-            int currentFloor = session.getCurrentFloor() != null ? session.getCurrentFloor() : 1;
-            if (clue.getRoom().getFloorNumber() != currentFloor) {
-                throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
-            }
-        }
-
-        DiscoveredClue existingDiscovered = discoveredClueRepository
-                .findBySessionIdAndClueId(sessionId, clueId)
-                .orElse(null);
-        if (existingDiscovered != null) {
-            return DiscoveredClueResponse.from(sessionId, clue, existingDiscovered.getDiscoveredAt());
-        }
-
-        Instant now = Instant.now();
-        DiscoveredClue discoveredClue = DiscoveredClue.builder()
-                .session(session)
-                .clue(clue)
-                .discoveredAt(now)
-                .build();
-        try {
-            discoveredClueRepository.save(discoveredClue);
-        } catch (DataIntegrityViolationException ex) {
-            DiscoveredClue raced = discoveredClueRepository
-                    .findBySessionIdAndClueId(sessionId, clueId)
-                    .orElse(null);
-            if (raced != null) {
-                return DiscoveredClueResponse.from(sessionId, clue, raced.getDiscoveredAt());
-            }
-            throw ex;
-        }
-
-        EventLog log = EventLog.builder()
-                .session(session)
-                .eventType(EventLog.EventType.CLUE_FOUND)
-                .eventName("단서 발견")
-                .displayMessage(clue.getName() + " 단서를 발견했습니다.")
-                .build();
-        eventLogRepository.save(log);
-
-        session.markSaved();
-
-        return DiscoveredClueResponse.from(sessionId, clue, now);
-    }
-
-    @Override
-    public ClueListResponse getClues(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-        long scenarioId = session.getScenario().getId();
-
-        List<Clue> allClues = clueRepository.findByScenarioIdOrderByRoomFloorNumberAsc(scenarioId);
-        Map<Long, DiscoveredClue> discoveredMap = discoveredClueRepository.findBySessionOrderByDiscoveredAtAsc(session)
-                .stream()
-                .collect(Collectors.toMap(dc -> dc.getClue().getId(), dc -> dc));
-
-        return ClueListResponse.from(sessionId, scenarioId, allClues, discoveredMap);
-    }
-
-    @Override
-    public ClueDetailResponse getClue(long sessionId, long clueId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-
-        Clue clue = clueRepository.findById(clueId)
-                .orElseThrow(() -> new BaseException(ErrorCode.CLUE_NOT_FOUND));
-
-        DiscoveredClue discoveredClue = discoveredClueRepository
-                .findBySessionIdAndClueId(sessionId, clueId)
-                .orElse(null);
-
-        if (discoveredClue == null) {
-            return new ClueDetailResponse(
-                    clue.getId(),
-                    clue.getRoom() != null ? clue.getRoom().getId() : 0,
-                    clue.getRoom() != null ? clue.getRoom().getFloorNumber() : 0,
-                    clue.getName(),
-                    clue.getImportance().name(),
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
-                    false,
-                    null
-            );
-        }
-
-        return ClueDetailResponse.from(clue, discoveredClue);
-    }
-
+    /**
+     * 수사로그 섹션
+     */
+    // TODO : 테스트 필요
     @Override
     public EventLogListResponse getLogs(long sessionId, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-        List<EventLog> logs = eventLogRepository.findBySessionOrderByCreatedAtAsc(session);
+
+        List<EventLog> logs = eventLogRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
         return EventLogListResponse.from(sessionId, logs);
     }
-    // TODO : 확인필요
-    @Override
-    @Transactional
-    public GameSaveResponse saveGame(long sessionId, GameSaveRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
-        JsonNode visitedFloorsJson = objectMapper.valueToTree(
-                request.visitedFloors() != null ? request.visitedFloors() : List.of()
-        );
-
-        session.updateProgress(request.currentFloor(), visitedFloorsJson, request.health(), request.playTime());
-
-        return GameSaveResponse.from(session);
-    }
-
-    @Override
-    public GameResumeResponse resumeGame(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-
-        List<DiscoveredClue> discoveredClues = discoveredClueRepository.findBySessionOrderByDiscoveredAtAsc(session);
-        List<BoardNode> nodes = boardNodeRepository.findBySession(session);
-        List<BoardConnection> connections = boardConnectionRepository.findBySession(session);
-        int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
-        List<Integer> visitedFloors = parseVisitedFloors(session.getVisitedFloorsJson());
-        List<EventLog> eventLogs = eventLogRepository.findBySessionOrderByCreatedAtAsc(session);
-
-        return GameResumeResponse.from(session, visitedFloors, discoveredClues, nodes, connections, redCount, eventLogs);
-    }
-
+    /**
+     * 층 이동 섹션
+     */
     @Override
     @Transactional
     public FloorMoveResponse moveFloor(long sessionId, FloorMoveRequest request, OidcUser oidcUser) {
@@ -518,35 +448,31 @@ public class GameSessionServiceImpl implements GameSessionService {
         }
 
         session.moveFloor(targetFloor, objectMapper.valueToTree(visitedFloors));
-        session.markSaved();
 
         Room room = roomRepository.findByScenarioIdAndFloorNumber(scenario.getId(), targetFloor)
                 .orElseThrow(() -> new BaseException(ErrorCode.ROOM_NOT_FOUND));
 
         EventLog newLog = null;
         if (isFirstVisit) {
-            newLog = EventLog.builder()
-                    .session(session)
-                    .eventType(EventLog.EventType.FLOOR_MOVED)
-                    .eventName("층 이동")
-                    .displayMessage(targetFloor + "층으로 이동했습니다.")
-                    .build();
-            eventLogRepository.save(newLog);
+            saveEventLog(session,FLOOR_MOVED, String.valueOf(targetFloor));
         }
+        session.updateProgress(session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                session.getHealth(),
+                session.getPlayTime());
 
         return FloorMoveResponse.from(sessionId, targetFloor, isFirstVisit, room, newLog);
     }
 
+    /**
+     * 추리보드 섹션
+     */
     @Override
     public BoardResponse getBoard(long sessionId, OidcUser oidcUser) {
         User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+        getSessionWithOwnershipValidation(sessionId, user);
 
-        List<BoardNode> nodes = boardNodeRepository.findBySession(session);
-        List<BoardConnection> connections = boardConnectionRepository.findBySession(session);
-        int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
-
-        return BoardResponse.from(sessionId, nodes, connections, redCount);
+        return buildBoardResponse(sessionId);
     }
 
     @Override
@@ -554,14 +480,7 @@ public class GameSessionServiceImpl implements GameSessionService {
     public BoardResponse addBoardNode(long sessionId, BoardNodeAddRequest request, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-
-        ItemType itemType = ItemType.MEMO;
-        if (request.type() != null && !request.type().isBlank()) {
-            try {
-                itemType = ItemType.valueOf(request.type().toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
+        ItemType itemType = parseItemType(request.type());
 
         BoardNode node = BoardNode.builder()
                 .session(session)
@@ -572,10 +491,12 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .positionY(request.y())
                 .build();
         boardNodeRepository.save(node);
+        session.updateProgress(session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                session.getHealth(),
+                session.getPlayTime());
 
-        session.markSaved();
-
-        return getBoard(sessionId, oidcUser);
+        return buildBoardResponse(sessionId);
     }
 
     @Override
@@ -584,17 +505,14 @@ public class GameSessionServiceImpl implements GameSessionService {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
-        BoardNode node = boardNodeRepository.findById(request.nodeId())
-                .orElseThrow(() -> new BaseException(ErrorCode.BOARD_NODE_NOT_FOUND));
-
-        if (node.getSession().getId() != session.getId()) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
+        BoardNode node = getBoardNodeWithValidation(session, request.nodeId());
         node.updatePosition(request.x(), request.y());
-        session.markSaved();
+        session.updateProgress(session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                session.getHealth(),
+                session.getPlayTime());
 
-        return getBoard(sessionId, oidcUser);
+        return buildBoardResponse(sessionId);
     }
 
     @Override
@@ -603,17 +521,14 @@ public class GameSessionServiceImpl implements GameSessionService {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
-        BoardNode node = boardNodeRepository.findById(nodeId)
-                .orElseThrow(() -> new BaseException(ErrorCode.BOARD_NODE_NOT_FOUND));
-
-        if (node.getSession().getId() != session.getId()) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
+        BoardNode node = getBoardNodeWithValidation(session, nodeId);
         node.updateMemoContent(request.memoContent());
-        session.markSaved();
+        session.updateProgress(session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                session.getHealth(),
+                session.getPlayTime());
 
-        return getBoard(sessionId, oidcUser);
+        return buildBoardResponse(sessionId);
     }
 
     @Override
@@ -622,27 +537,10 @@ public class GameSessionServiceImpl implements GameSessionService {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
-        BoardNode fromNode = boardNodeRepository.findById(request.fromNodeId())
-                .orElseThrow(() -> new BaseException(ErrorCode.BOARD_NODE_NOT_FOUND));
-        BoardNode toNode = boardNodeRepository.findById(request.toNodeId())
-                .orElseThrow(() -> new BaseException(ErrorCode.BOARD_NODE_NOT_FOUND));
-
-        if (fromNode.getSession().getId() != session.getId() || toNode.getSession().getId() != session.getId()) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
-        if (boardConnectionRepository.existsBySessionAndFromNodeAndToNode(session, fromNode, toNode) ||
-            boardConnectionRepository.existsBySessionAndFromNodeAndToNode(session, toNode, fromNode)) {
-            throw new BaseException(ErrorCode.BOARD_CONNECTION_ALREADY_EXISTS);
-        }
-
-        ConnectionType connectionType = ConnectionType.RED;
-        if (request.type() != null && !request.type().isBlank()) {
-            try {
-                connectionType = ConnectionType.valueOf(request.type().toUpperCase(Locale.ROOT));
-            } catch (IllegalArgumentException ignored) {
-            }
-        }
+        BoardNode fromNode = getBoardNodeWithValidation(session, request.fromNodeId());
+        BoardNode toNode = getBoardNodeWithValidation(session, request.toNodeId());
+        validateConnectionNotExists(session, fromNode, toNode);
+        ConnectionType connectionType = parseConnectionType(request.type());
 
         BoardConnection connection = BoardConnection.builder()
                 .session(session)
@@ -652,9 +550,12 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .build();
         boardConnectionRepository.save(connection);
 
-        session.markSaved();
+        session.updateProgress(session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                session.getHealth(),
+                session.getPlayTime());
 
-        return getBoard(sessionId, oidcUser);
+        return buildBoardResponse(sessionId);
     }
 
     @Override
@@ -664,82 +565,119 @@ public class GameSessionServiceImpl implements GameSessionService {
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
         if (request.connectionIds() != null && !request.connectionIds().isEmpty()) {
-            boardConnectionRepository.deleteBySessionAndIdIn(session, request.connectionIds());
+            boardConnectionRepository.deleteBySessionIdAndIdIn(sessionId, request.connectionIds());
         }
 
         if (request.nodeIds() != null && !request.nodeIds().isEmpty()) {
-            boardNodeRepository.deleteBySessionAndIdIn(session, request.nodeIds());
+            boardNodeRepository.deleteBySessionIdAndIdIn(sessionId, request.nodeIds());
         }
 
-        session.markSaved();
+        session.updateProgress(session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                session.getHealth(),
+                session.getPlayTime());
 
-        return getBoard(sessionId, oidcUser);
+        return buildBoardResponse(sessionId);
     }
 
-    private User getUser(OidcUser oidcUser) {
-        if (oidcUser == null) {
-            throw new BaseException(ErrorCode.UNAUTHORIZED);
-        }
-        String googleId = oidcUser.getSubject();
-        return userRepository.findByGoogleId(googleId)
-                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
+
+    private BoardResponse buildBoardResponse(long sessionId) {
+        List<BoardNode> nodes = boardNodeRepository.findBySessionId(sessionId);
+        List<BoardConnection> connections = boardConnectionRepository.findBySessionIdWithNodes(sessionId);
+
+        int redCount = (int) connections.stream()
+                .filter(c -> c.getConnectionType() == ConnectionType.RED)
+                .count();
+
+        return BoardResponse.from(sessionId, nodes, connections, redCount);
     }
 
-    private GameSession getSession(long sessionId) {
-        return gameSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
-    }
+    private BoardNode getBoardNodeWithValidation(GameSession session, long nodeId) {
+        BoardNode node = boardNodeRepository.findById(nodeId)
+                .orElseThrow(() -> new BaseException(ErrorCode.BOARD_NODE_NOT_FOUND));
 
-    private GameSession getSessionWithOwnershipValidation(long sessionId, User user) {
-        GameSession session = getSession(sessionId);
-        if (session.getUser().getId() != user.getId()) {
+        if (node.getSession().getId() != session.getId()) {
             throw new BaseException(ErrorCode.ACCESS_DENIED);
         }
-        return session;
+        return node;
     }
 
-    private void validatePlaying(GameSession session) {
-        if (session.getStatus() != Status.PLAYING) {
-            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+    private void validateConnectionNotExists(GameSession session, BoardNode fromNode, BoardNode toNode) {
+        if (boardConnectionRepository.existsBySessionIdAndFromNodeIdAndToNodeId(session.getId(), fromNode.getId(), toNode.getId()) ||
+                boardConnectionRepository.existsBySessionIdAndFromNodeIdAndToNodeId(session.getId(), toNode.getId(), fromNode.getId())) {
+            throw new BaseException(ErrorCode.BOARD_CONNECTION_ALREADY_EXISTS);
         }
     }
 
-    private List<Integer> parseVisitedFloors(JsonNode json) {
-        if (json == null || json.isNull()) {
-            return new ArrayList<>();
+    private ItemType parseItemType(String type) {
+        if (type == null || type.isBlank()) {
+            return ItemType.MEMO;
         }
-        List<Integer> floors = new ArrayList<>();
-        if (json.isArray()) {
-            for (JsonNode node : json) {
-                floors.add(node.asInt());
-            }
+        try {
+            return ItemType.valueOf(type.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return ItemType.MEMO;
         }
-        return floors;
     }
 
-    // TODO: 점수 계산 로직 다시 짤 필요 있음
-    private int calculateScore(GameSession session) {
-        // 100점 만점 기준
-        int base = 50;
-        int healthScore = (session.getHealth() != null ? session.getHealth() : 0) / 5; // 최대 20점
-        int clueScore = Math.min(20, discoveredClueRepository.countBySession(session) * 2); // 최대 20점
-        int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
-        int redScore = Math.min(10, redCount); // 최대 10점
-        int attemptPenalty = (session.getSubmitAttempts() != null ? session.getSubmitAttempts() : 0) * 10;
-        long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
-        int timePenalty = (int) Math.min(10, playTime / 300); // 5분마다 1점 감점, 최대 10점
-
-        int score = base + healthScore + clueScore + redScore - attemptPenalty - timePenalty;
-        return Math.max(0, Math.min(100, score));
+    private ConnectionType parseConnectionType(String type) {
+        if (type == null || type.isBlank()) {
+            return ConnectionType.RED;
+        }
+        try {
+            return ConnectionType.valueOf(type.toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException e) {
+            return ConnectionType.RED;
+        }
     }
 
-    private RankGrade calculateRankGrade(int score) {
-        if (score >= 95) return RankGrade.S;
-        if (score >= 85) return RankGrade.A;
-        if (score >= 70) return RankGrade.B;
-        if (score >= 50) return RankGrade.C;
-        return RankGrade.F;
+    /**
+     * 수사보고서 섹션
+     */
+    // TODO: 테스트 필요
+    @Override
+    public InvestigationReportResponse getInvestigationReport(long sessionId, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+
+        int cluesCollected = discoveredClueRepository.countBySession(session);
+        int totalInterrogations = chatMessageRepository.countBySessionAndRole(session, "user");
+
+        // TODO: keyTalk은 용의자 심문 API에서 설정됨. 심문 API 담당자가 ChatMessage.keyTalk 플래그 설정 필요
+        List<ChatMessage> keyTalks = chatMessageRepository.findBySessionIdAndKeyTalkTrueOrderByCreatedAtDesc(sessionId);
+
+        return InvestigationReportResponse.from(session, totalInterrogations, cluesCollected, keyTalks);
     }
+
+    // TODO: 테스트 필요
+    @Override
+    public InvestigationReportResponse getOtherInvestigationReport(long sessionId, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSession(sessionId);
+
+        // 타인 수사보고서 열람: COMPLETED 세션을 가진 유저만 열람 가능
+        if (session.getStatus() != Status.COMPLETED) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED);
+        }
+
+        boolean hasCompletedSession = gameSessionRepository.existsByScenarioIdAndUserIdAndStatus(
+                session.getScenario().getId(), user.getId(), Status.COMPLETED
+        );
+
+        if (!hasCompletedSession) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED);
+        }
+
+        int cluesCollected = discoveredClueRepository.countBySession(session);
+        int totalInterrogations = chatMessageRepository.countBySessionAndRole(session, "user");
+        List<ChatMessage> keyTalks = chatMessageRepository.findBySessionIdAndKeyTalkTrueOrderByCreatedAtDesc(sessionId);
+
+        return InvestigationReportResponse.from(session, totalInterrogations, cluesCollected, keyTalks);
+    }
+
+    /**
+     * 제출 세션
+     */
 
     @Override
     @Transactional
@@ -902,6 +840,131 @@ public class GameSessionServiceImpl implements GameSessionService {
                 isFirstClear,
                 new SubmitResponse.Evaluation(culpritCorrect, weaponCorrect, locationCorrect, motiveSimilarityPercent, aiComment)
         );
+    }
+
+    /**
+     * private 헬프 메서드 섹션
+     */
+    private User getUser(OidcUser oidcUser) {
+        if (oidcUser == null) {
+            throw new BaseException(ErrorCode.UNAUTHORIZED);
+        }
+        String googleId = oidcUser.getSubject();
+        return userRepository.findByGoogleId(googleId)
+                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
+    }
+
+    private GameSession getSession(long sessionId) {
+        return gameSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
+    }
+
+    private GameSession getSessionWithOwnershipValidation(long sessionId, User user) {
+        GameSession session = getSession(sessionId);
+        if (session.getUser().getId() != user.getId()) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED);
+        }
+        return session;
+    }
+
+    private void validatePlaying(GameSession session) {
+        if (session.getStatus() != Status.PLAYING) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
+    }
+
+    private List<Integer> parseVisitedFloors(JsonNode json) {
+        if (json == null || json.isNull()) {
+            return new ArrayList<>();
+        }
+        List<Integer> floors = new ArrayList<>();
+        if (json.isArray()) {
+            for (JsonNode node : json) {
+                floors.add(node.asInt());
+            }
+        }
+        return floors;
+    }
+
+    private EventLog saveEventLog(GameSession session, EventLog.EventType type, String targetName) {
+        String eventName;
+        String displayMessage;
+
+        switch (type) {
+            case GAME_START -> {
+                eventName = "게임 시작";
+                displayMessage = "사건 파일이 열렸습니다.";
+            }
+            case GAME_END -> {
+                eventName = "게임 종료";
+                displayMessage = "수사를 종료합니다.";
+            }
+            case FLOOR_MOVED -> {
+                eventName = "층 이동";
+                displayMessage = targetName + "층으로 이동했습니다.";
+            }
+            case CLUE_FOUND -> {
+                eventName = "단서 발견";
+                displayMessage = targetName + " 단서를 발견했습니다.";
+            }
+            case CHAT_STARTED -> {
+                eventName = "용의자 심문";
+                displayMessage = targetName + "에 대한 심문을 시작합니다.";
+            }
+            case SUBMIT_ATTEMPT -> {
+                eventName = "최종 제출";
+                displayMessage = targetName + "번째 최종 결과를 제출합니다.";
+            }
+
+                default -> {
+                eventName = type.name();
+                displayMessage = "";
+            }
+        }
+
+        EventLog eventLog = EventLog.builder()
+                .session(session)
+                .eventType(type)
+                .eventName(eventName)
+                .displayMessage(displayMessage)
+                .build();
+        eventLogRepository.save(eventLog);
+
+        return eventLog;
+    }
+
+    // TODO: 점수 계산 로직 다시 짤 필요 있음
+    private int calculateScore(GameSession session) {
+        // 100점 만점 기준
+        int base = 50;
+        int healthScore = (session.getHealth() != null ? session.getHealth() : 0) / 5; // 최대 20점
+        int clueScore = Math.min(20, discoveredClueRepository.countBySession(session) * 2); // 최대 20점
+        int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
+        int redScore = Math.min(10, redCount); // 최대 10점
+        int attemptPenalty = (session.getSubmitAttempts() != null ? session.getSubmitAttempts() : 0) * 10;
+        long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
+        int timePenalty = (int) Math.min(10, playTime / 300); // 5분마다 1점 감점, 최대 10점
+
+        int score = base + healthScore + clueScore + redScore - attemptPenalty - timePenalty;
+        return Math.max(0, Math.min(100, score));
+    }
+
+    private RankGrade calculateRankGrade(int score) {
+        if (score >= 95) return RankGrade.S;
+        if (score >= 85) return RankGrade.A;
+        if (score >= 70) return RankGrade.B;
+        if (score >= 50) return RankGrade.C;
+        return RankGrade.F;
+    }
+
+    private Scenario getValidScenario(long scenarioId) {
+        Scenario scenario = scenarioRepository.findById(scenarioId)
+                .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
+
+        if (scenario.getGenerationStatus() != Scenario.GenerationStatus.COMPLETED) {
+            throw new BaseException(ErrorCode.SCENARIO_NOT_READY);
+        }
+        return scenario;
     }
 
     private String buildAiComment(boolean culpritCorrect, boolean weaponCorrect,

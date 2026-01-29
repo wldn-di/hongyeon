@@ -4,12 +4,22 @@ import com.ssafy.s14p11a707.game.entity.ChatMessage;
 import com.ssafy.s14p11a707.game.entity.GameSession;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> {
 
-    List<ChatMessage> findBySessionAndKeyTalkTrueOrderByCreatedAtDesc(GameSession session);
+    List<ChatMessage> findBySessionIdAndKeyTalkTrueOrderByCreatedAtDesc(long sessionId);
 
     int countBySessionAndRole(GameSession session, String role);
 
     List<ChatMessage> findBySessionIdAndSuspectIdOrderByCreatedAtAsc(long sessionId, long suspectId);
+
+    void deleteBySessionId(long sessionId);
+
+    @Query("SELECT cm FROM ChatMessage cm " +
+            "LEFT JOIN FETCH cm.suspect " +
+            "WHERE cm.session.id = :sessionId " +
+            "ORDER BY cm.createdAt ASC")
+    List<ChatMessage> findBySessionIdWithSuspect(@Param("sessionId") Long sessionId);
 }

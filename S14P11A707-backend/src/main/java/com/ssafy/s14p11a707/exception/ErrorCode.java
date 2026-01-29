@@ -16,7 +16,7 @@ public enum ErrorCode {
     SCENARIO_NOT_READY(HttpStatus.BAD_REQUEST, "SCENARIO_002", "시나리오가 아직 준비되지 않았습니다."),
 
     SESSION_NOT_FOUND(HttpStatus.NOT_FOUND, "SESSION_001", "게임 세션을 찾을 수 없습니다."),
-    SESSION_ALREADY_PLAYING(HttpStatus.CONFLICT, "SESSION_002", "이미 진행 중인 게임이 있습니다."),
+    SESSION_ALREADY_EXISTS(HttpStatus.CONFLICT, "SESSION_002", "이미 진행 중인 게임이 있습니다."),
     SESSION_ALREADY_COMPLETED(HttpStatus.CONFLICT, "SESSION_003", "이미 완료한 시나리오입니다. 수사보고서만 열람 가능합니다."),
 
     CLUE_NOT_FOUND(HttpStatus.NOT_FOUND, "CLUE_001", "단서를 찾을 수 없습니다."),

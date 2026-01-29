@@ -9,7 +9,11 @@ import com.ssafy.s14p11a707.common.dto.DebugResponse.SuspectDto;
 import com.ssafy.s14p11a707.common.dto.DebugResponse.VictimDto;
 import com.ssafy.s14p11a707.exception.BaseException;
 import com.ssafy.s14p11a707.exception.ErrorCode;
+import com.ssafy.s14p11a707.game.dto.ClueListResponse;
+import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
+import com.ssafy.s14p11a707.game.repository.DiscoveredClueRepository;
 import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
+import com.ssafy.s14p11a707.game.service.GameSessionService;
 import com.ssafy.s14p11a707.scenario.repository.ClueRepository;
 import com.ssafy.s14p11a707.scenario.repository.RoomRepository;
 import com.ssafy.s14p11a707.scenario.repository.ScenarioRepository;
@@ -17,6 +21,8 @@ import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
 import com.ssafy.s14p11a707.scenario.repository.VictimRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -37,6 +43,8 @@ public class DebugApi implements DebugApiDoc {
     private final ClueRepository clueRepository;
     private final RoomRepository roomRepository;
     private final GameSessionRepository gameSessionRepository;
+    private final DiscoveredClueRepository discoveredClueRepository;
+    private final GameSessionService gameSessionService;
 
     @GetMapping("/scenarios/{scenarioId}")
     @Override
@@ -51,6 +59,14 @@ public class DebugApi implements DebugApiDoc {
     public ResponseEntity<List<ScenarioDto>> getScenariosByUser(@PathVariable long userId) {
         var scenarios = scenarioRepository.findByCreatorId(userId);
         return ResponseEntity.ok(scenarios.stream().map(ScenarioDto::from).toList());
+    }
+
+    @GetMapping("/sessions/{sessionId}/discoveredclues")
+    @Override
+    public ResponseEntity<ClueListResponse> getDiscoveredCluesBySession(
+            @PathVariable long sessionId,
+            @AuthenticationPrincipal OidcUser oidcUser){
+        return ResponseEntity.ok(gameSessionService.getDiscoveredClues(sessionId, oidcUser));
     }
 
     @GetMapping("/scenarios/{scenarioId}/victim")

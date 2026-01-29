@@ -122,24 +122,26 @@ public class GameSession extends BaseEntity {
         this.expiresAt = expiresAt;
     }
 
+    // 중간저장
     public void updateProgress(int currentFloor, JsonNode visitedFloorsJson, int health, long playTime) {
         this.currentFloor = currentFloor;
         this.visitedFloorsJson = visitedFloorsJson;
         this.health = health;
         this.playTime = playTime;
-        markSaved();
+        this.lastSavedAt = Instant.now();
+        this.expiresAt = this.lastSavedAt.plusSeconds(7 * 24 * 60 * 60); // 7일 후 만료
     }
-
+    // 층이동
     public void moveFloor(int floor, JsonNode visitedFloorsJson) {
         this.currentFloor = floor;
         this.visitedFloorsJson = visitedFloorsJson;
     }
-
+    // 게임실패처리
     public void failGame() {
         this.status = Status.FAILED;
         this.completedAt = Instant.now();
     }
-
+    // 게임성공처리
     public void completeGame(int finalScore, RankGrade rankGrade, boolean isFirstPlay) {
         this.status = Status.COMPLETED;
         this.finalScore = finalScore;
@@ -148,14 +150,28 @@ public class GameSession extends BaseEntity {
         this.completedAt = Instant.now();
         this.expiresAt = null; // 완료된 세션은 만료되지 않음
     }
-
+    // 최종제출횟수 증가
     public void incrementSubmitAttempts() {
         this.submitAttempts = (this.submitAttempts == null ? 0 : this.submitAttempts) + 1;
     }
 
-    public void markSaved() {
-        this.lastSavedAt = Instant.now();
-        this.expiresAt = this.lastSavedAt.plusSeconds(7 * 24 * 60 * 60); // 7일 후 만료
+    // 세션 초기화
+    public void reset(JsonNode initialVisitedFloors) {
+        this.status = Status.PLAYING;
+        this.currentFloor = 1;
+        this.visitedFloorsJson = initialVisitedFloors;
+        this.health = 100;
+        this.submitAttempts = 0;
+        this.firstPlay = false;
+        this.finalScore = null;
+        this.rankGrade = null;
+        this.resultReportJson = null;
+        this.submittedMotiveEmbedding = null;
+        this.startedAt = Instant.now();
+        this.completedAt = null;
+        this.playTime = 0L;
+        this.lastSavedAt = null;
+        this.expiresAt = null;
     }
 
     public enum Status {

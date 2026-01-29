@@ -1,8 +1,13 @@
 package com.ssafy.s14p11a707.game.dto;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.ssafy.s14p11a707.game.entity.DiscoveredClue;
+import com.ssafy.s14p11a707.game.entity.EventLog;
 import com.ssafy.s14p11a707.game.entity.GameSession;
+import com.ssafy.s14p11a707.scenario.entity.Clue;
 import com.ssafy.s14p11a707.scenario.entity.Room;
+import com.ssafy.s14p11a707.scenario.entity.Scenario;
+import com.ssafy.s14p11a707.scenario.entity.Victim;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.time.Instant;
@@ -13,18 +18,18 @@ public record GameStartResponse(
         long userId,
         String status,
         Instant startedAt,
-        Scenario scenario,
-        Victim victim,
+        ScenarioItem scenario,
+        VictimItem victim,
         CurrentRoom currentRoom,
-        EventLog eventLog
+        EventLogItem eventLog
 ) {
 
     public static GameStartResponse from(
             GameSession session,
-            com.ssafy.s14p11a707.scenario.entity.Scenario scenarioEntity,
-            com.ssafy.s14p11a707.scenario.entity.Victim victimEntity,
+            Scenario scenarioEntity,
+            Victim victimEntity,
             Room roomEntity,
-            com.ssafy.s14p11a707.game.entity.EventLog startLog
+            EventLog startLog
     ) {
         return new GameStartResponse(
                 session.getId(),
@@ -32,23 +37,23 @@ public record GameStartResponse(
                 session.getUser().getId(),
                 session.getStatus().name(),
                 session.getStartedAt(),
-                Scenario.from(scenarioEntity),
-                victimEntity != null ? Victim.from(victimEntity) : null,
+                ScenarioItem.from(scenarioEntity),
+                victimEntity != null ? VictimItem.from(victimEntity) : null,
                 roomEntity != null ? CurrentRoom.from(roomEntity) : null,
-                startLog != null ? EventLog.from(startLog) : null
+                startLog != null ? EventLogItem.from(startLog) : null
         );
     }
 
-    public record Scenario(
+    public record ScenarioItem(
             String title,
             String opening
     ) {
-        public static Scenario from(com.ssafy.s14p11a707.scenario.entity.Scenario entity) {
-            return new Scenario(entity.getTitle(), entity.getSynopsis());
+        public static ScenarioItem from(Scenario entity) {
+            return new ScenarioItem(entity.getTitle(), entity.getSynopsis());
         }
     }
 
-    public record Victim(
+    public record VictimItem(
             String name,
             int age,
             String gender,
@@ -58,8 +63,8 @@ public record GameStartResponse(
             String causeOfDeath,
             String portraitUrl
     ) {
-        public static Victim from(com.ssafy.s14p11a707.scenario.entity.Victim entity) {
-            return new Victim(
+        public static VictimItem from(Victim entity) {
+            return new VictimItem(
                     entity.getName(),
                     entity.getAge() != null ? entity.getAge() : 0,
                     entity.getGender(),
@@ -89,13 +94,13 @@ public record GameStartResponse(
         }
     }
 
-    public record EventLog(
+    public record EventLogItem(
             String type,
             String message,
             Instant createdAt
     ) {
-        public static EventLog from(com.ssafy.s14p11a707.game.entity.EventLog entity) {
-            return new EventLog(
+        public static EventLogItem from(EventLog entity) {
+            return new EventLogItem(
                     entity.getEventType().name(),
                     entity.getDisplayMessage(),
                     entity.getCreatedAt()

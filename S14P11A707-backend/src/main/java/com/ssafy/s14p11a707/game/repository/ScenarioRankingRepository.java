@@ -8,5 +8,7 @@ import java.util.List;
 public interface ScenarioRankingRepository extends JpaRepository<ScenarioRanking, Long> {
 
     List<ScenarioRanking> findByScenarioIdOrderByScoreDescClearTimeAsc(long scenarioId);
+
+    void deleteBySessionId(long sessionId);
 }
 

@@ -26,4 +26,8 @@ public interface GameSessionRepository extends JpaRepository<GameSession, Long> 
 
     // 유저 ID로 세션 목록 조회
     List<GameSession> findByUserId(long userId);
+
+    // GameSessionRepository
+    Optional<GameSession> findByUserIdAndScenarioId(long userId, long scenarioId);
+
 }

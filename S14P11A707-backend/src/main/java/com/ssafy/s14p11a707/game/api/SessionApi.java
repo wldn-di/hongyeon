@@ -13,8 +13,6 @@ import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
 import com.ssafy.s14p11a707.game.dto.FloorMoveRequest;
 import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
 import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
-import com.ssafy.s14p11a707.game.dto.GameSaveRequest;
-import com.ssafy.s14p11a707.game.dto.GameSaveResponse;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
 import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
 import com.ssafy.s14p11a707.game.dto.SubmitRequest;
@@ -34,7 +32,6 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -87,7 +84,7 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getClues(sessionId, oidcUser));
+        return ResponseEntity.ok(gameSessionService.getDiscoveredClues(sessionId, oidcUser));
     }
 
     @GetMapping("/{sessionId}/clues/{clueId}")
@@ -97,7 +94,7 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long clueId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getClue(sessionId, clueId, oidcUser));
+        return ResponseEntity.ok(gameSessionService.getDiscoveredClue(sessionId, clueId, oidcUser));
     }
 
     @GetMapping("/{sessionId}/logs")
@@ -107,16 +104,6 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         return ResponseEntity.ok(gameSessionService.getLogs(sessionId, oidcUser));
-    }
-
-    @PatchMapping("/{sessionId}")
-    @Override
-    public ResponseEntity<GameSaveResponse> saveGame(
-            @PathVariable long sessionId,
-            @RequestBody GameSaveRequest request,
-            @AuthenticationPrincipal OidcUser oidcUser
-    ) {
-        return ResponseEntity.ok(gameSessionService.saveGame(sessionId, request, oidcUser));
     }
 
     @GetMapping("/{sessionId}/resume")
@@ -222,8 +209,9 @@ public class SessionApi implements SessionApiDoc {
     @Override
     public ResponseEntity<ChatHistoryResponse> getChatHistory(
             @PathVariable long sessionId,
-            @PathVariable long suspectId
+            @PathVariable long suspectId,
+            @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getChatHistory(sessionId, suspectId));
+        return ResponseEntity.ok(gameSessionService.getChatHistory(sessionId, suspectId, oidcUser));
     }
 }

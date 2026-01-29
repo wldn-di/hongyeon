@@ -7,5 +7,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface EventLogRepository extends JpaRepository<EventLog, Long> {
 
-    List<EventLog> findBySessionOrderByCreatedAtAsc(GameSession session);
+    List<EventLog> findBySessionIdOrderByCreatedAtAsc(Long sessionId);
+
+    void deleteBySessionId(Long sessionId);
+
 }

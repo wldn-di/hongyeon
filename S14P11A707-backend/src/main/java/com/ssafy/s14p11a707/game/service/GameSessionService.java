@@ -13,13 +13,11 @@ public interface GameSessionService {
 
     DiscoveredClueResponse discoverClue(long sessionId, long clueId, OidcUser oidcUser);
 
-    ClueListResponse getClues(long sessionId, OidcUser oidcUser);
+    ClueListResponse getDiscoveredClues(long sessionId, OidcUser oidcUser);
 
-    ClueDetailResponse getClue(long sessionId, long clueId, OidcUser oidcUser);
+    ClueDetailResponse getDiscoveredClue(long sessionId, long clueId, OidcUser oidcUser);
 
     EventLogListResponse getLogs(long sessionId, OidcUser oidcUser);
-
-    GameSaveResponse saveGame(long sessionId, GameSaveRequest request, OidcUser oidcUser);
 
     GameResumeResponse resumeGame(long sessionId, OidcUser oidcUser);
 
@@ -39,7 +37,7 @@ public interface GameSessionService {
 
     SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
 
-    ChatHistoryResponse getChatHistory(long sessionId, long suspectId);
+    ChatHistoryResponse getChatHistory(long sessionId, long suspectId, OidcUser oidcUser);
 
     SubmitResponse submit(long sessionId, SubmitRequest request, OidcUser oidcUser);
 }
