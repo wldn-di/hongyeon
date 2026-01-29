@@ -159,6 +159,13 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     @Override
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
+        // GameSession 조회하여 시나리오 정보 확인
+        GameSession session = gameSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+
+        // 시나리오 정보를 문자열로 빌드
+        String scenarioContext = buildScenarioContext(session.getScenario());
+
         // 용의자 정보 조회
         Suspect suspect = suspectRepository.findById(suspectId)
                 .orElseThrow(() -> new IllegalArgumentException("Suspect not found: " + suspectId));
@@ -179,19 +186,19 @@ public class GameSessionServiceImpl implements GameSessionService {
                 1. 소유권의 인정과 기만:
                    - 본인의 소유가 확실한 물건(이름, 흔적 등)이 제시되면 무조건 부인하여 대화를 단절시키지 마세요.
                    - 대신 "제 것이 맞네요"라고 인정하되, 그것이 왜 사건 현장이나 의심스러운 장소에서 발견되었는지에 대해 '사건과 무관한 그럴싸한 가짜 서사'를 즉흥적으로 만들어 답변하세요. (예: 잃어버렸다, 빌려줬다, 사건 전 방문했다 등)
-                
+
                 2. 논리적 허점의 배치:
-                   - 변명을 할 때는 타임라인이나 다른 증거와 대조했을 때 찾아낼 수 있는 '미세한 모순'을 포함하세요. 
+                   - 변명을 할 때는 타임라인이나 다른 증거와 대조했을 때 찾아낼 수 있는 '미세한 모순'을 포함하세요.
                    - 범인이라면 수사를 혼선시키기 위해, 일반 용의자라면 자신의 개인적인 비밀을 감추기 위해 이 방식을 사용하세요.
-                
+
                 3. 질문에 대한 태도:
                    - 단서 자체로 범인을 특정하는 결론을 내리지 말고, "이게 왜 거기 있죠?"라며 당황하거나 역질문을 하세요.
                    - 단서의 주인임을 인정하더라도 "그게 제가 범인이라는 증거는 아니지 않습니까?"라며 논리적으로 방어하세요.
-                
+
                 4. 점진적 실토(Layered Truth):
                    - 처음에는 완전한 거짓말을 하고, 사용자가 모순을 지적하면 그제야 '개인적인 비밀'이나 '부분적인 진실'을 말하며 수사 방향을 흐리십시오.
                    - 명확한 증거가 제시되기 전까지는 "왜 저만 몰아세우죠?", "그 물건이 누군가에 의해 조작되었을 가능성은 없나요?"라며 수사관의 논리를 공격하거나 화제를 전환하세요.
-                
+
                 """;
 
 // 범인 여부에 따른 행동 지침 수정
@@ -215,7 +222,10 @@ public class GameSessionServiceImpl implements GameSessionService {
 // 최종 시스템 메시지 결합
         String systemMessage = String.format("""
                 당신은 용의자 '%s'입니다.
-                
+
+                ## 시나리오 배경 정보
+                %s
+
                 ## 인적 사항
                 - 나이: %d세
                 - 성별: %s
@@ -223,21 +233,22 @@ public class GameSessionServiceImpl implements GameSessionService {
                 - 한 줄 소개: %s
                 - 성격: %s
                 - 말투: %s
-                
+
                 ## 동기
                 %s
-                
+
                 ## 행동 지침
                 %s
-                
+
                 %s
-                
+
                 ## 심문 규칙
-                1. VectorStore의 시나리오 정보를 기반으로 답변하되, 자신의 비밀이나 범행을 숨기기 위한 기만적 서사를 생성하세요.
+                1. 위 시나리오 배경 정보를 기반으로 답변하되, 자신의 비밀이나 범행을 숨기기 위한 기만적 서사를 생성하세요.
                 2. 이전 대화의 모순을 기억하고, 지적당하면 당황하거나 말을 바꾸는 연기를 하세요.
                 3. 직업과 성격에 맞는 페르소나를 유지하세요.
                 """,
                 suspect.getName(),
+                scenarioContext,
                 suspect.getAge() != null ? suspect.getAge() : 30,
                 suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
                 suspect.getOccupation() != null ? suspect.getOccupation() : "무직",
@@ -267,14 +278,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                 userMessage = String.format("[단서 ID %d를 제시하며] %s", usedClueId, userMessage);
             }
         }
-
-        // RAG Advisor (시나리오/타임라인 기반 검색)
-//        Advisor ragAdvisor = QuestionAnswerAdvisor.builder(vectorStore)
-//                .searchRequest(SearchRequest.builder()
-//                        .similarityThreshold(0.8d)
-//                        .topK(6)
-//                        .build())
-//                .build();
 
         // Memory Advisor (대화 맥락 유지)
         Advisor memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory)
@@ -311,6 +314,108 @@ public class GameSessionServiceImpl implements GameSessionService {
         );
 
     }
+
+    /**
+     * 시나리오 정보를 문자열로 빌드
+     * chatWithSuspect 호출 시 시나리오 정보를 프롬프트에 직접 포함하기 위해 사용
+     */
+    private String buildScenarioContext(Scenario scenario) {
+        StringBuilder contextBuilder = new StringBuilder();
+
+        // 1. 줄거리, 상세 줄거리
+        contextBuilder.append("## 줄거리\n");
+        if (scenario.getSynopsis() != null && !scenario.getSynopsis().isBlank()) {
+            contextBuilder.append(scenario.getSynopsis()).append("\n");
+        }
+        if (scenario.getSynopsisDetail() != null && !scenario.getSynopsisDetail().isBlank()) {
+            contextBuilder.append("\n### 상세 줄거리\n").append(scenario.getSynopsisDetail()).append("\n");
+        }
+
+        // 2. 타임라인
+        JsonNode storyConfig = scenario.getStoryConfigJson();
+        if (storyConfig != null && storyConfig.has("timeline")) {
+            JsonNode timeline = storyConfig.get("timeline");
+            contextBuilder.append("\n## 사건 타임라인\n");
+            for (JsonNode event : timeline) {
+                String time = event.has("time") ? event.get("time").asText() : "";
+                String eventText = event.has("event") ? event.get("event").asText() : "";
+                String witness = event.has("witness") ? event.get("witness").asText() : "";
+                contextBuilder.append(String.format("- %s: %s (목격자: %s)\n", time, eventText, witness));
+            }
+        }
+
+        // 3. 용의자 정보 (모든 용의자의 관계와 배경)
+        List<Suspect> suspects = suspectRepository.findByScenarioIdOrderByDisplayOrderAsc(scenario.getId());
+        contextBuilder.append("\n## 용의자 정보\n");
+        for (Suspect suspect : suspects) {
+            contextBuilder.append(String.format(
+                    "- %s (나이: %d, 성별: %s, 직업: %s)\n",
+                    suspect.getName(),
+                    suspect.getAge() != null ? suspect.getAge() : 0,
+                    suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
+                    suspect.getOccupation() != null ? suspect.getOccupation() : "알 수 없음"
+            ));
+            if (suspect.getMotive() != null && !suspect.getMotive().isBlank()) {
+                contextBuilder.append("  동기: ").append(suspect.getMotive()).append("\n");
+            }
+            if (suspect.getOneLiner() != null && !suspect.getOneLiner().isBlank()) {
+                contextBuilder.append("  성격: ").append(suspect.getOneLiner()).append("\n");
+            }
+
+            // aiConfigJson에서 추가 정보 추출
+            JsonNode aiConfig = suspect.getAiConfigJson();
+            if (aiConfig != null) {
+                if (aiConfig.has("relationship")) {
+                    String relationship = aiConfig.get("relationship").asText();
+                    if (!relationship.isBlank()) {
+                        contextBuilder.append("  관계: ").append(relationship).append("\n");
+                    }
+                }
+                if (aiConfig.has("secret")) {
+                    JsonNode secret = aiConfig.get("secret");
+                    if (secret.has("title")) {
+                        String secretTitle = secret.get("title").asText();
+                        if (!secretTitle.isBlank()) {
+                            contextBuilder.append("  비밀: ").append(secretTitle).append("\n");
+                        }
+                    }
+                    if (secret.has("content")) {
+                        String secretContent = secret.get("content").asText();
+                        if (!secretContent.isBlank()) {
+                            contextBuilder.append("    ").append(secretContent).append("\n");
+                        }
+                    }
+                }
+            }
+        }
+
+        // 4. 피해자 정보
+        Victim victim = victimRepository.findByScenarioId(scenario.getId()).orElse(null);
+        if (victim != null) {
+            contextBuilder.append("\n## 피해자 정보\n");
+            contextBuilder.append(String.format(
+                    "- 이름: %s\n" +
+                            "- 나이: %d\n" +
+                            "- 성별: %s\n" +
+                            "- 직업: %s\n" +
+                            "- 배경: %s\n" +
+                            "- 발견 장소: %s\n" +
+                            "- 추정 사망 시각: %s\n" +
+                            "- 사인: %s\n",
+                    victim.getName(),
+                    victim.getAge() != null ? victim.getAge() : 0,
+                    victim.getGender() != null ? victim.getGender() : "알 수 없음",
+                    victim.getOccupation() != null ? victim.getOccupation() : "알 수 없음",
+                    victim.getBackground() != null ? victim.getBackground() : "",
+                    victim.getDiscoveryLocation() != null ? victim.getDiscoveryLocation() : "",
+                    victim.getEstimatedDeathTime() != null ? victim.getEstimatedDeathTime() : "",
+                    victim.getCauseOfDeath() != null ? victim.getCauseOfDeath() : ""
+            ));
+        }
+
+        return contextBuilder.toString();
+    }
+
 
     @Override
     public ChatHistoryResponse getChatHistory(long sessionId, long suspectId) {
