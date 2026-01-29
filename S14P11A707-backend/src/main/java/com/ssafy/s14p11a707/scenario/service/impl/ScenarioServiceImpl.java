@@ -59,7 +59,15 @@ public class ScenarioServiceImpl implements ScenarioService {
     private final RoomLayoutService roomLayoutService;
 
     @Override
-    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request) {
+    @Transactional
+    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request, OidcUser oidcUser) {
+        // 사용자 인증
+        if (oidcUser == null) {
+            throw new IllegalArgumentException("User not authenticated");
+        }
+        String googleId = oidcUser.getSubject();
+        User creator = userRepository.findByGoogleId(googleId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         int estimatedSeconds = Math.max(20, Math.min(120, 25 + request.suspectCount() * 10));
 
         ScenarioCreateResponse.OriginalRequest originalRequest = new ScenarioCreateResponse.OriginalRequest(request.title(), request.userSynopsis(), request.genre(), request.suspectCount());
@@ -377,6 +385,7 @@ public class ScenarioServiceImpl implements ScenarioService {
 
             // 6. Scenario 엔티티 저장
             Scenario scenario = Scenario.builder()
+                    .creator(creator)
                     .title(title)
                     .userSynopsis(request.userSynopsis())
                     .synopsis(synopsis)
@@ -537,6 +546,7 @@ public class ScenarioServiceImpl implements ScenarioService {
         } catch (Exception e) {
             log.error("Scenario generation failed", e);
             Scenario scenario = Scenario.builder()
+                    .creator(creator)
                     .title(request.title())
                     .userSynopsis(request.userSynopsis())
                     .synopsis(request.userSynopsis())
@@ -559,8 +569,40 @@ public class ScenarioServiceImpl implements ScenarioService {
     }
 
     @Override
-    public ScenarioDeleteResponse deleteScenario(long scenarioId) {
+    @Transactional
+    public ScenarioDeleteResponse deleteScenario(long scenarioId, OidcUser oidcUser) {
+        // 사용자 인증
+        if (oidcUser == null) {
+            throw new IllegalArgumentException("User not authenticated");
+        }
+        String googleId = oidcUser.getSubject();
+        User user = userRepository.findByGoogleId(googleId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        // 시나리오 조회 및 소유권 확인
+        Scenario scenario = scenarioRepository.findById(scenarioId)
+                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
+
+        if (scenario.getCreator().getId() != user.getId()) {
+            throw new IllegalArgumentException("You don't have permission to delete this scenario");
+        }
+
+        // 연관 데이터 삭제 (순서 중요: 외래키 제약 조건 고려)
+        // 1. Clue 먼저 삭제 (Room과 Scenario 모두 참조)
+        clueRepository.deleteByScenarioId(scenarioId);
+
+        // 2. Suspect 삭제
+        suspectRepository.deleteByScenarioId(scenarioId);
+
+        // 3. Victim 삭제
+        victimRepository.deleteByScenarioId(scenarioId);
+
+        // 4. Room 삭제
+        roomRepository.deleteByScenarioId(scenarioId);
+
+        // 5. Scenario 삭제
         scenarioRepository.deleteById(scenarioId);
+
         return new ScenarioDeleteResponse(scenarioId, true);
     }
 

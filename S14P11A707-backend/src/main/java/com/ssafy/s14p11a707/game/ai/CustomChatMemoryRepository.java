@@ -72,46 +72,8 @@ public class CustomChatMemoryRepository implements ChatMemoryRepository {
     @Override
     @Transactional
     public void saveAll(@NonNull String conversationId, @NonNull List<Message> messages) {
-        ConversationKey key = parseConversationId(conversationId);
-
-        GameSession session = gameSessionRepository.findById(key.sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + key.sessionId));
-
-        // suspect가 없으면 저장하지 않음 (AI 응답 후 별도 처리)
-        Suspect suspect = suspectRepository.findById(key.suspectId).orElse(null);
-        if (suspect == null) {
-            return; // suspect가 없으면 저장하지 않고 건너뜀
-        }
-
-        // 기존 저장된 메시지 개수 확인
-        List<ChatMessage> existingMessages = chatMessageRepository
-                .findBySessionIdAndSuspectIdOrderByCreatedAtDesc(key.sessionId, key.suspectId);
-        int existingCount = existingMessages.size();
-
-        // 새로운 메시지만 저장 (Spring AI가 전체 메시지 리스트를 전달하므로 중복 방지)
-        int startIndex = Math.max(0, messages.size() - existingCount - 2); // +2는 user+assistant 쌍 고려
-        for (int i = startIndex; i < messages.size(); i++) {
-            Message message = messages.get(i);
-
-            // 중복 체크: 동일한 role과 content를 가진 최근 메시지가 있는지 확인
-            boolean isDuplicate = existingMessages.stream()
-                    .anyMatch(existing -> existing.getRole().equals(getRoleFromMessage(message))
-                            && existing.getContent().equals(message.getText()));
-
-            if (!isDuplicate) {
-                ChatMessage chatMessage = ChatMessage.builder()
-                        .session(session)
-                        .suspect(suspect)
-                        .role(getRoleFromMessage(message))
-                        .content(message.getText())
-                        .usedClueId(null)
-                        .responseLevel(null)
-                        .keyTalk(false)
-                        .build();
-
-                chatMessageRepository.save(chatMessage);
-            }
-        }
+        // chatWithSuspect에서 직접 저장하므로 중복 방지를 위해 아무것도 하지 않음
+        return;
     }
 
     @Override

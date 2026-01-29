@@ -200,9 +200,10 @@ public class SessionApi implements SessionApiDoc {
     public ResponseEntity<SuspectChatResponse> chatWithSuspect(
             @PathVariable long sessionId,
             @PathVariable long suspectId,
-            @RequestBody SuspectChatRequest request
+            @RequestBody SuspectChatRequest request,
+            @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.chatWithSuspect(sessionId, suspectId, request));
+        return ResponseEntity.ok(gameSessionService.chatWithSuspect(sessionId, suspectId, request, oidcUser));
     }
 
     @GetMapping("/{sessionId}/suspects/{suspectId}/chats")

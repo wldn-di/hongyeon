@@ -30,7 +30,6 @@ import com.ssafy.s14p11a707.user.repository.UserRepository;
 
 import java.time.Instant;
 import java.util.*;
-import java.util.stream.Collectors;
 
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
@@ -262,12 +261,12 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      * 채팅/심문 섹션
      */
-    // TODO : session.updateProgress(), saveEventLog() 필요
     @Override
-    public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
-        // GameSession 조회하여 시나리오 정보 확인
-        GameSession session = gameSessionRepository.findById(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + sessionId));
+    @Transactional
+    public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+        validatePlaying(session);
 
         // 시나리오 정보를 문자열로 빌드
         String scenarioContext = buildScenarioContext(session.getScenario());
@@ -453,10 +452,43 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         String reply = sb.toString();
 
-        // DB에 대화 내역 저장은 ChatMemoryRepository가 자동 처리
+        // DB에 대화 내역 저장 (usedClueId 포함)
+        ChatMessage userMessageEntity = ChatMessage.builder()
+                .session(session)
+                .suspect(suspect)
+                .role("user")
+                .content(request.message())
+                .usedClueId(usedClueId)
+                .responseLevel(null)
+                .keyTalk(false)
+                .build();
+        chatMessageRepository.save(userMessageEntity);
 
         int responseLevel = usedClueId == null ? 1 : 2;
-        int health = 100 - (usedClueId == null ? 5 : 3);
+        ChatMessage assistantMessageEntity = ChatMessage.builder()
+                .session(session)
+                .suspect(suspect)
+                .role("suspect")
+                .content(reply)
+                .usedClueId(null)
+                .responseLevel(responseLevel)
+                .keyTalk(false)
+                .build();
+        chatMessageRepository.save(assistantMessageEntity);
+
+        // 진행도 업데이트 (health 반영)
+        int health = session.getHealth() != null ? session.getHealth() : 100;
+        health = health - 5;  // 채팅 시 무조건 5 감소
+        session.updateProgress(
+                session.getCurrentFloor(),
+                session.getVisitedFloorsJson(),
+                health,
+                session.getPlayTime()
+        );
+
+        // 이벤트 로그 저장
+        saveEventLog(session, CHAT_STARTED, suspect.getName());
+
         Long revealedClueId = null;
 
         return new SuspectChatResponse(
@@ -921,7 +953,6 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         if (request.motive() != null && !request.motive().isBlank()) {
             // EmbeddingModel로 텍스트 임베딩
-            // TODO 오류 수정 필요
             motiveEmbedding = embeddingModel.embed(request.motive());
 
             // Scenario의 correctMotiveEmbedding과 유사도 계산
@@ -930,10 +961,10 @@ public class GameSessionServiceImpl implements GameSessionService {
                 float[] correctMotiveEmbedding = parseVectorString(correctMotiveEmbeddingStr);
                 motiveSimilarity = cosineSimilarity(motiveEmbedding, correctMotiveEmbedding);
             }
-        }
 
-        // 5. GameSession에 임베딩 저장
-        gameSessionRepository.save(session);
+            // GameSession에 제출한 동기 임베딩 저장
+            session.setSubmittedMotiveEmbedding(vectorToString(motiveEmbedding));
+        }
 
 
         // 6. truthConfigJson에서 정답 확인
@@ -964,6 +995,12 @@ public class GameSessionServiceImpl implements GameSessionService {
             // 3회 다 썼으면 FAILED
             if (newAttempts >= 3) {
                 session.failGame();
+                // 연관 데이터 삭제
+                boardConnectionRepository.deleteBySessionId(sessionId);
+                boardNodeRepository.deleteBySessionId(sessionId);
+                discoveredClueRepository.deleteBySessionId(sessionId);
+                chatMessageRepository.deleteBySessionId(sessionId);
+                eventLogRepository.deleteBySessionId(sessionId);
                 // 유저 플레이 시간 누적
                 long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
                 user.addPlayTime(playTime);
@@ -988,6 +1025,13 @@ public class GameSessionServiceImpl implements GameSessionService {
         int finalScore = calculateScore(session);
         RankGrade rankGrade = calculateRankGrade(finalScore);
         session.completeGame(finalScore, rankGrade, isFirstClear);
+
+        // 연관 데이터 삭제
+        boardConnectionRepository.deleteBySessionId(sessionId);
+        boardNodeRepository.deleteBySessionId(sessionId);
+        discoveredClueRepository.deleteBySessionId(sessionId);
+        chatMessageRepository.deleteBySessionId(sessionId);
+        eventLogRepository.deleteBySessionId(sessionId);
 
         // 첫 클리어 시 랭킹 저장
         if (isFirstClear) {
@@ -1197,6 +1241,28 @@ public class GameSessionServiceImpl implements GameSessionService {
             result[i] = Float.parseFloat(parts[i].trim());
         }
         return result;
+    }
+
+    /**
+     * float[] 배열을 문자열로 변환
+     *
+     * @param vector float[] 배열
+     * @return "[0.1,0.2,0.3]" 형식의 문자열
+     */
+    private String vectorToString(float[] vector) {
+        if (vector == null || vector.length == 0) {
+            return null;
+        }
+
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < vector.length; i++) {
+            if (i > 0) {
+                sb.append(",");
+            }
+            sb.append(vector[i]);
+        }
+        sb.append("]");
+        return sb.toString();
     }
 
     /**

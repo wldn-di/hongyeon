@@ -122,12 +122,17 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
                     responseCode = "500",
                     description = "서버 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioCreateResponse> createScenario(ScenarioCreateRequest request);
+    ResponseEntity<ScenarioCreateResponse> createScenario(ScenarioCreateRequest request, OidcUser oidcUser);
 
     @Operation(summary = "시나리오 삭제", description = "시나리오를 삭제합니다.")
     @ApiResponses({
@@ -142,12 +147,27 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "접근 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "시나리오를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
                     responseCode = "500",
                     description = "서버 오류",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioDeleteResponse> deleteScenario(long scenarioId);
+    ResponseEntity<ScenarioDeleteResponse> deleteScenario(long scenarioId, OidcUser oidcUser);
 
     @Operation(summary = "시나리오 랭킹 조회", description = "시나리오 랭킹을 조회합니다.")
     @ApiResponses({
