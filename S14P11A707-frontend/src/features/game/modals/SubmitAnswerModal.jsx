@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/Button'
 import { InvestigationBoard } from "@/features/game/components/InvestigationBoard"
 
 // 최종 정답 제출: 추리보드(확정선) 기반 자동 추출
-export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioId, victim = null }) {
+export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, sessionId, scenarioId, victim = null }) {
   const [submitInitialItems, setSubmitInitialItems] = useState([])
   const [submitInitialConnections, setSubmitInitialConnections] = useState([])
   const [submitBoardState, setSubmitBoardState] = useState({ items: [], connections: [] })
@@ -12,8 +12,15 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
 
   useEffect(() => {
     if (!isOpen) return
-    const itemsRaw = localStorage.getItem(`board-items-${scenarioId}`)
-    const connectionsRaw = localStorage.getItem(`board-connections-${scenarioId}`)
+
+    // sessionId가 있으면 sessionId 기반, 없으면 scenarioId 기반 키 사용
+    const storageKey = sessionId ? `board-${sessionId}` : `board-scenario-${scenarioId}`
+    const itemsRaw = localStorage.getItem(`${storageKey}-items`)
+    const connectionsRaw = localStorage.getItem(`${storageKey}-connections`)
+
+    // 기존 키도 fallback으로 체크
+    const legacyItemsRaw = localStorage.getItem(`board-items-${scenarioId}`)
+    const legacyConnectionsRaw = localStorage.getItem(`board-connections-${scenarioId}`)
 
     const safeJsonParse = (value, fallback) => {
       if (!value) return fallback
@@ -193,8 +200,9 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
       return { items: dedupedItems, connections: [...connectionByKey.values()] }
     }
 
-    const rawItems = safeJsonParse(itemsRaw, [])
-    const rawConnections = safeJsonParse(connectionsRaw, [])
+    // 새 키에서 먼저 시도, 없으면 레거시 키에서 로드
+    const rawItems = safeJsonParse(itemsRaw, null) ?? safeJsonParse(legacyItemsRaw, [])
+    const rawConnections = safeJsonParse(connectionsRaw, null) ?? safeJsonParse(legacyConnectionsRaw, [])
     const normalized = normalizeBoardState(rawItems, rawConnections)
 
     const confirmedConnections = normalized.connections.filter((conn) => conn.type === 'confirmed')
@@ -212,7 +220,7 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
     setSubmitInitialItems(submitItems)
     setSubmitInitialConnections(submitConnections)
     setSubmitBoardState({ items: submitItems, connections: submitConnections })
-  }, [isOpen, scenarioId])
+  }, [isOpen, sessionId, scenarioId])
 
   // 백엔드 검증 조건에 맞춘 사전 검증
   const readyToSubmit = useMemo(() => {

@@ -19,6 +19,10 @@ import { useGameReport } from '@/features/game/hooks/useGameReport'
 import { startGame, endGame, saveGame, fetchResume, moveFloor, submitAnswer } from '@/features/session/api/sessionApi'
 import { fetchClues, discoverClue } from '@/features/session/api/cluesApi'
 import { normalizeGameStartResponse, normalizeResumeResponse, normalizeGameEndResponse, normalizeClueListResponse, normalizeDiscoveredClueResponse } from '@/features/session/api/sessionMappers'
+import { fetchClueDetail } from '@/features/session/api/cluesApi'
+import { normalizeClueDetailResponse } from '@/features/session/api/sessionMappers'
+import { chatWithSuspect, fetchChatHistory } from '@/features/session/api/sessionApi'
+
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -272,7 +276,7 @@ export default function GameRoom() {
   // 세션 상태 (sessionId는 위에서 선언됨)
   const [health, setHealth] = useState(100)
   const [playTimeSeconds, setPlayTimeSeconds] = useState(0)
-  const [hintsUsed, setHintsUsed] = useState(0)
+  const [remainingAttempts, setRemainingAttempts] = useState(3)  // ✅ 제출 횟수
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
   const [rightLogOpen, setRightLogOpen] = useState(true)
   const [boardPanelOpen, setBoardPanelOpen] = useState(false)
@@ -381,7 +385,7 @@ export default function GameRoom() {
   const isLoading = scenarioLoading || roomsLoading || gameInitializing
 
   // 에러 상태
-  const hasError = scenarioError || (!scenario && !scenarioLoading)
+  const hasError = scenarioError || (!scenario && !scenarioLoading && !resumeSessionId && !gameInitializing)
 
   // 플레이 시간 포맷
   const formatPlayTime = (seconds) => {
@@ -420,7 +424,7 @@ export default function GameRoom() {
       await loadCluesForSession(normalized.sessionId)
       setHealth(100)
       setPlayTimeSeconds(0)
-      setHintsUsed(0)
+      setRemainingAttempts(3)
       const startFloorNumber = clampFloor(
         Number.isFinite(normalized.currentFloor)
           ? normalized.currentFloor
@@ -443,10 +447,13 @@ export default function GameRoom() {
       setGameInitializing(false)
     }
   }, [activeScenarioId, addLog, getRoomIndexFromFloor, loadCluesForSession])
+
   const resumeGame = useCallback(async (resumeId) => {
     try {
       setGameInitializing(true)
       setGameInitError(null)
+
+      // 1. Resume API 호출
       const response = await fetchResume(resumeId)
       const normalized = normalizeResumeResponse(response)
 
@@ -456,10 +463,35 @@ export default function GameRoom() {
 
       setSessionId(normalized.sessionId)
       setApiClues([])
-      await loadCluesForSession(normalized.sessionId)
+
+      // 2. ✅ 단서 목록 API 호출 (발견 여부 포함)
+      const cluesData = await loadCluesForSession(normalized.sessionId)
+
+      // 3. ✅ 발견된 단서를 인벤토리에 추가
+      if (cluesData?.clues && cluesData.clues.length > 0) {
+        const discoveredClues = cluesData.clues.filter(clue => clue.discovered)
+
+        discoveredClues.forEach(clue => {
+          collectEvidence({
+            id: clue.id,
+            name: clue.name,
+            description: clue.description,
+            importance: clue.importance,
+            detailImageUrl: clue.detailImageUrl,
+            assistantComment: clue.assistantComment,
+            location: `${clue.floorNumber}층`,
+            discoveredAt: clue.discoveredAt,
+          }, { log: false })  // 로그는 남기지 않음 (복원이므로)
+        })
+
+        console.log(`[Resume] ${discoveredClues.length}개의 발견된 단서를 인벤토리에 복원했습니다.`)
+      }
+
+      // 4. 기타 상태 복원
       setHealth(normalized.health || 100)
       setPlayTimeSeconds(normalized.playTime || 0)
-      setHintsUsed(0)
+      setRemainingAttempts(normalized.remainingAttempts ?? 3)
+
       const resumeFloorNumber = clampFloor(
         Number.isFinite(normalized.currentFloor)
           ? normalized.currentFloor
@@ -469,25 +501,45 @@ export default function GameRoom() {
       const resumeIndex = getRoomIndexFromFloor(resumeFloorNumber)
       setCurrentRoomIndex(resumeIndex)
       setVisitedFloors(new Set([resumeFloorNumber]))
+
       if (normalized.scenarioId) {
         setActiveScenarioId(normalized.scenarioId)
       }
 
-      // 로그 복원
+      // 5. 보드 데이터 복원 (있는 경우)
       if (Array.isArray(normalized.board?.nodes)) {
-        // 보드 데이터로부터 증거 복원
-        const inventoryClues = normalized.inventory?.clues || []
-        inventoryClues.forEach(clue => {
-          collectEvidence({
-            id: clue.clueId,
-            name: clue.name,
-          }, { log: false })
-        })
+        // 보드 노드 복원 로직 (필요 시 추가)
       }
 
+      // 6. 용의자 채팅 기록 복원
+      if (scenario?.suspects && scenario.suspects.length > 0) {
+        const chatHistoriesFromApi = {}
+
+        for (const suspect of scenario.suspects) {
+          try {
+            const history = await fetchChatHistory(normalized.sessionId, suspect.id)
+            if (history?.messages && history.messages.length > 0) {
+              chatHistoriesFromApi[suspect.id] = history.messages.map(msg => ({
+                id: msg.messageId || Date.now(),
+                sender: msg.role === 'USER' ? 'user' : suspect.id,
+                text: msg.content,
+                time: new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+              }))
+            }
+          } catch (err) {
+            console.error(`[Resume] 용의자 ${suspect.id} 채팅 기록 복원 실패:`, err)
+          }
+        }
+
+        setChatHistories(prev => ({
+          ...prev,
+          ...chatHistoriesFromApi
+        }))
+      }
       addLog('system', '수사를 이어서 진행합니다.')
 
       return normalized
+
     } catch (err) {
       console.error('[GameRoom] resumeGame 에러:', err)
       setGameInitError(err.message || '이어하기에 실패했습니다.')
@@ -499,14 +551,13 @@ export default function GameRoom() {
 
   // 컴포넌트 마운트 시 게임 초기화
   useEffect(() => {
+
     // 이미 세션이 있거나 초기화 중이거나 에러 상태면 스킵
     if (sessionId || gameInitializing || gameInitError) return
 
     if (resumeSessionId) {
-      // 이어하기 모드
       resumeGame(resumeSessionId)
     } else if (activeScenarioId && scenario && !scenarioLoading) {
-      // 새 게임 시작 (시나리오 로딩 완료 후)
       initializeNewGame()
     }
   }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError, initializeNewGame, resumeGame])
@@ -553,6 +604,22 @@ export default function GameRoom() {
 
     return () => clearInterval(timer)
   }, [sessionId])
+
+    //처음ㅁ&이어하기
+    const handleEvidenceClick = useCallback(async (item) => {
+      if (!sessionId || !item?.id) {
+        setSelectedEvidence(item)
+        return
+      }
+      try {
+        const response = await fetchClueDetail(sessionId, item.id)
+        const detail = normalizeClueDetailResponse(response)
+        setSelectedEvidence(detail)
+      } catch (err) {
+        console.error('Failed to fetch clue detail:', err)
+        setSelectedEvidence(item)
+      }
+    }, [sessionId])
 
   const handleClueInspected = useCallback(async (clue) => {
     if (!clue || !sessionId) return
@@ -656,59 +723,134 @@ export default function GameRoom() {
     }
   }, [rooms, visitedFloors, addLog, sessionId, refetchLogs])
 
-  const handleSendMessage = async (contactId, text) => {
-    const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    const handleSendMessage = async (contactId, text) => {
+      const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+    // 유저 메시지 즉시 추가
+      const newMessage = {
+        id: Date.now(),
+        sender: 'user',
+        text,
+        time: timeStr
+      }
 
-    const newMessage = {
-      id: Date.now(),
-      sender: 'user',
-      text,
-      time: timeStr
-    }
+      setChatHistories(prev => ({
+        ...prev,
+        [contactId]: [...(prev[contactId] || []), newMessage]
+      }))
 
-    setChatHistories(prev => ({
-      ...prev,
-      [contactId]: [...(prev[contactId] || []), newMessage]
-    }))
+      const isHelper = contactId === 'helper'
 
-    const isHelper = contactId === 'helper'
-
-    if (isHelper) {
-      // 조력자는 더미 응답
-      setTimeout(() => {
-        const responseMessage = {
-          id: Date.now(),
-          sender: contactId,
-          text: "네, 알겠습니다. 그 부분은 제가 조사해볼게요.",
-          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+      if (isHelper) {
+        // 조력자는 더미 응답 (추후 API 연결 가능)
+        setTimeout(() => {
+          const responseMessage = {
+            id: Date.now(),
+            sender: contactId,
+            text: "네, 알겠습니다. 그 부분은 제가 조사해볼게요.",
+            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+          }
+          setChatHistories(prev => ({
+            ...prev,
+            [contactId]: [...(prev[contactId] || []), responseMessage]
+          }))
+        }, 500)
+      } else {
+        // ✅ 용의자 심문 - 실제 API 연동
+        if (!sessionId) {
+          toast.error('세션 정보가 없습니다.')
+          return
         }
-        setChatHistories(prev => ({
-          ...prev,
-          [contactId]: [...(prev[contactId] || []), responseMessage]
-        }))
-      }, 500)
-    } else {
-      // 용의자 심문 - 임시 로컬 응답 (API 연결 전)
-      setTimeout(() => {
-        const responseMessage = {
-          id: Date.now(),
-          sender: contactId,
-          text: "그 부분에 대해서는 아직 알고 있는 바가 없습니다...",
-          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-        }
-        setChatHistories(prev => ({
-          ...prev,
-          [contactId]: [...(prev[contactId] || []), responseMessage]
-        }))
-        addLog('interrogation', `용의자 신문을 진행했습니다.`)
-      }, 500)
-    }
-  }
 
-  // 연락처 선택 시 (API 연결 전이라 별도 처리 없음)
-  const handleContactSelect = useCallback((contact) => {
-    // 채팅 기록은 로컬 상태로 관리
-  }, [])
+        // contactId에서 suspectId 추출 (contact.id가 suspectId와 동일하다고 가정)
+        const suspectId = contactId
+
+        try {
+          // API 호출
+          const response = await chatWithSuspect(sessionId, suspectId, {
+            message: text,
+            usedClueId: null  // 단서 사용 시 해당 clueId 전달
+          })
+
+          // 응답 메시지 추가
+          const responseMessage = {
+            id: response.messageId || Date.now(),
+            sender: contactId,
+            text: response.content || response.message || "...",
+            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+            isKeyTalk: response.isKeyTalk || false,
+            responseLevel: response.responseLevel || 0
+          }
+
+          setChatHistories(prev => ({
+            ...prev,
+            [contactId]: [...(prev[contactId] || []), responseMessage]
+          }))
+
+          // 핵심 대화인 경우 로그 추가
+          if (response.isKeyTalk) {
+            addLog('interrogation', `[핵심 정보] 용의자로부터 중요한 정보를 얻었습니다!`)
+          } else {
+            addLog('interrogation', `용의자 심문을 진행했습니다.`)
+          }
+
+          // 로그 새로고침
+          refetchLogs?.()
+
+        } catch (err) {
+          console.error('심문 실패:', err)
+          toast.error(err.message || '심문에 실패했습니다.')
+
+          // 에러 시 에러 메시지 표시
+          const errorMessage = {
+            id: Date.now(),
+            sender: 'system',
+            text: "⚠️ 응답을 받지 못했습니다. 다시 시도해주세요.",
+            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+          }
+          setChatHistories(prev => ({
+            ...prev,
+            [contactId]: [...(prev[contactId] || []), errorMessage]
+          }))
+        }
+      }
+    }
+    const handleContactSelect = useCallback(async (contact) => {
+      // 조력자는 로컬 히스토리 사용
+      if (contact.id === 'helper' || contact.isHelper) {
+        return
+      }
+
+      // ✅ 용의자 선택 시 기존 대화 기록 조회
+      if (!sessionId) return
+
+      const suspectId = contact.id
+
+      try {
+        const response = await fetchChatHistory(sessionId, suspectId)
+
+        if (response?.messages && response.messages.length > 0) {
+          // API 응답을 채팅 히스토리 형식으로 변환
+          const formattedMessages = response.messages.map(msg => ({
+            id: msg.messageId,
+            sender: msg.role === 'USER' ? 'user' : suspectId,
+            text: msg.content,
+            time: msg.createdAt
+              ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+              : '',
+            isKeyTalk: msg.isKeyTalk || false,
+            responseLevel: msg.responseLevel || 0
+          }))
+
+          setChatHistories(prev => ({
+            ...prev,
+            [suspectId]: formattedMessages
+          }))
+        }
+      } catch (err) {
+        console.error('심문 기록 조회 실패:', err)
+        // 실패해도 빈 히스토리로 시작 가능
+      }
+    }, [sessionId])
 
   const handleDragStart = (e, data, type) => {
     const payload = JSON.stringify({ data, type })
@@ -738,7 +880,6 @@ export default function GameRoom() {
     if (!sessionId) return
 
     try {
-      // 추리보드에서 범인, 흉기, 장소 추출
       const suspects = submissionItems.filter(item => item.type === 'suspect')
       const evidences = submissionItems.filter(item => item.type === 'evidence')
       const locations = submissionItems.filter(item => item.type === 'location')
@@ -763,50 +904,46 @@ export default function GameRoom() {
           (conn.from === culpritItem?.id && conn.to === e.id) ||
           (conn.to === culpritItem?.id && conn.from === e.id)
         )
-      )
+      ) || evidences[0]
 
-      // 장소의 floorNumber (첫 번째 장소 또는 기본값 1)
-      const locationFloor = locations[0]?.floorNumber || locations[0]?.id || 1
+      const locationItem = locations[0]
+      const locationFloor = locationItem?.floorNumber
+        || locationItem?.locationId
+        || parseInt(String(locationItem?.id || '1').replace('location-', ''))
+        || 1
 
-      // 백엔드 SubmitRequest DTO에 맞춤 (victimId 없음, causeOfDeath는 빈 문자열)
+      // ✅ 괄호로 감싸서 연산자 우선순위 명확히!
       const submitData = {
-        culpritId:
-          (culpritItem?.suspectId ?? parseInt(String(culpritItem?.id || "0").replace("suspect-", ""))) || 0,
-        weaponClueId:
-          (culpritConnectedEvidence?.evidenceId ??
-            parseInt(String(culpritConnectedEvidence?.id || "0").replace("evidence-", ""))) || 0,
+        culpritId: (culpritItem?.suspectId
+          ?? parseInt(String(culpritItem?.id || '0').replace('suspect-', '')))
+          || 0,
+        weaponClueId: (culpritConnectedEvidence?.evidenceId
+          ?? parseInt(String(culpritConnectedEvidence?.id || '0').replace('evidence-', '')))
+          || 0,
         locationFloor: Number(locationFloor) || 1,
         motive: motive?.trim() || '',
-        causeOfDeath: '' // 미사용 (빈 문자열)
       }
 
-      // 최종 제출 API 호출
       const result = await submitAnswer(sessionId, submitData)
 
       if (result.status === 'COMPLETED') {
-        // 성공: 모달 닫고 리뷰 모달 오픈
         setSubmitAnswerOpen(false)
         toast.success(`사건 해결! 랭크: ${result.rankGrade}, 점수: ${result.finalScore}`)
         setReviewModalOpen(true)
       } else if (result.status === 'WRONG_ANSWER') {
-        // 범인 틀림: 횟수 감소, 모달 유지
         toast.error(`틀렸습니다. 남은 기회: ${result.remainingAttempts}회`)
-        // 모달은 계속 열려있음
       } else if (result.status === 'FAILED') {
-        // 게임 오버: 모달 닫음
         setSubmitAnswerOpen(false)
+        setRemainingAttempts(0)
         toast.error('게임 오버! 기회를 모두 소진했습니다.')
       } else if (result.status === 'BOARD_INVALID') {
-        // 보드 검증 실패: 횟수 감소 없음, 모달 유지
         toast.error(result.errorMessage || '추리보드가 유효하지 않습니다.')
-        // 모달은 계속 열려있음
       }
     } catch (err) {
+      console.error('[Submit] 제출 실패:', err)
       toast.error(err.message || '제출에 실패했습니다.')
-      setSubmitAnswerOpen(true)
     }
   }
-
   const handleReviewSubmit = async (difficulty, rating, review) => {
     if (!activeScenarioId) return
 
@@ -924,10 +1061,15 @@ export default function GameRoom() {
                 <DoorOpen className="w-4 h-4 mr-2" />
                 나가기
               </Button>
-              <Button variant="outline" size="sm">
-                <Lightbulb className="w-4 h-4 mr-2" />
-                힌트 ({hintsUsed}/3)
-              </Button>
+              <div className="flex items-center gap-2 px-3 py-1.5 bg-muted/50 border border-border rounded-lg">
+                <Send className="w-4 h-4 text-amber-400" />
+                <span className="text-sm font-semibold">
+                  제출 <span className={cn(
+                    "font-mono",
+                    remainingAttempts <= 1 ? "text-red-400" : "text-amber-400"
+                  )}>{3 - remainingAttempts}/3</span>
+                </span>
+              </div>
               <Button variant="neon" size="sm" onClick={handleSubmitClick}>
                 <Send className="w-4 h-4 mr-2" />
                 최종 정답 제출
@@ -997,17 +1139,17 @@ export default function GameRoom() {
 
       {/* 왼쪽 패널 (증거 목록) */}
 	      <LeftEvidencePanel
-	        isOpen={leftPanelOpen}
-	        onToggle={() => setLeftPanelOpen(!leftPanelOpen)}
-	        evidence={discoveredEvidence}
-	        suspects={suspects}
-	        rooms={rooms}
-	        onItemClick={(item, type) => {
-	          if (type === 'evidence') setSelectedEvidence(item)
-	        }}
-	        onDragStart={handleDragStart}
-	        onAddToBoard={handleAddToBoard}
-	      />
+            isOpen={leftPanelOpen}
+            onToggle={() => setLeftPanelOpen(!leftPanelOpen)}
+            evidence={discoveredEvidence}
+            suspects={suspects}
+            rooms={rooms}
+            onItemClick={(item, type) => {
+              if (type === 'evidence') handleEvidenceClick(item)  // ← 여기만 바꿈
+            }}
+            onDragStart={handleDragStart}
+            onAddToBoard={handleAddToBoard}
+          />
 
       {/* 오른쪽 수사 로그 사이드바 */}
       <RightLogSidebar
@@ -1021,6 +1163,7 @@ export default function GameRoom() {
 	        isOpen={boardPanelOpen}
 	        onOpenChange={setBoardPanelOpen}
 	        scenarioId={activeScenarioId}
+	        sessionId={sessionId}
 	        victim={scenario?.victim || null}
 	        leftOffsetPx={leftPanelOpen ? SIDE_PANEL_WIDTH_PX : 0}
 	        rightOffsetPx={rightLogOpen ? SIDE_PANEL_WIDTH_PX : 0}
@@ -1077,6 +1220,7 @@ export default function GameRoom() {
 	        onClose={() => setSubmitAnswerOpen(false)}
 	        onSubmit={handleAnswerSubmit}
 	        scenarioId={activeScenarioId}
+	        sessionId={sessionId}
 	        victim={scenario?.victim || null}
 	      />
       <ReviewModal isOpen={reviewModalOpen} onSubmit={handleReviewSubmit} />

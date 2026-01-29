@@ -1,5 +1,5 @@
 import React from 'react'
-import { Link } from 'wouter'
+// import { Link } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { Star, Clock, Users, Play, Trophy, ChevronLeft, ChevronRight, User, AlertTriangle } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -145,7 +145,7 @@ function ReviewItem({ review }) {
   )
 }
 
-export default function ScenarioDetailCard({ scenario }) {
+export default function ScenarioDetailCard({ scenario, onPlay }) {
   const { reviews, loading: reviewsLoading, page, totalPages, hasNext, hasPrev, nextPage, prevPage } = useReviews(scenario?.id, 2)
 
   if (!scenario) return null
@@ -305,13 +305,16 @@ export default function ScenarioDetailCard({ scenario }) {
 
       {/* 플레이 버튼 (오른쪽 하단 고정) */}
       <div className="fixed bottom-8 right-8 z-50">
-        <Link href={`/room/${scenario.id}/solo`}>
-          <Button variant="neon" size="lg" className="shadow-lg shadow-primary/25 px-8">
-            <Play className="w-5 h-5 mr-2" />
-            플레이 시작
-          </Button>
-        </Link>
-      </div>
-    </div>
+          <Button
+                    variant="neon"
+                    size="lg"
+                    className="shadow-lg shadow-primary/25 px-8"
+                    onClick={onPlay}
+                  >
+                    <Play className="w-5 h-5 mr-2" />
+                    플레이 시작
+                  </Button>
+                </div>
+              </div>
   )
 }
