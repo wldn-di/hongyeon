@@ -22,7 +22,7 @@ public interface ScenarioService {
 
     ScenarioStatusResponse getScenarioStatus(long scenarioId);
 
-    ScenarioCreateResponse createScenario(ScenarioCreateRequest request);
+    ScenarioCreateResponse createScenario(ScenarioCreateRequest request, OidcUser user);
 
     ScenarioDeleteResponse deleteScenario(long scenarioId);
 
