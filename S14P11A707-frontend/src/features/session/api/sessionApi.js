@@ -90,13 +90,16 @@ export const endGame = async (sessionId) => {
 /**
  * 층 이동 (POST /api/sessions/{sessionId}/move-floor)
  * @param {number} sessionId
+ * @param {number} targetFloor
  * @returns {Promise<FloorMoveResponse>}
  * @throws {ApiError}
  */
-export const moveFloor = async (sessionId) => {
+export const moveFloor = async (sessionId, targetFloor) => {
   try {
+    const payload = { targetFloor };
     const response = await apiClient.post(
       ENDPOINTS.sessions.moveFloor(sessionId),
+      payload,
     );
     return response.data;
   } catch (error) {

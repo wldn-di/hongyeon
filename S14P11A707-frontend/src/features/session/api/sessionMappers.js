@@ -753,6 +753,7 @@ export const normalizeGameStartResponse = (response) => {
       startedAt: null,
       scenario: null,
       victim: null,
+      currentFloor: 0,
       currentRoom: null,
       eventLog: null,
     }
@@ -766,6 +767,7 @@ export const normalizeGameStartResponse = (response) => {
     startedAt: response.startedAt || null,
     scenario: response.scenario || null,
     victim: response.victim || null,
+    currentFloor: response.currentFloor ?? response.currentRoom?.floorNumber ?? 0,
     currentRoom: response.currentRoom ? normalizeCurrentRoom(response.currentRoom) : null,
     eventLog: response.eventLog ? normalizeEventLog(response.eventLog) : null,
   }

@@ -9,6 +9,7 @@ import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.scenario.repository.ScenarioRepository;
+import com.ssafy.s14p11a707.scenario.repository.ScenarioListProjection;
 import com.ssafy.s14p11a707.user.dto.BookshelfSessionResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
 import com.ssafy.s14p11a707.user.entity.User;
@@ -96,7 +97,7 @@ public class UserMeService {
     public ScenarioListResponse getMyScenarios(OidcUser oidcUser, Pageable pageable) {
         User user = getUser(oidcUser);
 
-        Page<Scenario> scenarioPage = scenarioRepository.findByCreator(user, pageable);
+        Page<ScenarioListProjection> scenarioPage = scenarioRepository.findByCreatorId(user.getId(), pageable);
 
         List<ScenarioListResponse.Item> items = scenarioPage.getContent().stream()
                 .map(scenario -> new ScenarioListResponse.Item(

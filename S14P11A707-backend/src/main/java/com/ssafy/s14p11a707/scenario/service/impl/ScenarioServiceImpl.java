@@ -661,22 +661,10 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Override
     @Transactional(readOnly = true)
     public ScenarioListResponse listScenarios() {
-        List<Scenario> scenarios = scenarioRepository.findAll();
+        List<ScenarioListProjection> scenarios = scenarioRepository.findAllProjectedBy();
 
         List<ScenarioListResponse.Item> items = scenarios.stream()
-                .map(scenario -> new ScenarioListResponse.Item(
-                        scenario.getId(),
-                        scenario.getTitle(),
-                        scenario.getSynopsis(),
-                        scenario.getGenre(),
-                        scenario.getThumbnailUrl(),
-                        scenario.getPlayCount(),
-                        scenario.getAvgRating(),
-                        scenario.getAvgDifficulty(),
-                        scenario.getGenerationStatus() != null ? scenario.getGenerationStatus().name() : "UNKNOWN",
-                        null, // progress - 추후 구현
-                        scenario.getGenerationError()
-                ))
+                .map(this::toScenarioListItem)
                 .toList();
 
         return new ScenarioListResponse(items, 1, items.size(), 0);
@@ -685,33 +673,36 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Override
     @Transactional(readOnly = true)
     public ScenarioListResponse searchScenarios(String keyword) {
-        List<Scenario> scenarios;
+        List<ScenarioListProjection> scenarios;
 
         if (keyword == null || keyword.isBlank()) {
-            scenarios = scenarioRepository.findAll();
+            scenarios = scenarioRepository.findAllProjectedBy();
         } else {
-            scenarios = scenarioRepository.findByTitleContainingOrSynopsisContaining(
-                    keyword.trim()
-            );
+            String trimmed = keyword.trim();
+            scenarios = scenarioRepository.searchProjectedByKeyword(trimmed);
         }
 
         List<ScenarioListResponse.Item> items = scenarios.stream()
-                .map(scenario -> new ScenarioListResponse.Item(
-                        scenario.getId(),
-                        scenario.getTitle(),
-                        scenario.getSynopsis(),
-                        scenario.getGenre(),
-                        scenario.getThumbnailUrl(),
-                        scenario.getPlayCount(),
-                        scenario.getAvgRating(),
-                        scenario.getAvgDifficulty(),
-                        scenario.getGenerationStatus() != null ? scenario.getGenerationStatus().name() : "UNKNOWN",
-                        null,
-                        scenario.getGenerationError()
-                ))
+                .map(this::toScenarioListItem)
                 .toList();
 
         return new ScenarioListResponse(items, 1, items.size(), 0);
+    }
+
+    private ScenarioListResponse.Item toScenarioListItem(ScenarioListProjection scenario) {
+        return new ScenarioListResponse.Item(
+                scenario.getId(),
+                scenario.getTitle(),
+                scenario.getSynopsis(),
+                scenario.getGenre(),
+                scenario.getThumbnailUrl(),
+                scenario.getPlayCount(),
+                scenario.getAvgRating(),
+                scenario.getAvgDifficulty(),
+                scenario.getGenerationStatus() != null ? scenario.getGenerationStatus().name() : "UNKNOWN",
+                null,
+                scenario.getGenerationError()
+        );
     }
 
     @Override
@@ -882,3 +873,6 @@ public class ScenarioServiceImpl implements ScenarioService {
         return fallback;
     }
 }
+
+
+

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo } from 'react'
+﻿import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react'
 import { useLocation, useRoute } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -23,7 +23,6 @@ import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 // ========================================
-// 오프닝 페이즈 (시나리오 도입 나레이션)
 // ========================================
 function OpeningPhase({ scenario, onComplete, onSkip }) {
   const [stage, setStage] = useState('title')
@@ -54,7 +53,7 @@ function OpeningPhase({ scenario, onComplete, onSkip }) {
             <h1 className="text-3xl font-bold gold-glow mb-6">{scenario.title}</h1>
             <p className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line">
               <TypingText
-                text={scenario.synopsisDetail || scenario.synopsis || '사건이 발생했습니다. 진실을 밝혀내세요.'}
+                text={scenario.synopsisDetail || scenario.synopsis || '사건이 발생했습니다. 진실을 밝혀주세요.'}
                 speed={30}
                 onComplete={() => setTimeout(() => setStage('ready'), 500)}
               />
@@ -87,10 +86,8 @@ function OpeningPhase({ scenario, onComplete, onSkip }) {
 }
 
 // ========================================
-// 피해자 소개 페이즈
 // ========================================
 function VictimIntroPhase({ victim, onComplete }) {
-  // 피해자 정보 없으면 바로 완료
   useEffect(() => {
     if (!victim) {
       onComplete?.()
@@ -120,7 +117,7 @@ function VictimIntroPhase({ victim, onComplete }) {
               </div>
               <div>
                 <p className="text-2xl font-bold">{victim.name}</p>
-                <p className="text-muted-foreground">{victim.age}세, {victim.gender}</p>
+                <p className="text-muted-foreground">{victim.age}세 {victim.gender}</p>
                 <p className="text-sm text-primary">{victim.occupation}</p>
               </div>
             </div>
@@ -142,7 +139,7 @@ function VictimIntroPhase({ victim, onComplete }) {
                   <div key={i} className="flex justify-between p-2 bg-muted/20 rounded">
                     <span className="text-muted-foreground">{k}</span>
                     <span className={cn("font-bold", i === 2 && "text-red-400")}>{v}</span>
-                  </div>
+              </div>
                 ))}
               </div>
             </div>
@@ -158,8 +155,6 @@ function VictimIntroPhase({ victim, onComplete }) {
     </div>
   )
 }
-
-// 조력자 정보
 const helperInfo = {
   id: "helper",
   name: "조수 왓슨",
@@ -167,11 +162,11 @@ const helperInfo = {
   isHelper: true,
 }
 
-// 조력자 초기 메시지
+// 조력??초기 메시지
 const getHelperInitialMessage = (scenarioTitle) => ({
   id: Date.now(),
   sender: "helper",
-  text: `안녕하세요, 탐정님. "${scenarioTitle}" 사건 수사를 도와드리겠습니다. 궁금한 점이 있으시면 언제든 물어보세요!`,
+  text: `안녕하세요, 형사님. "${scenarioTitle}" 사건 수사를 도와드리겠습니다. 궁금한 점이 있으면 언제든 물어보세요.`,
   time: new Date().toLocaleTimeString("ko-KR", {
     hour: "2-digit",
     minute: "2-digit",
@@ -182,11 +177,10 @@ const getHelperInitialMessage = (scenarioTitle) => ({
 export default function GameRoom() {
   const [, setLocation] = useLocation()
 
-  // /game/:scenarioId 경로 (새 게임)
+  // /game/:scenarioId 경로 (??게임)
   const [matchGame, paramsGame] = useRoute('/game/:scenarioId')
-  // /room/:scenarioId/solo 경로 (새 게임)
+  // /room/:scenarioId/solo 경로 (??게임)
   const [matchSolo, paramsSolo] = useRoute('/room/:scenarioId/solo')
-  // /room/:sessionId/resume 경로 (이어하기)
   const [matchResume, paramsResume] = useRoute('/room/:sessionId/resume')
 
   const initialScenarioId = paramsGame?.scenarioId
@@ -195,43 +189,20 @@ export default function GameRoom() {
       ? parseInt(paramsSolo.scenarioId)
       : null
   const resumeSessionId = paramsResume?.sessionId ? parseInt(paramsResume.sessionId) : null
-
-  // 이어하기 시 resume API에서 scenarioId를 가져와서 상태로 관리
   const [activeScenarioId, setActiveScenarioId] = useState(initialScenarioId)
-
-  // scenarioId가 변경되면 activeScenarioId도 업데이트
   useEffect(() => {
     if (initialScenarioId) {
       setActiveScenarioId(initialScenarioId)
     }
   }, [initialScenarioId])
-
-  // 시나리오 정보 조회 (API) - 이어하기가 아닐 때만 조회
   const { scenario, loading: scenarioLoading, error: scenarioError } = useScenarioById(activeScenarioId)
-
-  // 방 데이터 조회 (API) - activeScenarioId 사용
   const { rooms, loading: roomsLoading } = useGameRooms(activeScenarioId)
-
-  // 게임 세션 ID (API 호출용)
   const [sessionId, setSessionId] = useState(null)
-
-  // 게임 페이즈: 'opening' -> 'victim' -> 'main'
-  // 이어하기면 바로 'main'
   const [gamePhase, setGamePhase] = useState(resumeSessionId ? 'main' : 'opening')
-
-  // API 단서 데이터
   const [apiClues, setApiClues] = useState([])
-
-  // 게임 로그 조회 (API) - sessionId 전달하여 백엔드 로그 가져오기
   const { logs, addLog, resetLogs, refetch: refetchLogs } = useGameLogs(sessionId)
-
-  // 게임 제출 Hook
   const { submitGame, loading: submitLoading, result: submitResult } = useGameSubmission()
-
-  // 수사보고서 Hook
   const { report, loading: reportLoading, fetchReport, submitReview } = useGameReport()
-
-  // 세션 상태 (sessionId는 위에서 선언됨)
   const [health, setHealth] = useState(100)
   const [playTimeSeconds, setPlayTimeSeconds] = useState(0)
   const [hintsUsed, setHintsUsed] = useState(0)
@@ -246,7 +217,8 @@ export default function GameRoom() {
 
   const { discoveredEvidence, collectEvidence, resetSession } = useGameSession()
 
-  // 휴대폰 관련 상태
+  const currentRoomIndexRef = useRef(currentRoomIndex)
+  currentRoomIndexRef.current = currentRoomIndex
   const [phoneOpen, setPhoneOpen] = useState(false)
   const [chatHistories, setChatHistories] = useState({})
   const [currentChat, setCurrentChat] = useState(null)
@@ -255,21 +227,28 @@ export default function GameRoom() {
   const [submitAnswerOpen, setSubmitAnswerOpen] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reportModalOpen, setReportModalOpen] = useState(false)
-
-  // 방문한 층 (첫 방문 여부 체크용)
   const [visitedFloors, setVisitedFloors] = useState(new Set([0]))
 
   const SIDE_PANEL_WIDTH_PX = 288
-
-  // 용의자 데이터 (시나리오에서 가져옴)
   const suspects = scenario?.suspects || []
 
-  // 증거 목록 = 발견된 증거
-
-  // 현재 방
+  // 증거 목록 = 발견??증거
   const currentRoom = rooms?.[currentRoomIndex] || rooms?.[0] || null
 
-  // 세션 시작 후 단서 목록 가져오기
+  const currentFloorNumber = Number.isFinite(currentRoom?.floorNumber) ? currentRoom.floorNumber : (currentRoomIndex + 1)
+
+  const getRoomIndexFromFloor = useCallback((floorNumber) => {
+    if (!Number.isFinite(floorNumber)) return 0
+
+    if (rooms && rooms.length > 0) {
+      const foundIndex = rooms.findIndex(r => r.floorNumber === floorNumber)
+      if (foundIndex >= 0) return foundIndex
+      const fallbackIndex = floorNumber - 1
+      return Math.max(0, Math.min(fallbackIndex, rooms.length - 1))
+    }
+
+    return Math.max(0, floorNumber - 1)
+  }, [rooms])
   useEffect(() => {
     if (!sessionId) return
 
@@ -285,13 +264,9 @@ export default function GameRoom() {
 
     loadClues()
   }, [sessionId])
-
-  // 단서 데이터 (Phaser용) - API에서 가져온 데이터 사용
   const clues = useMemo(() => {
     if (roomsLoading) return []
     if (!apiClues || apiClues.length === 0) return []
-
-    // 방 내 단서 위치 (방마다 최대 3개 단서 배치용)
     const positionsPerRoom = [
       { localX: 90, localY: 200 },
       { localX: 235, localY: 220 },
@@ -299,12 +274,9 @@ export default function GameRoom() {
     ]
 
     const undiscoveredClues = apiClues.filter(clue => !clue.discovered)
-
-    // 방별로 단서를 그룹화하여 인덱스 관리
     const clueCountByRoom = {}
 
     return undiscoveredClues.map((clue) => {
-      // rooms가 비어있으면 floorNumber를 roomIndex로 사용
       let roomIndex = 0
       if (rooms && rooms.length > 0) {
         const foundIndex = rooms.findIndex(r => r.floorNumber === clue.floorNumber)
@@ -312,18 +284,14 @@ export default function GameRoom() {
       } else {
         roomIndex = clue.floorNumber || 0
       }
-
-      // 해당 방에서 몇 번째 단서인지 계산
       const countInRoom = clueCountByRoom[roomIndex] || 0
       clueCountByRoom[roomIndex] = countInRoom + 1
-
-      // 방 내에서의 위치 (최대 3개까지, 그 이후는 순환)
       const pos = positionsPerRoom[countInRoom % positionsPerRoom.length]
 
       return {
         clueId: clue.id,
         evidenceId: clue.id,
-        title: clue.name || '알 수 없는 단서',
+        title: clue.name || '이름 없는 단서',
         body: clue.description || `단서를 조사해보세요.`,
         roomIndex,
         localX: pos.localX,
@@ -332,14 +300,8 @@ export default function GameRoom() {
       }
     })
   }, [apiClues, rooms, roomsLoading])
-
-  // 로딩 상태
   const isLoading = scenarioLoading || roomsLoading || gameInitializing
-
-  // 에러 상태
   const hasError = scenarioError || (!scenario && !scenarioLoading)
-
-  // 플레이 시간 포맷
   const formatPlayTime = (seconds) => {
     const h = Math.floor(seconds / 3600)
     const m = Math.floor((seconds % 3600) / 60)
@@ -348,8 +310,6 @@ export default function GameRoom() {
   }
 
   const playTime = formatPlayTime(playTimeSeconds)
-
-  // 게임 초기화 (새로 시작)
   const initializeNewGame = useCallback(async () => {
     if (!activeScenarioId) {
       console.log('[GameRoom] initializeNewGame: activeScenarioId 없음')
@@ -375,9 +335,12 @@ export default function GameRoom() {
       setHealth(100)
       setPlayTimeSeconds(0)
       setHintsUsed(0)
-      setCurrentRoomIndex(0)
-
-      // 초기 로그 추가
+      const startFloorNumber = Number.isFinite(normalized.currentFloor)
+        ? normalized.currentFloor
+        : (normalized.currentRoom?.floorNumber ?? 1)
+      const startIndex = getRoomIndexFromFloor(startFloorNumber)
+      setCurrentRoomIndex(startIndex)
+      setVisitedFloors(new Set([startIndex]))
       if (normalized.eventLog) {
         addLog('system', '수사가 시작되었습니다.')
       }
@@ -390,9 +353,7 @@ export default function GameRoom() {
     } finally {
       setGameInitializing(false)
     }
-  }, [activeScenarioId, addLog])
-
-  // 게임 이어하기
+  }, [activeScenarioId, addLog, getRoomIndexFromFloor])
   const resumeGame = useCallback(async (resumeId) => {
     try {
       setGameInitializing(true)
@@ -408,16 +369,18 @@ export default function GameRoom() {
       setHealth(normalized.health || 100)
       setPlayTimeSeconds(normalized.playTime || 0)
       setHintsUsed(0)
-      setCurrentRoomIndex(normalized.currentFloor || 0)
-
-      // 이어하기 시 scenarioId 설정
+      const resumeFloorNumber = Number.isFinite(normalized.currentFloor)
+        ? normalized.currentFloor
+        : (normalized.currentRoom?.floorNumber ?? 1)
+      const resumeIndex = getRoomIndexFromFloor(resumeFloorNumber)
+      setCurrentRoomIndex(resumeIndex)
+      setVisitedFloors(new Set([resumeIndex]))
       if (normalized.scenarioId) {
         setActiveScenarioId(normalized.scenarioId)
       }
 
       // 로그 복원
       if (Array.isArray(normalized.board?.nodes)) {
-        // 보드 데이터로부터 증거 복원
         const inventoryClues = normalized.inventory?.clues || []
         inventoryClues.forEach(clue => {
           collectEvidence({
@@ -437,18 +400,15 @@ export default function GameRoom() {
     } finally {
       setGameInitializing(false)
     }
-  }, [addLog, collectEvidence])
+  }, [addLog, collectEvidence, getRoomIndexFromFloor])
 
-  // 컴포넌트 마운트 시 게임 초기화
+  // 컴포힌트 마운????게임 초기??
   useEffect(() => {
-    // 이미 세션이 있거나 초기화 중이거나 에러 상태면 스킵
     if (sessionId || gameInitializing || gameInitError) return
 
     if (resumeSessionId) {
-      // 이어하기 모드
       resumeGame(resumeSessionId)
     } else if (activeScenarioId && scenario && !scenarioLoading) {
-      // 새 게임 시작 (시나리오 로딩 완료 후)
       initializeNewGame()
     }
   }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError, initializeNewGame, resumeGame])
@@ -459,8 +419,6 @@ export default function GameRoom() {
       localStorage.removeItem(`board-connections-${activeScenarioId}`)
     }
   }, [activeScenarioId])
-
-  // 시나리오 시작/변경 시 세션 초기화 (로그 추가는 initializeNewGame/resumeGame에서만)
   useEffect(() => {
     if (!activeScenarioId) return
 
@@ -475,8 +433,6 @@ export default function GameRoom() {
     setReviewModalOpen(false)
     setReportModalOpen(false)
 
-    // 시스템 로그는 initializeNewGame/resumeGame에서 추가하므로 여기서 중복 제거
-
     const initialMsg = getHelperInitialMessage(scenario?.title || '사건')
     setChatHistories({ helper: [initialMsg] })
 
@@ -484,8 +440,6 @@ export default function GameRoom() {
     const timer = setTimeout(() => setPhoneNotification(null), 3000)
     return () => clearTimeout(timer)
   }, [activeScenarioId, scenario?.title, resetSession])
-
-  // 플레이 시간 타이머
   useEffect(() => {
     if (!sessionId) return
 
@@ -503,10 +457,7 @@ export default function GameRoom() {
     if (!clueId) return
 
     try {
-      // 백엔드에 단서 발견 요청
       const response = await discoverClue(sessionId, clueId)
-
-      // 응답 정규화
       const normalized = normalizeDiscoveredClueResponse(response)
       const clueData = normalized.clue
 
@@ -514,8 +465,6 @@ export default function GameRoom() {
         console.error('단서 데이터가 없습니다:', response)
         return
       }
-
-      // 증거 객체 생성 (API 응답 데이터만 사용)
       const evidence = {
         id: clueData.id,
         name: clueData.name,
@@ -527,19 +476,12 @@ export default function GameRoom() {
         discoveredAt: normalized.discoveredAt,
       }
       collectEvidence(evidence)
-
-      // 로그 추가
       addLog('evidence', `${evidence.name} 단서를 발견했습니다.`)
-
-      // 단서 목록 새로고침
       const cluesResponse = await fetchClues(sessionId)
       const cluesNormalized = normalizeClueListResponse(cluesResponse)
       setApiClues(cluesNormalized.clues || [])
-
-      // 백엔드 로그도 새로고침
       refetchLogs?.()
     } catch (err) {
-      // 이미 발견된 단서면 에러 무시
       if (err.message?.includes('이미') || err.message?.includes('already')) {
         console.log('이미 발견된 단서입니다.')
       } else {
@@ -554,27 +496,31 @@ export default function GameRoom() {
     if (!rooms || rooms.length === 0) return
 
     const validIndex = Math.max(0, Math.min(roomIndex, rooms.length - 1))
-    setCurrentRoomIndex(validIndex)
+    const prevIndex = currentRoomIndexRef.current
+    const hasChanged = validIndex !== prevIndex
+    if (hasChanged) {
+      setCurrentRoomIndex(validIndex)
+    }
 
-    // 첫 방문 체크
+    const room = rooms[validIndex]
+    const targetFloor = Number.isFinite(room?.floorNumber) ? room.floorNumber : (validIndex + 1)
+
+    if (sessionId && hasChanged) {
+      try {
+        await moveFloor(sessionId, targetFloor)
+        refetchLogs?.()
+      } catch (err) {
+        console.error('층 이동 API 오류:', err)
+      }
+    }
     const isFirstVisit = !visitedFloors.has(validIndex)
     if (isFirstVisit) {
       setVisitedFloors(prev => new Set([...prev, validIndex]))
 
       const room = rooms[validIndex]
       if (room) {
-        // 로그 추가
+        // 濡쒓렇 異붽?
         addLog('system', `${room.name}에 도착했습니다.`)
-
-        // 백엔드에 층 이동 알림 (첫 방문 시)
-        if (sessionId) {
-          try {
-            await moveFloor(sessionId)
-            refetchLogs?.()
-          } catch (err) {
-            console.error('층 이동 API 오류:', err)
-          }
-        }
       }
     }
   }, [rooms, visitedFloors, addLog, sessionId, refetchLogs])
@@ -597,12 +543,11 @@ export default function GameRoom() {
     const isHelper = contactId === 'helper'
 
     if (isHelper) {
-      // 조력자는 더미 응답
       setTimeout(() => {
         const responseMessage = {
           id: Date.now(),
           sender: contactId,
-          text: "네, 알겠습니다. 그 부분에 대해 조사해볼게요.",
+          text: "네, 알겠습니다. 그 부분은 제가 조사해볼게요.",
           time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
         }
         setChatHistories(prev => ({
@@ -611,26 +556,22 @@ export default function GameRoom() {
         }))
       }, 500)
     } else {
-      // 용의자 심문 - 임시 로컬 응답 (API 연결 전)
       setTimeout(() => {
         const responseMessage = {
           id: Date.now(),
           sender: contactId,
-          text: "그 부분에 대해서는 제가 알고 있는 바가 없습니다...",
+          text: "그 부분에 대해서는 아직 알고 있는 바가 없습니다...",
           time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
         }
         setChatHistories(prev => ({
           ...prev,
           [contactId]: [...(prev[contactId] || []), responseMessage]
         }))
-        addLog('interrogation', `용의자 심문을 진행했습니다.`)
+        addLog('interrogation', `용의자 신문을 진행했습니다.`)
       }, 500)
     }
   }
-
-  // 연락처 선택 시 (API 연결 전이라 별도 처리 없음)
   const handleContactSelect = useCallback((contact) => {
-    // 채팅 기록은 로컬 상태로 관리
   }, [])
 
   const handleDragStart = (e, data, type) => {
@@ -645,7 +586,7 @@ export default function GameRoom() {
   }
 
   const handleExit = useCallback(() => {
-    if (!window.confirm('정말 나가시겠습니까?')) return
+    if (!window.confirm('정말 종료하시겠습니까?')) return
     setLocation('/scenarios')
   }, [setLocation])
 
@@ -661,12 +602,9 @@ export default function GameRoom() {
     if (!sessionId) return
 
     try {
-      // 추리보드에서 범인, 흉기, 장소 추출
       const suspects = submissionItems.filter(item => item.type === 'suspect')
       const evidences = submissionItems.filter(item => item.type === 'evidence')
       const locations = submissionItems.filter(item => item.type === 'location')
-
-      // 가장 많이 연결된 용의자를 범인으로 지목
       const suspectConnectionCounts = {}
       confirmedConnections.forEach(conn => {
         suspects.forEach(s => {
@@ -679,16 +617,12 @@ export default function GameRoom() {
       const culpritItem = suspects.reduce((max, s) =>
         (suspectConnectionCounts[s.id] || 0) > (suspectConnectionCounts[max?.id] || 0) ? s : max
       , suspects[0])
-
-      // 범인과 연결된 증거 중 하나를 흉기로
       const culpritConnectedEvidence = evidences.find(e =>
         confirmedConnections.some(conn =>
           (conn.from === culpritItem?.id && conn.to === e.id) ||
           (conn.to === culpritItem?.id && conn.from === e.id)
         )
       )
-
-      // 첫 번째 장소의 floorNumber 사용
       const locationFloor = locations[0]?.floorNumber || rooms?.[0]?.floorNumber || 1
 
       const submitData = {
@@ -696,19 +630,17 @@ export default function GameRoom() {
         weaponClueId: culpritConnectedEvidence?.evidenceId || culpritConnectedEvidence?.targetId || parseInt(String(culpritConnectedEvidence?.id).replace('evidence-', '')) || 1,
         locationFloor,
         motive: motive || '범행 동기 추리',
-        causeOfDeath: '사인 추리', // 추후 입력 폼 추가 가능
+        causeOfDeath: '사인 추리', // 추후 입력 값으로 변경 가능
       }
 
       setSubmitAnswerOpen(false)
-
-      // 최종 제출 API 호출
       const result = await submitAnswer(sessionId, submitData)
 
       if (result.status === 'COMPLETED') {
-        toast.success(`사건 해결! 랭크: ${result.rankGrade}, 점수: ${result.finalScore}`)
+        toast.success(`사건 해결! 등급: ${result.rankGrade}, 점수: ${result.finalScore}`)
         setReviewModalOpen(true)
       } else if (result.status === 'WRONG_ANSWER') {
-        toast.error(`틀렸습니다. 남은 기회: ${result.remainingAttempts}회`)
+        toast.error('오답입니다. 남은 기회: ' + result.remainingAttempts + '회')
         if (result.remainingAttempts > 0) {
           setSubmitAnswerOpen(true)
         }
@@ -729,22 +661,18 @@ export default function GameRoom() {
 
     try {
       setReviewModalOpen(false)
-
-      // 리뷰 작성
       await submitReview(activeScenarioId, {
         rating,
         difficulty: difficulty.toUpperCase(),
         content: review,
         isSpoiler: false,
       })
-
-      // 수사보고서 조회
       const reportData = await fetchReport(sessionId)
       if (reportData) {
         setReportModalOpen(true)
       }
     } catch (err) {
-      toast.error('후기 작성에 실패했습니다.')
+      toast.error('보고서 생성에 실패했습니다.')
     }
   }
 
@@ -754,8 +682,6 @@ export default function GameRoom() {
     setBoardPanelOpen(true)
     setPendingAddItem({ type, data: item })
   }
-
-  // 오프닝 페이즈 핸들러
   const handleOpeningComplete = useCallback(() => {
     setGamePhase('victim')
   }, [])
@@ -767,32 +693,26 @@ export default function GameRoom() {
   const handleVictimComplete = useCallback(() => {
     setGamePhase('main')
   }, [])
-
-  // 로딩 상태 렌더링
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
           <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
-          <p className="text-muted-foreground">게임을 불러오는 중...</p>
+          <p className="text-muted-foreground">게임을 불러오는 중..</p>
         </div>
       </div>
     )
   }
-
-  // 에러 상태 렌더링
   if (hasError) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">시나리오를 불러오는데 실패했습니다.</p>
+          <p className="text-red-400 mb-4">시나리오를 불러오는 데 실패했습니다.</p>
           <Button onClick={() => window.location.href = '/scenarios'}>시나리오 목록</Button>
         </div>
       </div>
     )
   }
-
-  // 오프닝 페이즈 (새 게임 시작 시)
   if (gamePhase === 'opening' && scenario && !resumeSessionId) {
     return (
       <OpeningPhase
@@ -802,8 +722,6 @@ export default function GameRoom() {
       />
     )
   }
-
-  // 피해자 소개 페이즈
   if (gamePhase === 'victim' && scenario && !resumeSessionId) {
     return (
       <VictimIntroPhase
@@ -815,10 +733,10 @@ export default function GameRoom() {
 
   return (
     <div className="min-h-screen bg-background relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900" />
-      <div className="absolute inset-0 bg-black/40" />
+      <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 pointer-events-none" />
+      <div className="absolute inset-0 bg-black/40 pointer-events-none" />
 
-      {/* 상단 바 */}
+      
       <div className="fixed top-0 left-0 right-0 z-40 bg-card/80 backdrop-blur border-b border-border">
         <div className="container h-16">
           <div className="flex items-center justify-between h-full">
@@ -854,7 +772,7 @@ export default function GameRoom() {
         </div>
       </div>
 
-      {/* 탐사(AgitRoom) */}
+      
 	      <div
 	        className="fixed z-20 transition-all duration-300"
 	        style={{
@@ -872,17 +790,24 @@ export default function GameRoom() {
                 {currentRoom?.name || "발견 장소"}
               </span>
             </div>
-            <span className="text-sm font-bold gold-glow truncate">{scenario?.title || '시나리오'}</span>
-	          </div>
+            <div className="flex items-center gap-2 min-w-0">
+              <span className="flex items-center gap-1 text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 to-yellow-300/10 border border-amber-400/40 text-amber-200 shadow-[0_0_8px_rgba(251,191,36,0.25)]">
+                <span className="w-1.5 h-1.5 rounded-full bg-amber-300 animate-pulse" />
+                FLOOR {currentFloorNumber}
+              </span>
+              <span className="text-sm font-bold gold-glow truncate">{scenario?.title || '시나리오'}</span>
+            </div>
+          </div>
 
 	          <div className="w-full h-[calc(100%-40px)] bg-black/40 relative">
-	            {/* sessionId가 있으면 AgitRoom 렌더링 */}
+	            
 	            {sessionId ? (
 	              <AgitRoom
 	                key={`${activeScenarioId}-${sessionId}`}
 	                clues={clues}
 	                onClueInspected={handleClueInspected}
 	                onRoomChanged={handleRoomChanged}
+                initialRoomIndex={currentRoomIndex}
 	              />
 	            ) : gameInitError ? (
 	              <div className="w-full h-full flex items-center justify-center">
@@ -897,7 +822,7 @@ export default function GameRoom() {
 	              <div className="w-full h-full flex items-center justify-center">
 	                <div className="text-center">
 	                  <Loader2 className="w-8 h-8 animate-spin text-primary mx-auto mb-2" />
-	                  <p className="text-muted-foreground text-sm">게임을 준비하는 중...</p>
+	                  <p className="text-muted-foreground text-sm">게임을 준비하고 있습니다..</p>
 	                </div>
 	              </div>
 	            )}
@@ -905,7 +830,7 @@ export default function GameRoom() {
 	        </div>
 	      </div>
 
-      {/* 왼쪽 패널 (증거 목록) */}
+      
 	      <LeftEvidencePanel
 	        isOpen={leftPanelOpen}
 	        onToggle={() => setLeftPanelOpen(!leftPanelOpen)}
@@ -919,14 +844,14 @@ export default function GameRoom() {
 	        onAddToBoard={handleAddToBoard}
 	      />
 
-      {/* 오른쪽 수사 로그 사이드바 */}
+      
       <RightLogSidebar
         isOpen={rightLogOpen}
         onToggle={() => setRightLogOpen(!rightLogOpen)}
         logs={logs}
       />
 
-      {/* 하단 추리보드 패널 */}
+      
 	      <BottomBoardPanel
 	        isOpen={boardPanelOpen}
 	        onOpenChange={setBoardPanelOpen}
@@ -938,9 +863,9 @@ export default function GameRoom() {
 	        onConsumePendingAddItem={() => setPendingAddItem(null)}
 	      />
 
-      {/* 오른쪽 하단: 방 이동 + 휴대폰 */}
+      
       <div className="fixed right-6 bottom-6 z-40 flex items-center gap-3">
-        {/* 휴대폰 아이콘 */}
+        
         <div className="relative">
           <button
             onClick={() => setPhoneOpen(!phoneOpen)}
@@ -949,7 +874,7 @@ export default function GameRoom() {
             <Smartphone className="w-6 h-6 text-blue-500" />
           </button>
 
-          {/* 알림 말풍선 */}
+          
           {phoneNotification && (
             <div className="absolute bottom-16 right-0 w-64 bg-card border border-border rounded-lg shadow-xl p-3 animate-in slide-in-from-bottom-2">
               <div className="flex items-start gap-2">
@@ -967,7 +892,7 @@ export default function GameRoom() {
         </div>
       </div>
 
-      {/* 휴대폰 UI */}
+      
       <PhoneUI
         isOpen={phoneOpen}
         onClose={() => setPhoneOpen(false)}
@@ -980,7 +905,7 @@ export default function GameRoom() {
         onContactSelect={handleContactSelect}
       />
 
-      {/* 모달들 */}
+      {/* 모달??*/}
       <EvidenceDetailModal evidence={selectedEvidence} onClose={() => setSelectedEvidence(null)} />
 	      <SubmitAnswerModal
 	        isOpen={submitAnswerOpen}
@@ -994,3 +919,26 @@ export default function GameRoom() {
     </div>
   )
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,7 +1,16 @@
 import React, { useEffect, useRef } from "react";
 import Phaser from "phaser";
 
-export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, isDialogActive = false, inputFocused = false, canUseElevator = true }) {
+export default function AgitRoom({
+    clues = [],
+    onClueInspected,
+    onRoomChanged,
+    isDialogActive = false,
+    inputFocused = false,
+    canUseElevator = true,
+    initialRoomIndex = 0,
+}) {
+    const ENABLE_PUZZLES = false;
     const gameContainer = useRef(null);
     const gameInstance = useRef(null);
     const onClueInspectedRef = useRef(onClueInspected);
@@ -9,6 +18,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
     const isDialogActiveRef = useRef(isDialogActive);
     const inputFocusedRef = useRef(inputFocused);
     const canUseElevatorRef = useRef(canUseElevator);
+    const initialRoomIndexRef = useRef(initialRoomIndex);
 
     useEffect(() => {
         onClueInspectedRef.current = onClueInspected;
@@ -29,6 +39,10 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
     useEffect(() => {
         canUseElevatorRef.current = canUseElevator;
     }, [canUseElevator]);
+
+    useEffect(() => {
+        initialRoomIndexRef.current = initialRoomIndex;
+    }, [initialRoomIndex]);
 
     useEffect(() => {
         if (gameInstance.current) return;
@@ -74,6 +88,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                     this.scene.start("AgitScene", {
                         assets: parsedData,
                         clues: initialClues,
+                        initialRoomIndex: initialRoomIndexRef.current,
                         onClueInspected: (payload) => {
                             try {
                                 onClueInspectedRef.current?.(payload);
@@ -181,9 +196,38 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 // UI
                 this.interactionContainer = null;
                 this.interactionText = null;
+                this.interactionKeyBg = null;
+                this.interactionKeyText = null;
+                this.interactionActionText = null;
+                this.floorHudContainer = null;
+                this.floorHudBg = null;
+                this.floorHudText = null;
+                this.floorHudAccent = null;
+                this.floorHudTopLine = null;
 
                 // ✅ 프롬프트 BG 레퍼런스(빛나는 연출용)
                 this.promptBg = null;
+                this.elevatorMenuContainer = null;
+                this.elevatorMenuBg = null;
+                this.elevatorMenuGlow = null;
+                this.elevatorMenuTitle = null;
+                this.elevatorMenuHint = null;
+                this.elevatorMenuUpRow = null;
+                this.elevatorMenuDownRow = null;
+                this.elevatorMenuUpText = null;
+                this.elevatorMenuDownText = null;
+                this.elevatorMenuUpKey = null;
+                this.elevatorMenuDownKey = null;
+                this.isElevatorMenuOpen = false;
+                this.elevatorGlows = [];
+                this.elevatorGlowPulseSeed = Math.random() * 1000;
+                this.uiBeepCooldownUntil = 0;
+
+                this.flashDust = null;
+                this.flashDustEmitter = null;
+                this.flashDustOn = false;
+
+                this.baseZoom = 1;
 
                 // 비네팅
                 this.vignette = null;
@@ -209,6 +253,23 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 this.inspectTitleText = null;
                 this.inspectBodyText = null;
 
+                this.isPuzzleActive = false;
+                this.puzzleContainer = null;
+                this.puzzleTitle = null;
+                this.puzzleHint = null;
+                this.puzzleLeftSockets = [];
+                this.puzzleRightSockets = [];
+                this.puzzleLines = [];
+                this.puzzleActiveLeft = null;
+                this.puzzleSolvedCount = 0;
+                this.puzzleTarget = null;
+                this.puzzleType = null;
+                this.timingBar = null;
+                this.timingZone = null;
+                this.timingIndicator = null;
+                this.timingTween = null;
+                this.elevatorWirePending = false;
+
                 this.keyEsc = null;
 
                 // ✅ [추가] 증거 반짝 파티클
@@ -219,6 +280,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 this.initialClues = [];
                 this.onClueInspected = null;
                 this.onRoomChanged = null;
+                this.initialRoomIndex = 0;
             }
 
             init(data) {
@@ -230,6 +292,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 this.initialClues = Array.isArray(data?.clues) ? data.clues : [];
                 this.onClueInspected = typeof data?.onClueInspected === "function" ? data.onClueInspected : null;
                 this.onRoomChanged = typeof data?.onRoomChanged === "function" ? data.onRoomChanged : null;
+                this.initialRoomIndex = Number.isFinite(data?.initialRoomIndex) ? data.initialRoomIndex : 0;
             }
 
             preload() {
@@ -272,6 +335,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
 
                     this.roomsData = [];
                     this.createAnimations();
+                    this.createElevatorGlowTextures();
 
                     // SFX 객체
                     this.sfxFlashlight = this.sound.add("sfx_flashlight", { volume: 0.5 });
@@ -392,11 +456,15 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                         this.physics.world.enable(portal);
                         portal.body.moves = false;
 
+                        this.addElevatorGlow(doorX, doorY, roomOriginY, i);
+
                         this.decorateRoom(roomType, roomOriginX, roomOriginY);
                     }
 
                     // 플레이어
-                    const startRoom = this.roomsData[0];
+                    const startIndex = Phaser.Math.Clamp(this.initialRoomIndex, 0, this.ROOM_COUNT - 1);
+                    this.currentRoomIndex = startIndex;
+                    const startRoom = this.roomsData[startIndex];
                     this.player = this.physics.add.sprite(startRoom.centerX, startRoom.centerY + 50, "bob");
                     this.player.setScale(1.5).setCollideWorldBounds(true).setDepth(100);
                     this.player.body.setSize(20, 20).setOffset(6, 12);
@@ -415,6 +483,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                     this.createLighting();
                     this.createVignette();
                     this.createFlashlight();
+                    this.createFlashlightDust();
                     this.createInteractGlow();
                     this.createElevatorDoors();
 
@@ -429,7 +498,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                     this.lightSprite.setPosition(startRoom.centerX, startRoom.centerY);
 
                     try {
-                        this.onRoomChanged?.(0);
+                        this.onRoomChanged?.(startIndex);
                     } catch (e) {
                         console.error("AgitScene onRoomChanged error:", e);
                     }
@@ -437,26 +506,40 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                     this.createStaticNoise();
 
                     const targetZoom = this.scale.width / this.ROOM_WIDTH;
+                    this.baseZoom = targetZoom;
                     this.cameras.main.setZoom(targetZoom);
                     this.cameras.main.setRoundPixels(true);
 
                     this.cameras.main.startFollow(this.player, true, 0.12, 0.12);
-                    this.updateCameraBounds(0);
+                    this.updateCameraBounds(startIndex);
 
                     this.cursors = this.input.keyboard.createCursorKeys();
                     this.wasd = this.input.keyboard.addKeys({ up: 87, left: 65, down: 83, right: 68 });
                     this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
                     this.keyShift = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
                     this.keyEsc = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC);
+                    this.input.on("pointerdown", this.handlePuzzlePointerDown, this);
 
                     // 프롬프트 UI
                     this.interactionContainer = this.add.container(0, 0).setDepth(12000).setVisible(false);
-                    const bg = this.add.rectangle(0, 0, 110, 20, 0x000000, 1.0).setStrokeStyle(2, 0xffffff);
+                    const bg = this.add.rectangle(0, 0, 150, 26, 0x0b0d10, 0.92).setStrokeStyle(2, 0xffffff);
                     this.promptBg = bg;
-                    this.interactionText = this.add
-                        .text(0, 0, "INSPECT [SPACE]", { fontSize: "10px", color: "#fff", fontStyle: "bold" })
+
+                    const keyBg = this.add.rectangle(-50, 0, 42, 18, 0x151515, 1).setStrokeStyle(1, 0x9cc2ff);
+                    const keyText = this.add
+                        .text(-50, 0, "SPACE", { fontSize: "9px", color: "#e9f3ff", fontStyle: "bold" })
                         .setOrigin(0.5);
-                    this.interactionContainer.add([bg, this.interactionText]);
+
+                    const actionText = this.add
+                        .text(-20, 0, "INSPECT", { fontSize: "10px", color: "#ffffff", fontStyle: "bold" })
+                        .setOrigin(0, 0.5);
+                    actionText.setShadow(0, 1, "#000", 2, false, true);
+
+                    this.interactionKeyBg = keyBg;
+                    this.interactionKeyText = keyText;
+                    this.interactionActionText = actionText;
+                    this.interactionContainer.add([bg, keyBg, keyText, actionText]);
+                    this.updateInteractionPrompt("INSPECT", 0xffffcc);
 
                     this.tweens.add({
                         targets: this.interactionContainer,
@@ -466,6 +549,10 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                         repeat: -1,
                         ease: "Sine.easeInOut",
                     });
+
+                    this.createElevatorMenu();
+                    this.createFloorHud();
+                    this.updateFloorHud(startIndex);
 
                     this.player.anims.play("bob-idle-down", true);
                     this.cameras.main.fadeIn(600, 0, 0, 0);
@@ -572,6 +659,395 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 this.inspectTitleText = title;
                 this.inspectBodyText = body;
                 this.inspectUI.add([bg, title, body, hint]);
+            }
+
+            openWirePuzzle(target) {
+                this.openCluePuzzle(target);
+            }
+
+            openCluePuzzle(target) {
+                if (!target || this.isPuzzleActive) return;
+                if (!ENABLE_PUZZLES) {
+                    if (target?.active) this.openInspect(target);
+                    return;
+                }
+
+                this.isPuzzleActive = true;
+                this.puzzleTarget = target;
+                this.puzzleSolvedCount = 0;
+                this.puzzleActiveLeft = null;
+                this.puzzleType = "timing";
+
+                if (this.highlightTarget === target) this.highlightTarget = null;
+                if (this.interactGlow) {
+                    this.interactGlow.setVisible(false);
+                    this.interactGlow.setAlpha(0);
+                }
+                this.setClueSparkle(false);
+                this.interactionContainer?.setVisible(false);
+
+                if (this.puzzleType === "wire") {
+                    this.buildWirePuzzle();
+                } else {
+                    this.buildTimingPuzzle();
+                }
+            }
+
+            openElevatorWirePuzzle() {
+                if (this.isPuzzleActive) return false;
+                if (!ENABLE_PUZZLES) return false;
+
+                this.isPuzzleActive = true;
+                this.puzzleTarget = null;
+                this.puzzleSolvedCount = 0;
+                this.puzzleActiveLeft = null;
+                this.puzzleType = "wire";
+                this.elevatorWirePending = true;
+
+                if (this.interactGlow) {
+                    this.interactGlow.setVisible(false);
+                    this.interactGlow.setAlpha(0);
+                }
+                this.setClueSparkle(false);
+                this.interactionContainer?.setVisible(false);
+
+                this.buildWirePuzzle();
+                return true;
+            }
+
+            closeWirePuzzle() {
+                this.isPuzzleActive = false;
+                this.puzzleActiveLeft = null;
+                this.puzzleSolvedCount = 0;
+                this.puzzleTarget = null;
+                this.puzzleType = null;
+                this.elevatorWirePending = false;
+                if (this.timingTween) {
+                    this.timingTween.stop();
+                    this.timingTween = null;
+                }
+                this.timingBar = null;
+                this.timingZone = null;
+                this.timingIndicator = null;
+
+                if (this.puzzleContainer) {
+                    this.puzzleContainer.destroy(true);
+                    this.puzzleContainer = null;
+                }
+                this.puzzleLeftSockets = [];
+                this.puzzleRightSockets = [];
+                this.puzzleLines = [];
+                this.puzzleTitle = null;
+                this.puzzleHint = null;
+            }
+
+            buildWirePuzzle() {
+                const w = this.sys.game.config.width;
+                const h = this.sys.game.config.height;
+
+                if (this.puzzleContainer) this.puzzleContainer.destroy(true);
+
+                const container = this.add.container(w / 2, h / 2).setScrollFactor(0).setDepth(32000);
+                const bg = this.add.rectangle(0, 0, 300, 220, 0x090d12, 0.95).setStrokeStyle(2, 0x7fb2ff, 0.9);
+                const title = this.add
+                    .text(0, -96, "WIRE PANEL", { fontSize: "12px", color: "#d6e8ff", fontStyle: "bold" })
+                    .setOrigin(0.5);
+                title.setShadow(0, 1, "#000", 2, true, true);
+
+                const hint = this.add.text(0, 96, "CONNECT MATCHING COLORS", { fontSize: "9px", color: "#7f90a8" }).setOrigin(0.5);
+
+                container.add([bg, title, hint]);
+
+                const colors = [0x6fd3ff, 0xff9b7a, 0x9bff9b, 0xfff07a, 0xb78bff, 0xff88c4];
+                const wireCount = 4;
+
+                const leftX = -90;
+                const rightX = 90;
+                const startY = -48;
+                const gap = 30;
+
+                const baseOrder = Array.from({ length: wireCount }, (_, i) => i);
+                let rightOrder = [...baseOrder];
+                let tries = 0;
+                while (tries < 10) {
+                    rightOrder = Phaser.Utils.Array.Shuffle([...baseOrder]);
+                    let same = true;
+                    for (let i = 0; i < wireCount; i++) {
+                        if (rightOrder[i] !== baseOrder[i]) {
+                            same = false;
+                            break;
+                        }
+                    }
+                    if (!same) break;
+                    tries += 1;
+                }
+
+                this.puzzleLeftSockets = [];
+                this.puzzleRightSockets = [];
+                this.puzzleLines = [];
+
+                for (let i = 0; i < wireCount; i++) {
+                    const y = startY + i * gap;
+                    const color = colors[i];
+
+                    const leftSocket = this.add.circle(leftX, y, 7, color, 1).setStrokeStyle(2, 0x0f141b);
+                    leftSocket.setData("index", i);
+                    leftSocket.setData("connected", false);
+
+                    const rightColorIndex = rightOrder[i];
+                    const rightSocket = this.add.circle(rightX, y, 7, colors[rightColorIndex], 1).setStrokeStyle(2, 0x0f141b);
+                    rightSocket.setData("index", rightColorIndex);
+                    rightSocket.setData("connected", false);
+
+                    this.puzzleLeftSockets.push(leftSocket);
+                    this.puzzleRightSockets.push(rightSocket);
+                    container.add([leftSocket, rightSocket]);
+
+                    leftSocket.setInteractive(new Phaser.Geom.Circle(0, 0, 7), Phaser.Geom.Circle.Contains, { useHandCursor: true });
+                    leftSocket.on("pointerdown", () => this.selectWireLeft(i));
+
+                    rightSocket.setInteractive(new Phaser.Geom.Circle(0, 0, 7), Phaser.Geom.Circle.Contains, { useHandCursor: true });
+                    rightSocket.on("pointerdown", () => this.tryConnectWire(rightColorIndex));
+                }
+
+                this.puzzleContainer = container;
+                this.puzzleTitle = title;
+                this.puzzleHint = hint;
+            }
+
+            buildTimingPuzzle() {
+                const w = this.sys.game.config.width;
+                const h = this.sys.game.config.height;
+
+                if (this.puzzleContainer) this.puzzleContainer.destroy(true);
+
+                const container = this.add.container(w / 2, h / 2).setScrollFactor(0).setDepth(32000);
+                const bg = this.add.rectangle(0, 0, 300, 220, 0x090d12, 0.95).setStrokeStyle(2, 0x7fb2ff, 0.9);
+                const title = this.add
+                    .text(0, -96, "TIMING LOCK", { fontSize: "12px", color: "#d6e8ff", fontStyle: "bold" })
+                    .setOrigin(0.5);
+                title.setShadow(0, 1, "#000", 2, true, true);
+
+                const hint = this.add.text(0, 96, "CLICK / SPACE TO STOP", { fontSize: "9px", color: "#7f90a8" }).setOrigin(0.5);
+
+                const barW = 220;
+                const barH = 10;
+                const bar = this.add.rectangle(0, 0, barW, barH, 0x1b2430, 1).setStrokeStyle(1, 0x7fb2ff, 0.9);
+
+                const zoneW = 40;
+                const zoneMinX = -barW / 2 + zoneW / 2;
+                const zoneMaxX = barW / 2 - zoneW / 2;
+                const zoneX = Phaser.Math.Between(zoneMinX, zoneMaxX);
+                const zone = this.add.rectangle(zoneX, 0, zoneW, barH + 6, 0x7fb2ff, 0.35).setStrokeStyle(1, 0xffffff, 0.6);
+
+                const indicator = this.add.rectangle(-barW / 2, 0, 8, barH + 8, 0xfff07a, 1).setStrokeStyle(1, 0xffffff, 0.8);
+
+                container.add([bg, title, hint, bar, zone, indicator]);
+
+                this.puzzleContainer = container;
+                this.puzzleTitle = title;
+                this.puzzleHint = hint;
+                this.timingBar = bar;
+                this.timingZone = zone;
+                this.timingIndicator = indicator;
+
+                this.timingTween = this.tweens.add({
+                    targets: indicator,
+                    x: barW / 2,
+                    duration: Phaser.Math.Between(900, 1300),
+                    yoyo: true,
+                    repeat: -1,
+                    ease: "Sine.easeInOut",
+                });
+            }
+
+            pulseSocket(socket) {
+                if (!socket) return;
+                this.tweens.add({
+                    targets: socket,
+                    scale: 1.35,
+                    duration: 70,
+                    yoyo: true,
+                    repeat: 0,
+                    ease: "Sine.easeOut",
+                });
+            }
+
+            handlePuzzlePointerDown(pointer) {
+                if (!this.isPuzzleActive) return;
+                if (this.puzzleType === "wire" && (!this.puzzleLeftSockets.length || !this.puzzleRightSockets.length)) return;
+
+                this.handlePuzzlePointerAtScreen(pointer.x, pointer.y);
+            }
+
+            handlePuzzlePointerAtScreen(screenX, screenY) {
+                if (!this.isPuzzleActive) return;
+                if (this.puzzleType === "timing") {
+                    this.tryTimingStop();
+                    return;
+                }
+                if (this.puzzleType !== "wire") return;
+                const hitRadius = 24;
+                const container = this.puzzleContainer;
+                if (!container) return;
+                const cam = this.cameras.main;
+                const worldPoint = cam.getWorldPoint(screenX, screenY);
+                const localPoint = container.getLocalPoint(worldPoint.x, worldPoint.y);
+                const localX = localPoint.x;
+                const localY = localPoint.y;
+
+                if (this.puzzleActiveLeft == null) {
+                    const hitLeft = this.findSocketHitLocal(this.puzzleLeftSockets, localX, localY, hitRadius);
+                    if (hitLeft) {
+                        this.pulseSocket(hitLeft);
+                        const leftIndex = hitLeft.getData("index");
+                        this.selectWireLeft(leftIndex);
+                    }
+                    return;
+                }
+
+                const hitRight = this.findSocketHitLocal(this.puzzleRightSockets, localX, localY, hitRadius);
+                if (hitRight) {
+                    this.pulseSocket(hitRight);
+                    const rightIndex = hitRight.getData("index");
+                    this.tryConnectWire(rightIndex);
+                }
+            }
+
+            findSocketHitLocal(sockets, localX, localY, radius) {
+                for (let i = 0; i < sockets.length; i++) {
+                    const socket = sockets[i];
+                    if (!socket || socket.getData("connected")) continue;
+                    const dist = Phaser.Math.Distance.Between(localX, localY, socket.x, socket.y);
+                    if (dist <= radius) {
+                        return socket;
+                    }
+                }
+                return null;
+            }
+
+            selectWireLeft(index) {
+                if (!this.puzzleLeftSockets[index]) return;
+                if (this.puzzleLeftSockets[index].getData("connected")) return;
+
+                this.puzzleActiveLeft = index;
+                this.puzzleLeftSockets.forEach((socket, i) => {
+                    if (!socket) return;
+                    const scale = i === index ? 1.25 : 1.0;
+                    socket.setScale(scale);
+                    socket.setStrokeStyle(i === index ? 3 : 2, 0x0f141b);
+                });
+            }
+
+            tryConnectWire(rightColorIndex) {
+                if (this.puzzleActiveLeft == null) return;
+
+                const leftIndex = this.puzzleActiveLeft;
+                const leftSocket = this.puzzleLeftSockets[leftIndex];
+                if (!leftSocket || leftSocket.getData("connected")) return;
+
+                const rightSocket = this.puzzleRightSockets.find((socket) => socket?.getData("index") === rightColorIndex);
+                if (!rightSocket || rightSocket.getData("connected")) return;
+
+                if (rightColorIndex !== leftIndex) {
+                    this.playUiBeep(280, 0.08, 0.06);
+                    if (this.puzzleContainer) {
+                        this.tweens.add({
+                            targets: this.puzzleContainer,
+                            x: "+=6",
+                            duration: 50,
+                            yoyo: true,
+                            repeat: 2,
+                            ease: "Sine.easeInOut",
+                        });
+                    }
+                    return;
+                }
+
+                const line = this.add.graphics();
+                line.lineStyle(3, leftSocket.fillColor, 0.9);
+                line.beginPath();
+                line.moveTo(leftSocket.x, leftSocket.y);
+                line.lineTo(rightSocket.x, rightSocket.y);
+                line.strokePath();
+                this.puzzleLines.push(line);
+                this.puzzleContainer.add(line);
+
+                leftSocket.setData("connected", true);
+                rightSocket.setData("connected", true);
+                leftSocket.disableInteractive();
+                rightSocket.disableInteractive();
+                leftSocket.setScale(1.0);
+                leftSocket.setStrokeStyle(2, 0x0f141b);
+                rightSocket.setStrokeStyle(2, 0x0f141b);
+
+                this.puzzleSolvedCount += 1;
+                this.playUiBeep(860, 0.06, 0.08);
+                this.puzzleActiveLeft = null;
+
+                if (this.puzzleSolvedCount >= this.puzzleLeftSockets.length) {
+                    if (this.puzzleHint) this.puzzleHint.setText("UNLOCKED");
+                    this.time.delayedCall(180, () => {
+                        const target = this.puzzleTarget;
+                        const shouldOpenElevator = this.elevatorWirePending;
+                        this.closeWirePuzzle();
+                        if (shouldOpenElevator) {
+                            this.openElevatorMenu();
+                            this.elevatorMenuContainer?.setPosition(this.player.x, this.player.y - 60);
+                            return;
+                        }
+                        if (target?.active) this.openInspect(target);
+                    });
+                }
+            }
+
+            tryTimingStop() {
+                if (!this.timingIndicator || !this.timingZone) return;
+                if (!this.timingTween) return;
+
+                this.timingTween.stop();
+                this.timingTween = null;
+
+                const indicatorX = this.timingIndicator.x;
+                const zoneLeft = this.timingZone.x - this.timingZone.width / 2;
+                const zoneRight = this.timingZone.x + this.timingZone.width / 2;
+
+                if (indicatorX >= zoneLeft && indicatorX <= zoneRight) {
+                    if (this.puzzleHint) this.puzzleHint.setText("UNLOCKED");
+                    this.playUiBeep(860, 0.06, 0.08);
+                    this.time.delayedCall(180, () => {
+                        const target = this.puzzleTarget;
+                        this.closeWirePuzzle();
+                        if (target?.active) this.openInspect(target);
+                    });
+                    return;
+                }
+
+                this.playUiBeep(280, 0.08, 0.06);
+                if (this.puzzleContainer) {
+                    this.tweens.add({
+                        targets: this.puzzleContainer,
+                        x: "+=6",
+                        duration: 50,
+                        yoyo: true,
+                        repeat: 2,
+                        ease: "Sine.easeInOut",
+                    });
+                }
+
+                if (this.timingIndicator) {
+                    const barW = this.timingBar?.width || 220;
+                    this.timingIndicator.x = -barW / 2;
+                }
+
+                this.timingTween = this.tweens.add({
+                    targets: this.timingIndicator,
+                    x: (this.timingBar?.width || 220) / 2,
+                    duration: Phaser.Math.Between(900, 1300),
+                    yoyo: true,
+                    repeat: -1,
+                    ease: "Sine.easeInOut",
+                });
             }
 
             openInspect(target) {
@@ -880,6 +1356,51 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 this.flashAlphaIntent = 0;
             }
 
+            createFlashlightDust() {
+                if (!this.textures.exists("flash_dust")) {
+                    const g = this.make.graphics({ x: 0, y: 0, add: false });
+                    g.fillStyle(0xf6f8ff, 0.85);
+                    g.fillCircle(2, 2, 2);
+                    g.generateTexture("flash_dust", 4, 4);
+                }
+
+                this.flashDust = this.add.particles(0, 0, "flash_dust", {
+                    lifespan: { min: 500, max: 900 },
+                    speed: { min: 2, max: 14 },
+                    angle: { min: 0, max: 360 },
+                    scale: { start: 1.0, end: 0 },
+                    alpha: { start: 0.35, end: 0 },
+                    frequency: 70,
+                    blendMode: "ADD",
+                    on: false,
+                });
+                this.flashDust.setDepth(9004);
+                this.flashDustEmitter = this.flashDust.emitters?.list?.[0] ?? null;
+                this.flashDustOn = false;
+            }
+
+            updateFlashlightDust(time) {
+                if (!this.flashDust || !this.flashDustEmitter || !this.flashlight) return;
+
+                const active = this.isFlashlightOn && this.flashAlpha > 0.15;
+                if (active) {
+                    const offsetDist = 60;
+                    const angle = this.flashlight.rotation;
+                    const offsetX = Math.cos(angle) * offsetDist;
+                    const offsetY = Math.sin(angle) * offsetDist;
+                    this.flashDust.setPosition(this.flashlight.x + offsetX, this.flashlight.y + offsetY);
+                    this.flashDust.setAlpha(Phaser.Math.Clamp(this.flashAlpha * 0.6, 0, 0.6));
+
+                    if (!this.flashDustOn) {
+                        this.flashDustEmitter.start();
+                        this.flashDustOn = true;
+                    }
+                } else if (this.flashDustOn) {
+                    this.flashDustEmitter.stop();
+                    this.flashDustOn = false;
+                }
+            }
+
             createInteractGlow() {
                 if (!this.textures.exists("interact_glow")) {
                     const size = 128;
@@ -1167,6 +1688,79 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 this.applyRoomParticleProfile(roomType);
             }
 
+            createElevatorGlowTextures() {
+                if (!this.textures.exists("elevator_glow")) {
+                    const size = 140;
+                    const tex = this.textures.createCanvas("elevator_glow", size, size);
+                    const ctx = tex.getContext();
+
+                    const grd = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
+                    grd.addColorStop(0.0, "rgba(140, 190, 255, 0.45)");
+                    grd.addColorStop(0.5, "rgba(110, 170, 255, 0.18)");
+                    grd.addColorStop(1.0, "rgba(0, 0, 0, 0)");
+
+                    ctx.fillStyle = grd;
+                    ctx.fillRect(0, 0, size, size);
+                    tex.refresh();
+                }
+
+                if (!this.textures.exists("elevator_spot")) {
+                    const w = 160;
+                    const h = 80;
+                    const tex = this.textures.createCanvas("elevator_spot", w, h);
+                    const ctx = tex.getContext();
+
+                    ctx.fillStyle = "rgba(130, 185, 255, 0.28)";
+                    ctx.beginPath();
+                    ctx.ellipse(w / 2, h / 2, 68, 22, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    tex.refresh();
+                }
+            }
+
+            addElevatorGlow(doorX, doorY, roomOriginY, roomIndex) {
+                if (!this.textures.exists("elevator_glow")) this.createElevatorGlowTextures();
+
+                const glow = this.add.image(doorX, doorY + 6, "elevator_glow");
+                glow.setDepth(45);
+                glow.setBlendMode(Phaser.BlendModes.ADD);
+                glow.setAlpha(0.18);
+                glow.setScale(0.45, 0.35);
+
+                const spot = this.add.image(doorX, roomOriginY + 82, "elevator_spot");
+                spot.setDepth(2);
+                spot.setAlpha(0.16);
+                spot.setScale(0.6, 0.45);
+                spot.setBlendMode(Phaser.BlendModes.ADD);
+
+                this.elevatorGlows.push({
+                    glow,
+                    spot,
+                    roomIndex,
+                    seed: Math.random() * 1000,
+                });
+            }
+
+            updateElevatorGlows(time, nearPortal) {
+                if (!this.elevatorGlows.length) return;
+
+                this.elevatorGlows.forEach((entry) => {
+                    if (!entry?.glow || !entry?.spot) return;
+
+                    const isActive = entry.roomIndex === this.currentRoomIndex;
+                    const pulse = 0.5 + 0.5 * Math.sin(time * 0.01 + entry.seed);
+                    const glowBase = isActive ? (nearPortal ? 0.28 : 0.18) : 0.08;
+                    const glowAlpha = glowBase + (isActive ? 0.08 : 0.02) * pulse;
+                    const glowScale = isActive ? 0.5 + (nearPortal ? 0.08 * pulse : 0.04 * pulse) : 0.42;
+
+                    entry.glow.setAlpha(glowAlpha);
+                    entry.glow.setScale(glowScale, glowScale * 0.75);
+
+                    const spotBase = isActive ? (nearPortal ? 0.22 : 0.14) : 0.06;
+                    entry.spot.setAlpha(spotBase + (isActive ? 0.05 * pulse : 0));
+                });
+            }
+
             createElevatorDoors() {
                 const screenW = this.sys.game.config.width;
                 const screenH = this.sys.game.config.height;
@@ -1183,6 +1777,205 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                     .setScrollFactor(0)
                     .setDepth(20000)
                     .setVisible(false);
+            }
+
+            createElevatorMenu() {
+                this.elevatorMenuContainer = this.add.container(0, 0).setDepth(12010).setVisible(false);
+
+                const glow = this.add.image(0, 0, "interact_glow").setScale(0.6).setAlpha(0.25);
+                glow.setBlendMode(Phaser.BlendModes.ADD);
+
+                const bg = this.add.rectangle(0, 0, 150, 66, 0x0a0f16, 0.94).setStrokeStyle(2, 0x7fb2ff, 0.9);
+                const title = this.add
+                    .text(0, -24, "ELEVATOR PANEL", { fontSize: "9px", color: "#9cc2ff", fontStyle: "bold" })
+                    .setOrigin(0.5);
+                title.setShadow(0, 1, "#000", 2, true, true);
+
+                const upRow = this.add.container(0, -4);
+                const upKey = this.add.rectangle(-46, 0, 18, 18, 0x161616, 1).setStrokeStyle(1, 0x9cc2ff);
+                const upKeyText = this.add.text(-46, 0, "W", { fontSize: "10px", color: "#e6f1ff", fontStyle: "bold" }).setOrigin(0.5);
+                const upText = this.add.text(-22, 0, "UP FLOOR", { fontSize: "10px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 0.5);
+                upText.setShadow(0, 1, "#000", 2, false, true);
+                upRow.add([upKey, upKeyText, upText]);
+
+                const downRow = this.add.container(0, 12);
+                const downKey = this.add.rectangle(-46, 0, 18, 18, 0x161616, 1).setStrokeStyle(1, 0x9cc2ff);
+                const downKeyText = this.add.text(-46, 0, "S", { fontSize: "10px", color: "#e6f1ff", fontStyle: "bold" }).setOrigin(0.5);
+                const downText = this.add.text(-22, 0, "DOWN FLOOR", { fontSize: "10px", color: "#ffffff", fontStyle: "bold" }).setOrigin(0, 0.5);
+                downText.setShadow(0, 1, "#000", 2, false, true);
+                downRow.add([downKey, downKeyText, downText]);
+
+                const hint = this.add.text(0, 26, "SPACE: CLOSE", { fontSize: "8px", color: "#7f90a8" }).setOrigin(0.5);
+
+                this.elevatorMenuBg = bg;
+                this.elevatorMenuGlow = glow;
+                this.elevatorMenuTitle = title;
+                this.elevatorMenuHint = hint;
+                this.elevatorMenuUpRow = upRow;
+                this.elevatorMenuDownRow = downRow;
+                this.elevatorMenuUpText = upText;
+                this.elevatorMenuDownText = downText;
+                this.elevatorMenuUpKey = upKey;
+                this.elevatorMenuDownKey = downKey;
+                this.elevatorMenuContainer.add([glow, bg, title, upRow, downRow, hint]);
+            }
+
+            createFloorHud() {
+                const w = this.sys.game.config.width;
+                const container = this.add.container(w / 2, 26).setScrollFactor(0).setDepth(15000);
+
+                const bg = this.add.rectangle(0, 0, 150, 26, 0x0a0f14, 0.92).setStrokeStyle(1, 0x7fb2ff, 0.9);
+                const topLine = this.add.rectangle(0, -11, 150, 2, 0x7fb2ff, 0.75);
+                const accent = this.add.rectangle(-60, 0, 6, 16, 0x7fb2ff, 0.9);
+                const text = this.add
+                    .text(-52, 0, "FLOOR 01", { fontSize: "11px", color: "#e7f2ff", fontStyle: "bold" })
+                    .setOrigin(0, 0.5);
+                text.setShadow(0, 1, "#000", 2, false, true);
+
+                container.add([bg, topLine, accent, text]);
+
+                this.floorHudContainer = container;
+                this.floorHudBg = bg;
+                this.floorHudText = text;
+                this.floorHudAccent = accent;
+                this.floorHudTopLine = topLine;
+
+                this.scale.on(
+                    "resize",
+                    (gameSize) => {
+                        if (!this.floorHudContainer) return;
+                        this.floorHudContainer.setPosition(gameSize.width / 2, 26);
+                    },
+                    this
+                );
+            }
+
+            updateFloorHud(roomIndex) {
+                if (!this.floorHudContainer || !this.floorHudText || !this.floorHudBg) return;
+
+                const floorNumber = Phaser.Math.Clamp(roomIndex + 1, 1, this.ROOM_COUNT);
+                const label = `FLOOR ${String(floorNumber).padStart(2, "0")}`;
+                this.floorHudText.setText(label);
+
+                const palette = [0x7fb2ff, 0x8cc5ff, 0x9bd6ff, 0xffc07f, 0xffad75, 0xff9966];
+                const accentColor = palette[floorNumber - 1] ?? 0x7fb2ff;
+                this.floorHudBg.setStrokeStyle(1, accentColor, 0.9);
+                this.floorHudAccent?.setFillStyle(accentColor, 0.9);
+                this.floorHudTopLine?.setFillStyle(accentColor, 0.75);
+
+                this.tweens.add({
+                    targets: this.floorHudContainer,
+                    scale: 1.06,
+                    duration: 130,
+                    yoyo: true,
+                    ease: "Sine.easeOut",
+                });
+            }
+
+            updateInteractionPrompt(label, accentColor = 0xffffff) {
+                if (!this.interactionContainer || !this.promptBg || !this.interactionActionText) return;
+
+                this.interactionActionText.setText(label);
+                if (this.interactionKeyText) this.interactionKeyText.setText("SPACE");
+
+                const keyWidth = 42;
+                const keyHeight = 18;
+                const gap = 8;
+                const padding = 12;
+                const totalWidth = keyWidth + gap + this.interactionActionText.width + padding * 2;
+                const totalHeight = 26;
+
+                this.promptBg.setSize(totalWidth, totalHeight);
+                const left = -totalWidth / 2 + padding;
+                const keyX = left + keyWidth / 2;
+
+                this.interactionKeyBg?.setSize(keyWidth, keyHeight);
+                this.interactionKeyBg?.setPosition(keyX, 0);
+                this.interactionKeyText?.setPosition(keyX, 0);
+                this.interactionActionText.setPosition(keyX + keyWidth / 2 + gap, 0);
+
+                this.promptBg.setStrokeStyle(2, accentColor);
+                this.interactionKeyBg?.setStrokeStyle(1, accentColor);
+            }
+
+            playUiBeep(freq = 820, duration = 0.07, volume = 0.1) {
+                const ctx = this.sound?.context;
+                if (!ctx) return;
+
+                const now = ctx.currentTime;
+                if (this.uiBeepCooldownUntil && now < this.uiBeepCooldownUntil) return;
+                this.uiBeepCooldownUntil = now + 0.04;
+
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                osc.type = "sine";
+                osc.frequency.setValueAtTime(freq, now);
+                gain.gain.setValueAtTime(0.0001, now);
+                gain.gain.exponentialRampToValueAtTime(volume, now + 0.01);
+                gain.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                osc.start(now);
+                osc.stop(now + duration + 0.02);
+            }
+
+            updateElevatorMenuAvailability() {
+                if (!this.elevatorMenuContainer) return;
+
+                const canGoUp = this.currentRoomIndex < this.ROOM_COUNT - 1;
+                const canGoDown = this.currentRoomIndex > 0;
+
+                this.elevatorMenuUpText.setAlpha(1);
+                this.elevatorMenuDownText.setAlpha(1);
+                this.elevatorMenuUpRow.setVisible(canGoUp);
+                this.elevatorMenuDownRow.setVisible(canGoDown);
+
+                if (canGoUp && canGoDown) {
+                    this.elevatorMenuUpRow.y = -4;
+                    this.elevatorMenuDownRow.y = 12;
+                    this.elevatorMenuTitle.y = -24;
+                    if (this.elevatorMenuHint) this.elevatorMenuHint.y = 26;
+                    this.elevatorMenuBg.setSize(150, 66);
+                    this.elevatorMenuGlow?.setScale(0.6);
+                } else if (canGoUp) {
+                    this.elevatorMenuUpRow.y = 4;
+                    this.elevatorMenuTitle.y = -18;
+                    if (this.elevatorMenuHint) this.elevatorMenuHint.y = 18;
+                    this.elevatorMenuBg.setSize(150, 52);
+                    this.elevatorMenuGlow?.setScale(0.55);
+                } else if (canGoDown) {
+                    this.elevatorMenuDownRow.y = 4;
+                    this.elevatorMenuTitle.y = -18;
+                    if (this.elevatorMenuHint) this.elevatorMenuHint.y = 18;
+                    this.elevatorMenuBg.setSize(150, 52);
+                    this.elevatorMenuGlow?.setScale(0.55);
+                } else {
+                    this.elevatorMenuContainer.setVisible(false);
+                }
+            }
+
+            openElevatorMenu() {
+                if (!this.elevatorMenuContainer) return;
+                this.isElevatorMenuOpen = true;
+                this.playUiBeep(760, 0.06, 0.08);
+                this.updateElevatorMenuAvailability();
+                this.tweens.killTweensOf(this.elevatorMenuContainer);
+                this.elevatorMenuContainer.setAlpha(0);
+                this.elevatorMenuContainer.setScale(0.96);
+                this.elevatorMenuContainer.setVisible(true);
+                this.tweens.add({
+                    targets: this.elevatorMenuContainer,
+                    alpha: 1,
+                    scale: 1,
+                    duration: 160,
+                    ease: "Sine.easeOut",
+                });
+            }
+
+            closeElevatorMenu() {
+                if (!this.elevatorMenuContainer) return;
+                this.isElevatorMenuOpen = false;
+                this.elevatorMenuContainer.setVisible(false);
             }
 
             closeElevatorDoors(onComplete) {
@@ -1259,12 +2052,25 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 if (this.isTransitioning) return;
                 this.isTransitioning = true;
                 this.interactionContainer?.setVisible(false);
+                this.closeElevatorMenu?.();
 
+                const cam = this.cameras.main;
+                if (cam) {
+                    cam.shake(140, 0.002);
+                    cam.zoomTo(this.baseZoom * 1.02, 140, "Sine.easeOut");
+                }
+
+                this.playUiBeep(920, 0.06, 0.1);
                 if (this.sfxElevator) this.sfxElevator.play({ rate: Phaser.Math.FloatBetween(0.98, 1.02) });
 
                 this.closeElevatorDoors(() => {
-                    this.cameras.main.shake(260, 0.0022);
-                    if (this.sfxRumble && Math.random() < 0.35) this.sfxRumble.play();
+                    if (cam) {
+                        cam.shake(420, 0.0045);
+                        cam.zoomTo(this.baseZoom * 1.03, 180, "Sine.easeOut");
+                    }
+                    if (this.sfxRumble && Math.random() < 0.6) {
+                        this.sfxRumble.play({ volume: 0.7, rate: Phaser.Math.FloatBetween(0.95, 1.05) });
+                    }
 
                     const nextRoom = this.roomsData[nextIndex];
 
@@ -1275,6 +2081,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
 
                     this.currentRoomIndex = nextIndex;
                     this.updateCameraBounds(nextIndex);
+                    this.updateFloorHud(nextIndex);
 
                     try {
                         this.onRoomChanged?.(nextIndex);
@@ -1285,6 +2092,7 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                     const PAUSE_MS = 250;
                     this.time.delayedCall(PAUSE_MS, () => {
                         this.openElevatorDoors(() => {
+                            if (cam) cam.zoomTo(this.baseZoom, 220, "Sine.easeInOut");
                             this.isTransitioning = false;
                         });
                     });
@@ -1440,9 +2248,22 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
             update(time) {
                 if (!this.player) return;
 
+                if (this.isPuzzleActive) {
+                    this.player.body.setVelocity(0);
+                    this.closeElevatorMenu?.();
+                    if (this.puzzleType === "timing" && Phaser.Input.Keyboard.JustDown(this.keySpace)) {
+                        this.tryTimingStop();
+                    }
+                    if (Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
+                        this.closeWirePuzzle();
+                    }
+                    return;
+                }
+
                 // 조사 UI 열려있으면 닫기만
                 if (this.isInspecting) {
                     this.player.body.setVelocity(0);
+                    this.closeElevatorMenu?.();
                     if (Phaser.Input.Keyboard.JustDown(this.keySpace) || Phaser.Input.Keyboard.JustDown(this.keyEsc)) {
                         this.closeInspect();
                     }
@@ -1451,12 +2272,14 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
 
                 if (this.isTransitioning) {
                     this.player.body.setVelocity(0);
+                    this.closeElevatorMenu?.();
                     return;
                 }
 
                 // ✅ 추가: 튜토리얼 대화 중이거나 입력창 포커스 시 이동 차단
                 if (isDialogActiveRef.current || inputFocusedRef.current) {
                     this.player.body.setVelocity(0);
+                    this.closeElevatorMenu?.();
                     return;
                 }
 
@@ -1545,7 +2368,66 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 }
 
                 // ✅ 증거 하이라이트 업데이트(반짝/글로우/스파클)
+                this.updateFlashlightDust(time);
                 this.updateNearestClueHighlight(time);
+
+                const currentRoom = this.roomsData[this.currentRoomIndex];
+                if (!currentRoom) return;
+
+                const portalX = currentRoom.x + this.ROOM_WIDTH / 2 + 8;
+                const portalY = currentRoom.y + 43;
+                const nearPortal = Phaser.Math.Distance.Between(this.player.x, this.player.y, portalX, portalY) < 40;
+                this.updateElevatorGlows(time, nearPortal);
+
+                if (this.isElevatorMenuOpen) {
+                    if (!nearPortal || !canUseElevatorRef.current) {
+                        this.closeElevatorMenu();
+                    } else {
+                        this.updateElevatorMenuAvailability();
+                        this.elevatorMenuContainer.setPosition(this.player.x, this.player.y - 60);
+                        this.interactionContainer?.setVisible(false);
+
+                        const pulse = 0.82 + 0.18 * Math.sin(time * 0.02);
+                        if (this.elevatorMenuUpRow?.visible) {
+                            this.elevatorMenuUpText.setAlpha(pulse);
+                        }
+                        if (this.elevatorMenuDownRow?.visible) {
+                            this.elevatorMenuDownText.setAlpha(pulse);
+                        }
+                        if (this.elevatorMenuGlow) {
+                            this.elevatorMenuGlow.setAlpha(0.18 + 0.18 * pulse);
+                        }
+                        if (this.elevatorMenuTitle) {
+                            this.elevatorMenuTitle.setAlpha(0.7 + 0.3 * pulse);
+                        }
+                        if (this.elevatorMenuHint) {
+                            this.elevatorMenuHint.setAlpha(0.5 + 0.2 * pulse);
+                        }
+
+                        const upPressed = Phaser.Input.Keyboard.JustDown(this.wasd.up);
+                        const downPressed = Phaser.Input.Keyboard.JustDown(this.wasd.down);
+
+                        if (upPressed && this.currentRoomIndex < this.ROOM_COUNT - 1) {
+                            this.closeElevatorMenu();
+                            this.startElevatorTransition(this.currentRoomIndex + 1);
+                            return;
+                        }
+                        if (downPressed && this.currentRoomIndex > 0) {
+                            this.closeElevatorMenu();
+                            this.startElevatorTransition(this.currentRoomIndex - 1);
+                            return;
+                        }
+                        if (Phaser.Input.Keyboard.JustDown(this.keySpace)) {
+                            this.closeElevatorMenu();
+                        }
+                    }
+
+                    this.player.body.setVelocity(0);
+                    const dir = this.lastDirection || "down";
+                    this.player.anims.play(`bob-idle-${dir}`, true);
+                    this.player.setDepth(this.player.y);
+                    return;
+                }
 
                 // 이동
                 const speed = 160;
@@ -1579,7 +2461,6 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 this.player.setDepth(this.player.y);
 
                 // 발소리/먼지
-                const currentRoom = this.roomsData[this.currentRoomIndex];
                 const roomType = currentRoom?.type ?? "default";
                 const fp = this.getFootstepProfile(roomType);
 
@@ -1597,44 +2478,36 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
                 }
 
                 // 상호작용 우선순위: 증거 > 엘리베이터
-                if (!currentRoom) return;
-
                 const nearestClue = this.getNearestClue(this.CLUE_INTERACT_RADIUS);
-
-                const portalX = currentRoom.x + this.ROOM_WIDTH / 2 + 8;
-                const portalY = currentRoom.y + 43;
-                const nearPortal = Phaser.Math.Distance.Between(this.player.x, this.player.y, portalX, portalY) < 40;
 
                 if (nearestClue) {
                     this.interactionContainer.setPosition(this.player.x, this.player.y - 34);
-                    this.interactionText.setText("INSPECT [SPACE]");
+                    this.updateInteractionPrompt("INSPECT", 0xffffcc);
                     this.interactionContainer.setVisible(true);
 
                     // ✅ 프롬프트도 살짝 반짝
                     const p = 0.5 + 0.5 * Math.sin(time * 0.02);
                     this.interactionContainer.setAlpha(0.85 + 0.15 * p);
                     this.interactionContainer.setScale(1.0 + 0.03 * p);
-                    if (this.promptBg) this.promptBg.setStrokeStyle(2, 0xffffcc);
-
                     if (Phaser.Input.Keyboard.JustDown(this.keySpace)) {
-                        this.openInspect(nearestClue.obj);
+                        this.openWirePuzzle(nearestClue.obj);
                     }
                 } else if (nearPortal) {
                     this.interactionContainer.setPosition(this.player.x, this.player.y - 34);
-                    this.interactionText.setText("ELEVATOR [SPACE]");
+                    this.updateInteractionPrompt("ELEVATOR", 0xffffff);
                     this.interactionContainer.setVisible(true);
 
                     this.interactionContainer.setAlpha(1);
                     this.interactionContainer.setScale(1);
-                    if (this.promptBg) this.promptBg.setStrokeStyle(2, 0xffffff);
-
                     if (Phaser.Input.Keyboard.JustDown(this.keySpace)) {
                         // ✅ 추가: 엘리베이터 사용 가능 여부 체크 (특정 튜토리얼 단계에서 차단)
                         if (!canUseElevatorRef.current) return;
 
-                        let nextIndex = this.currentRoomIndex + 1;
-                        if (nextIndex >= this.ROOM_COUNT) nextIndex = 0;
-                        this.startElevatorTransition(nextIndex);
+                        const opened = this.openElevatorWirePuzzle();
+                        if (!opened) {
+                            this.openElevatorMenu();
+                            this.elevatorMenuContainer?.setPosition(this.player.x, this.player.y - 60);
+                        }
                     }
                 } else {
                     this.interactionContainer.setVisible(false);
@@ -1655,9 +2528,17 @@ export default function AgitRoom({ clues = [], onClueInspected, onRoomChanged, i
             physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } },
             scene: [BootScene, AgitScene],
             scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+            input: {
+                mouse: { target: gameContainer.current },
+                touch: { target: gameContainer.current },
+            },
         };
 
         gameInstance.current = new Phaser.Game(config);
+        if (gameInstance.current?.canvas) {
+            gameInstance.current.canvas.style.pointerEvents = "auto";
+            gameInstance.current.canvas.style.cursor = "default";
+        }
 
         return () => {
             if (gameInstance.current) {
