@@ -325,21 +325,20 @@ export default function GameRoom() {
 
     return Math.max(0, safeFloor - 1)
   }, [rooms])
-  useEffect(() => {
-    if (!sessionId) return
 
-    const loadClues = async () => {
-      try {
-        const response = await fetchClues(sessionId)
-        const normalized = normalizeClueListResponse(response)
-        setApiClues(normalized.clues || [])
-      } catch (err) {
-        console.error('Failed to fetch clues:', err)
-      }
+  const loadCluesForSession = useCallback(async (nextSessionId) => {
+    if (!nextSessionId) return null
+
+    try {
+      const response = await fetchClues(nextSessionId)
+      const normalized = normalizeClueListResponse(response)
+      setApiClues(normalized.clues || [])
+      return normalized
+    } catch (err) {
+      console.error('Failed to fetch clues:', err)
+      return null
     }
-
-    loadClues()
-  }, [sessionId])
+  }, [])
 
   // 단서 데이터 (Phaser용) - API에서 가져온 데이터 사용
   const clues = useMemo(() => {
@@ -417,6 +416,8 @@ export default function GameRoom() {
       }
 
       setSessionId(normalized.sessionId)
+      setApiClues([])
+      await loadCluesForSession(normalized.sessionId)
       setHealth(100)
       setPlayTimeSeconds(0)
       setHintsUsed(0)
@@ -441,7 +442,7 @@ export default function GameRoom() {
     } finally {
       setGameInitializing(false)
     }
-  }, [activeScenarioId, addLog, getRoomIndexFromFloor])
+  }, [activeScenarioId, addLog, getRoomIndexFromFloor, loadCluesForSession])
   const resumeGame = useCallback(async (resumeId) => {
     try {
       setGameInitializing(true)
@@ -454,6 +455,8 @@ export default function GameRoom() {
       }
 
       setSessionId(normalized.sessionId)
+      setApiClues([])
+      await loadCluesForSession(normalized.sessionId)
       setHealth(normalized.health || 100)
       setPlayTimeSeconds(normalized.playTime || 0)
       setHintsUsed(0)
@@ -492,7 +495,7 @@ export default function GameRoom() {
     } finally {
       setGameInitializing(false)
     }
-  }, [addLog, collectEvidence, getRoomIndexFromFloor])
+  }, [addLog, collectEvidence, getRoomIndexFromFloor, loadCluesForSession])
 
   // 컴포넌트 마운트 시 게임 초기화
   useEffect(() => {
@@ -586,10 +589,19 @@ export default function GameRoom() {
       // 로그 추가
       addLog('evidence', `${evidence.name} 단서를 발견했습니다.`)
 
-      // 단서 목록 새로고침
-      const cluesResponse = await fetchClues(sessionId)
-      const cluesNormalized = normalizeClueListResponse(cluesResponse)
-      setApiClues(cluesNormalized.clues || [])
+      // 로컬 상태에서 즉시 discovered 처리 (재요청 레이스로 인한 "잠깐 다시 보임" 방지)
+      setApiClues((prev) => {
+        if (!Array.isArray(prev) || prev.length === 0) return prev
+        const next = prev.map((item) => {
+          if (item?.id !== clueId) return item
+          return {
+            ...item,
+            discovered: true,
+            discoveredAt: normalized.discoveredAt || item.discoveredAt || new Date().toISOString(),
+          }
+        })
+        return next
+      })
 
       // 백엔드 로그도 새로고침
       refetchLogs?.()
@@ -600,9 +612,11 @@ export default function GameRoom() {
       } else {
         console.error('단서 발견 실패:', err)
         toast.error('단서 발견에 실패했습니다.')
+        // Phaser에서는 단서를 먼저 제거하므로, 실패 시 서버 기준으로 다시 동기화
+        await loadCluesForSession(sessionId)
       }
     }
-  }, [sessionId, collectEvidence, currentRoom, addLog, refetchLogs])
+  }, [sessionId, collectEvidence, currentRoom, addLog, refetchLogs, loadCluesForSession])
 
   const handleRoomChanged = useCallback(async (roomIndex) => {
     if (!Number.isFinite(roomIndex)) return
