@@ -222,9 +222,9 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
     const itemsById = new Map(items.map((item) => [item?.id, item]).filter(([id]) => id != null))
     const confirmedConnections = connections.filter((conn) => conn?.type === 'confirmed')
 
-    // 조건 1: 빨간선 정확히 4개
-    if (confirmedConnections.length !== 4) {
-      setValidationError(`빨간선 연결이 정확히 4개여야 합니다. (현재: ${confirmedConnections.length}개)`)
+    // 조건 1: 빨간선 정확히 3개
+    if (confirmedConnections.length !== 3) {
+      setValidationError(`빨간선 연결이 정확히 3개여야 합니다. (현재: ${confirmedConnections.length}개)`)
       return false
     }
 
@@ -318,7 +318,7 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
             <div className="text-sm text-muted-foreground bg-muted/20 border border-border rounded-lg p-4">
               <p className="font-semibold mb-2">제출 조건:</p>
               <ul className="list-disc list-inside space-y-1">
-                <li>빨간선(확정) 연결이 정확히 <span className="text-red-300 font-bold">4개</span>여야 합니다</li>
+                <li>빨간선(확정) 연결이 정확히 <span className="text-red-300 font-bold">3개</span>여야 합니다</li>
                 <li>피해자, 용의자, 장소, 증거 <span className="text-red-300 font-bold">4가지 타입</span>이 모두 연결되어야 합니다</li>
               </ul>
             </div>
