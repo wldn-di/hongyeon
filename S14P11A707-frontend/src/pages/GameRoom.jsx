@@ -358,8 +358,12 @@ export default function GameRoom() {
       } else {
         roomIndex = clampFloor(clue.floorNumber, 1) - 1
       }
-      // 방/단서 ID 기반 고정 위치
-      const pos = getCluePosition(roomIndex, clue.id)
+      // Prefer backend-provided transform (stable + collision-free per scenario).
+      const backendX = clue?.transform?.x
+      const backendY = clue?.transform?.y
+      const pos = (Number.isFinite(backendX) && Number.isFinite(backendY))
+        ? { localX: backendX, localY: backendY }
+        : getCluePosition(roomIndex, clue.id)
 
       return {
         clueId: clue.id,

@@ -17,7 +17,9 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -57,6 +59,7 @@ public class ScenarioServiceImpl implements ScenarioService {
 
     // ★ 랜덤 가구 배치 서비스 주입
     private final RoomLayoutService roomLayoutService;
+    private final PlatformTransactionManager transactionManager;
 
     @Override
     public ScenarioCreateResponse createScenario(ScenarioCreateRequest request) {
@@ -388,155 +391,23 @@ public class ScenarioServiceImpl implements ScenarioService {
 
             // float[] → 문자열로 변환
             String motiveEmbeddingStr = arrayToVectorString(motiveEmbedding);
-            String causeEmbeddingStr = arrayToVectorString(causeEmbedding);
+            // float[] → 문자열로 변환 (causeEmbedding은 현재 미사용이지만, 임베딩 생성 자체는 유지)
+            arrayToVectorString(causeEmbedding);
 
-            // 6. Scenario 엔티티 저장
-            Scenario scenario = Scenario.builder()
-                    .title(title)
-                    .userSynopsis(request.userSynopsis())
-                    .synopsis(synopsis)
-                    .synopsisDetail(synopsisDetail)
-                    .genre(request.genre())
-                    .suspectCount(request.suspectCount())
-                    .playCount(0)
-                    .generationStatus(Scenario.GenerationStatus.COMPLETED)
-                    .generationError(null)
-                    .storyConfigJson(storyConfig)
-                    .truthConfigJson(truthConfig)
-                    .correctMotiveEmbedding(motiveEmbeddingStr)
-                    .build();
-
-            scenarioRepository.saveScenario(scenario);
-
-
-            // 7. Victim 저장
-            JsonNode victimNode = root.path("victim");
-            Victim victim = Victim.builder()
-                    .scenario(scenario)
-                    .name(victimNode.path("name").asText())
-                    .age(victimNode.path("age").asInt())
-                    .gender(victimNode.path("gender").asText())
-                    .occupation(victimNode.path("occupation").asText())
-                    .background(victimNode.path("background").asText())
-                    .discoveryLocation(victimNode.path("discovery_location").asText())
-                    .estimatedDeathTime(victimNode.path("estimated_death_time").asText())
-                    .causeOfDeath(victimNode.path("cause_of_death").asText())
-                    .victimDetailJson(victimNode.path("victim_detail_json"))
-                    .portraitUrl("https://example.com/victim.jpg")
-                    .build();
-            victimRepository.saveVictim(victim);
-
-            // 8. Suspects 저장
-            List<Suspect> suspects = new ArrayList<>();
-            int displayOrder = 1;
-            for (JsonNode suspectNode : root.path("suspects")) {
-                Suspect suspect = Suspect.builder()
-                        .scenario(scenario)
-                        .name(suspectNode.path("name").asText())
-                        .age(suspectNode.path("age").asInt())
-                        .gender(suspectNode.path("gender").asText())
-                        .occupation(suspectNode.path("occupation").asText())
-                        .culprit(suspectNode.path("is_culprit").asBoolean())
-                        .motive(suspectNode.path("motive").asText())
-                        .oneLiner(suspectNode.path("one_liner").asText())
-                        .aiConfigJson(suspectNode.path("ai_config_json"))
-                        .displayOrder(displayOrder++)
-                        .portraitUrl("https://example.com/suspect.jpg")
-                        .build();
-                suspects.add(suspect);
+            TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
+            Scenario scenario = transactionTemplate.execute(status -> persistScenarioData(
+                    request,
+                    root,
+                    title,
+                    synopsis,
+                    synopsisDetail,
+                    storyConfig,
+                    truthConfig,
+                    motiveEmbeddingStr
+            ));
+            if (scenario == null) {
+                throw new IllegalStateException("persistScenarioData returned null");
             }
-            suspectRepository.saveSuspects(suspects);
-
-            // 9. Rooms 저장
-            // ★ RoomLayoutService를 호출하여 랜덤 가구 배치 적용
-            Map<Integer, Room> roomMap = new LinkedHashMap<>();
-            for (JsonNode roomNode : root.path("rooms")) {
-                String roomType = roomNode.path("room_type").asText("living");
-                int rawFloor = roomNode.path("floor_number").asInt();
-                int floorNumber = normalizeFloorNumber(roomType, rawFloor, roomMap);
-
-                // 같은 floor_number가 없을 때만 추가
-                if (!roomMap.containsKey(floorNumber)) {
-                    // AI가 생성한 방 타입 (living, kitchen 등)
-
-                    // ★ 랜덤 배치 서비스 호출
-                    JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
-
-                    Room room = Room.builder()
-                            .scenario(scenario)
-                            .floorNumber(floorNumber)
-                            .roomType(roomType) // AI가 준 타입 사용
-                            .roomName(roomNode.path("room_name").asText())
-                            .description(roomNode.path("description").asText())
-                            .assistantComment(roomNode.path("assistant_comment").asText())
-                            .objectJson(objectLayout) // ★ 생성된 가구 배치 JSON 저장
-                            .build();
-                    roomMap.put(floorNumber, room);
-                }
-            }
-            if (roomMap.size() < 6) {
-                String[] defaultTypes = {"living", "kitchen", "bedroom", "bathroom", "living", "basement"};
-                for (int floor = 1; floor <= 6; floor++) {
-                    if (roomMap.containsKey(floor)) continue;
-                    String roomType = defaultTypes[floor - 1];
-                    JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
-                    Room room = Room.builder()
-                            .scenario(scenario)
-                            .floorNumber(floor)
-                            .roomType(roomType)
-                            .roomName("Floor " + floor)
-                            .description("")
-                            .assistantComment("")
-                            .objectJson(objectLayout)
-                            .build();
-                    roomMap.put(floor, room);
-                }
-            }
-            List<Room> savedRooms = roomRepository.saveRooms(new ArrayList<>(roomMap.values()));
-
-            // 10. Clues 저장
-            List<Clue> clues = new ArrayList<>();
-            List<Room> roomsByFloor = savedRooms.stream()
-                    .sorted(Comparator.comparingInt(Room::getFloorNumber))
-                    .toList();
-            Map<Long, List<Rect>> occupiedByRoomId = new HashMap<>();
-
-            int clueIndex = 0;
-            for (JsonNode clueNode : root.path("clues")) {
-                String importanceStr = clueNode.path("importance").asText("SUPPORTING");
-                Clue.Importance importance = "CRITICAL".equalsIgnoreCase(importanceStr)
-                        ? Clue.Importance.CRITICAL
-                        : "RED_HERRING".equalsIgnoreCase(importanceStr)
-                        ? Clue.Importance.RED_HERRING
-                        : Clue.Importance.SUPPORTING;
-
-                Room targetRoom = roomsByFloor.isEmpty()
-                        ? null
-                        : roomsByFloor.get(clueIndex % roomsByFloor.size());
-                JsonNode transform = mapper.createObjectNode();
-                if (targetRoom != null) {
-                    List<Rect> occupied = occupiedByRoomId.computeIfAbsent(
-                            targetRoom.getId(),
-                            key -> new ArrayList<>()
-                    );
-                    transform = generateRandomClueTransform(mapper, occupied);
-                }
-
-                Clue clue = Clue.builder()
-                        .scenario(scenario)
-                        .room(targetRoom)
-                        .name(clueNode.path("name").asText())
-                        .importance(importance)
-                        .description(clueNode.path("description").asText())
-                        .clueDetailJson(clueNode.path("clue_detail_json"))
-                        .detailImageUrl("https://example.com/clue.jpg")
-                        .assistantComment(null)
-                        .transformJson(transform)
-                        .build();
-                clues.add(clue);
-                clueIndex++;
-            }
-            clueRepository.saveClues(clues);
 
             ScenarioCreateResponse.OriginalRequest originalRequest1 = new ScenarioCreateResponse.OriginalRequest(request.title(), synopsis, request.genre(), request.suspectCount());
 
@@ -571,6 +442,180 @@ public class ScenarioServiceImpl implements ScenarioService {
             );
 
         }
+    }
+
+    /**
+     * Persist scenario graph (scenario + victim + suspects + rooms + clues) atomically.
+     * <p>
+     * AI 호출/파싱/임베딩 생성은 트랜잭션 밖에서 수행하고, DB 저장 here-only로 묶어
+     * 일부만 저장되는 불완전 시나리오가 남지 않도록 한다.
+     * </p>
+     */
+    private Scenario persistScenarioData(
+            ScenarioCreateRequest request,
+            JsonNode root,
+            String title,
+            String synopsis,
+            String synopsisDetail,
+            JsonNode storyConfig,
+            JsonNode truthConfig,
+            String motiveEmbeddingStr
+    ) {
+        ObjectMapper mapper = new ObjectMapper();
+
+        // 6. Scenario 엔티티 저장
+        Scenario scenario = Scenario.builder()
+                .title(title)
+                .userSynopsis(request.userSynopsis())
+                .synopsis(synopsis)
+                .synopsisDetail(synopsisDetail)
+                .genre(request.genre())
+                .suspectCount(request.suspectCount())
+                .playCount(0)
+                .generationStatus(Scenario.GenerationStatus.COMPLETED)
+                .generationError(null)
+                .storyConfigJson(storyConfig)
+                .truthConfigJson(truthConfig)
+                .correctMotiveEmbedding(motiveEmbeddingStr)
+                .build();
+        scenarioRepository.saveScenario(scenario);
+
+        // 7. Victim 저장
+        JsonNode victimNode = root.path("victim");
+        Victim victim = Victim.builder()
+                .scenario(scenario)
+                .name(victimNode.path("name").asText())
+                .age(victimNode.path("age").asInt())
+                .gender(victimNode.path("gender").asText())
+                .occupation(victimNode.path("occupation").asText())
+                .background(victimNode.path("background").asText())
+                .discoveryLocation(victimNode.path("discovery_location").asText())
+                .estimatedDeathTime(victimNode.path("estimated_death_time").asText())
+                .causeOfDeath(victimNode.path("cause_of_death").asText())
+                .victimDetailJson(victimNode.path("victim_detail_json"))
+                .portraitUrl("https://example.com/victim.jpg")
+                .build();
+        victimRepository.saveVictim(victim);
+
+        // 8. Suspects 저장
+        List<Suspect> suspects = new ArrayList<>();
+        int displayOrder = 1;
+        for (JsonNode suspectNode : root.path("suspects")) {
+            Suspect suspect = Suspect.builder()
+                    .scenario(scenario)
+                    .name(suspectNode.path("name").asText())
+                    .age(suspectNode.path("age").asInt())
+                    .gender(suspectNode.path("gender").asText())
+                    .occupation(suspectNode.path("occupation").asText())
+                    .culprit(suspectNode.path("is_culprit").asBoolean())
+                    .motive(suspectNode.path("motive").asText())
+                    .oneLiner(suspectNode.path("one_liner").asText())
+                    .aiConfigJson(suspectNode.path("ai_config_json"))
+                    .displayOrder(displayOrder++)
+                    .portraitUrl("https://example.com/suspect.jpg")
+                    .build();
+            suspects.add(suspect);
+        }
+        suspectRepository.saveSuspects(suspects);
+
+        // 9. Rooms 저장 (RoomLayoutService로 랜덤 가구 배치 적용)
+        Map<Integer, Room> roomMap = new LinkedHashMap<>();
+        for (JsonNode roomNode : root.path("rooms")) {
+            String roomType = roomNode.path("room_type").asText("living");
+            int rawFloor = roomNode.path("floor_number").asInt();
+            int floorNumber = normalizeFloorNumber(roomType, rawFloor, roomMap);
+
+            // 같은 floor_number가 없을 때만 추가
+            if (!roomMap.containsKey(floorNumber)) {
+                JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
+
+                Room room = Room.builder()
+                        .scenario(scenario)
+                        .floorNumber(floorNumber)
+                        .roomType(roomType)
+                        .roomName(roomNode.path("room_name").asText())
+                        .description(roomNode.path("description").asText())
+                        .assistantComment(roomNode.path("assistant_comment").asText())
+                        .objectJson(objectLayout)
+                        .build();
+                roomMap.put(floorNumber, room);
+            }
+        }
+        if (roomMap.size() < 6) {
+            String[] defaultTypes = {"living", "kitchen", "bedroom", "bathroom", "living", "basement"};
+            for (int floor = 1; floor <= 6; floor++) {
+                if (roomMap.containsKey(floor)) continue;
+                String roomType = defaultTypes[floor - 1];
+                JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
+                Room room = Room.builder()
+                        .scenario(scenario)
+                        .floorNumber(floor)
+                        .roomType(roomType)
+                        .roomName("Floor " + floor)
+                        .description("")
+                        .assistantComment("")
+                        .objectJson(objectLayout)
+                        .build();
+                roomMap.put(floor, room);
+            }
+        }
+        List<Room> savedRooms = roomRepository.saveRooms(new ArrayList<>(roomMap.values()));
+
+        // 10. Clues 저장
+        List<Clue> clues = new ArrayList<>();
+        List<Room> roomsByFloor = savedRooms.stream()
+                .sorted(Comparator.comparingInt(Room::getFloorNumber))
+                .toList();
+        Map<Long, List<Rect>> occupiedByRoomId = new HashMap<>();
+
+        int clueIndex = 0;
+        List<JsonNode> clueNodes = new ArrayList<>();
+        JsonNode cluesNode = root.path("clues");
+        if (cluesNode.isArray()) {
+            cluesNode.forEach(clueNodes::add);
+        }
+        if (clueNodes.isEmpty()) {
+            log.warn("Scenario {} has no clues in AI response. Creating fallback clues.", scenario.getId());
+            clueNodes.addAll(buildFallbackClues(mapper, roomsByFloor));
+        }
+
+        for (JsonNode clueNode : clueNodes) {
+            String importanceStr = clueNode.path("importance").asText("SUPPORTING");
+            Clue.Importance importance = "CRITICAL".equalsIgnoreCase(importanceStr)
+                    ? Clue.Importance.CRITICAL
+                    : "RED_HERRING".equalsIgnoreCase(importanceStr)
+                    ? Clue.Importance.RED_HERRING
+                    : Clue.Importance.SUPPORTING;
+
+            Room targetRoom = roomsByFloor.isEmpty()
+                    ? null
+                    : roomsByFloor.get(clueIndex % roomsByFloor.size());
+            JsonNode transform = mapper.createObjectNode();
+            if (targetRoom != null) {
+                List<Rect> occupied = occupiedByRoomId.computeIfAbsent(
+                        targetRoom.getId(),
+                        key -> new ArrayList<>()
+                );
+                transform = generateRandomClueTransform(mapper, occupied);
+            }
+
+            Clue clue = Clue.builder()
+                    .scenario(scenario)
+                    .room(targetRoom)
+                    .name(clueNode.path("name").asText())
+                    .importance(importance)
+                    .description(clueNode.path("description").asText())
+                    .clueDetailJson(clueNode.path("clue_detail_json"))
+                    .detailImageUrl("https://example.com/clue.jpg")
+                    .assistantComment(null)
+                    .transformJson(transform)
+                    .build();
+            clues.add(clue);
+            clueIndex++;
+        }
+        clueRepository.saveClues(clues);
+
+        return scenario;
     }
 
     @Override
@@ -741,6 +786,25 @@ public class ScenarioServiceImpl implements ScenarioService {
                 null,
                 scenario.getGenerationError()
         );
+    }
+
+    private List<JsonNode> buildFallbackClues(ObjectMapper mapper, List<Room> roomsByFloor) {
+        List<JsonNode> fallback = new ArrayList<>();
+        int count = Math.max(3, Math.min(6, roomsByFloor.size()));
+        for (int i = 0; i < count; i++) {
+            String roomName = roomsByFloor.isEmpty() ? "현장" : roomsByFloor.get(i % roomsByFloor.size()).getRoomName();
+            var node = mapper.createObjectNode();
+            node.put("name", roomName + "에서 발견된 물건");
+            node.put("description", roomName + "에서 발견된 수상한 물건이다.");
+            node.put("importance", "SUPPORTING");
+            node.put("assistant_comment", "자세히 조사해보자.");
+            var detail = mapper.createObjectNode();
+            detail.put("revealed_truth", "추가 정보를 찾을 수 있다.");
+            detail.put("discovery_script", "단서를 발견했다.");
+            node.set("clue_detail_json", detail);
+            fallback.add(node);
+        }
+        return fallback;
     }
 
     @Override

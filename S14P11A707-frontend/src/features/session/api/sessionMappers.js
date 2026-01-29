@@ -199,6 +199,7 @@ export const normalizeClue = (clue) => {
     description: clue.description || '',
     detailImageUrl: clue.detailImageUrl || '',
     assistantComment: clue.assistantComment || '',
+    transform: clue.transform || null,
     discovered: clue.discovered || false,
     discoveredAt: clue.discoveredAt || null,
   }

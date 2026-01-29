@@ -171,8 +171,10 @@ public class GameSessionServiceImpl implements GameSessionService {
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
         List<Integer> visitedFloors = parseVisitedFloors(session.getVisitedFloorsJson());
+        List<DiscoveredClue> discoveredClues = discoveredClueRepository
+                .findBySessionIdWithClue(sessionId);
 
-        return GameResumeResponse.from(session, visitedFloors);
+        return GameResumeResponse.from(session, visitedFloors, discoveredClues);
     }
 
     /**
@@ -241,8 +243,29 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         List<DiscoveredClue> discoveredClues = discoveredClueRepository
                 .findBySessionIdWithClue(sessionId);
+        Map<Long, DiscoveredClue> discoveredByClueId = discoveredClues.stream()
+                .collect(Collectors.toMap(dc -> dc.getClue().getId(), dc -> dc));
+        long scenarioId = session.getScenario().getId();
+        List<Clue> allClues = clueRepository.findByScenarioIdWithRoom(scenarioId);
+        if (allClues.isEmpty()) {
+            // Defensive fallback: in case fetch-join query behaves unexpectedly (e.g., nullable room),
+            // still return clues rather than an empty list.
+            log.warn("No clues found via findByScenarioIdWithRoom. Falling back to findByScenarioId. sessionId={}, scenarioId={}",
+                    sessionId, scenarioId);
+            allClues = clueRepository.findByScenarioId(scenarioId);
+            allClues = allClues.stream()
+                    .sorted(Comparator
+                            .comparingInt((Clue clue) -> clue.getRoom() != null ? clue.getRoom().getFloorNumber() : Integer.MAX_VALUE)
+                            .thenComparingLong(Clue::getId))
+                    .toList();
+        }
 
-        return ClueListResponse.from(sessionId, session.getScenario().getId(), discoveredClues);
+        return ClueListResponse.from(
+                sessionId,
+                scenarioId,
+                allClues,
+                discoveredByClueId
+        );
     }
 
     @Override
