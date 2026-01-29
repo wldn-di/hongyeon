@@ -50,6 +50,15 @@ public class SessionApi implements SessionApiDoc {
         return ResponseEntity.ok(gameSessionService.startGame(scenarioId, oidcUser));
     }
 
+    @PostMapping("/{scenarioId}/restart")
+    @Override
+    public ResponseEntity<GameStartResponse> restartGame(
+            @PathVariable long scenarioId,
+            @AuthenticationPrincipal OidcUser oidcUser
+    ) {
+        return ResponseEntity.ok(gameSessionService.restartGame(scenarioId, oidcUser));
+    }
+
     @GetMapping("/{sessionId}/report")
     @Override
     public ResponseEntity<InvestigationReportResponse> getInvestigationReport(

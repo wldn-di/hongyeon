@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
-import { fetchScenarios, searchScenarios } from '../api/scenariosApi'
-import { mapScenarioListResponseFull } from '../api/scenarioMappers'
-import { toast } from 'sonner'
+import { useState, useEffect } from "react";
+import { fetchScenarios, searchScenarios } from "../api/scenariosApi";
+import { mapScenarioListResponseFull } from "../api/scenarioMappers";
+import { toast } from "sonner";
 
 /**
  * 시나리오 목록 조회 Hook
@@ -13,34 +13,34 @@ export function useScenarios() {
     totalPages: 0,
     totalElements: 0,
     currentPage: 0,
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetch = async () => {
     try {
-      setLoading(true)
-      setError(null)
-      const response = await fetchScenarios()
-      const mapped = mapScenarioListResponseFull(response)
+      setLoading(true);
+      setError(null);
+      const response = await fetchScenarios();
+      const mapped = mapScenarioListResponseFull(response);
       setData({
         scenarios: mapped.content,
         totalPages: mapped.totalPages,
         totalElements: mapped.totalElements,
         currentPage: mapped.currentPage,
-      })
+      });
     } catch (err) {
-      setError(err)
-      toast.error('시나리오 목록을 불러오는데 실패했습니다.')
-      console.error('useScenarios error:', err)
+      setError(err);
+      //toast.error('시나리오 목록을 불러오는데 실패했습니다.')
+      console.error("useScenarios error:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetch()
-  }, [])
+    fetch();
+  }, []);
 
   return {
     scenarios: data.scenarios,
@@ -50,7 +50,7 @@ export function useScenarios() {
     loading,
     error,
     refetch: fetch,
-  }
+  };
 }
 
 /**
@@ -64,42 +64,47 @@ export function useScenarioSearch() {
     totalPages: 0,
     totalElements: 0,
     currentPage: 0,
-  })
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState(null)
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const search = async (keyword) => {
-    if (!keyword || keyword.trim() === '') {
-      setData({ scenarios: [], totalPages: 0, totalElements: 0, currentPage: 0 })
-      return
+    if (!keyword || keyword.trim() === "") {
+      setData({
+        scenarios: [],
+        totalPages: 0,
+        totalElements: 0,
+        currentPage: 0,
+      });
+      return;
     }
 
     try {
-      setLoading(true)
-      setError(null)
-      const response = await searchScenarios(keyword.trim())
-      const mapped = mapScenarioListResponseFull(response)
+      setLoading(true);
+      setError(null);
+      const response = await searchScenarios(keyword.trim());
+      const mapped = mapScenarioListResponseFull(response);
       setData({
         scenarios: mapped.content,
         totalPages: mapped.totalPages,
         totalElements: mapped.totalElements,
         currentPage: mapped.currentPage,
-      })
+      });
     } catch (err) {
-      setError(err)
-      toast.error('시나리오 검색에 실패했습니다.')
-      console.error('useScenarioSearch error:', err)
+      setError(err);
+      toast.error("시나리오 검색에 실패했습니다.");
+      console.error("useScenarioSearch error:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   return {
     scenarios: data.scenarios,
     loading,
     error,
     search,
-  }
+  };
 }
 
-export default useScenarios
+export default useScenarios;

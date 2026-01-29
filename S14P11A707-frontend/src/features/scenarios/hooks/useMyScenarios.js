@@ -27,7 +27,7 @@ export function useMyScenarios() {
       setError(err);
       // 사용자 인증이 안 된 경우는 silent fail (로그인 유도는 다른 곳에서)
       if (err.response?.status !== 401) {
-        toast.error("내 시나리오를 불러오는데 실패했습니다.");
+        //toast.error("내 시나리오를 불러오는데 실패했습니다.");
       }
       // useMyScenarios.js (개발 중 임시)
       if (err.response?.status === 401) {

@@ -16,9 +16,11 @@ import { useGameRooms } from '@/features/game/hooks/useGameRooms'
 import { useGameLogs } from '@/features/game/hooks/useGameLogs'
 import { useGameSubmission } from '@/features/game/hooks/useGameSubmission'
 import { useGameReport } from '@/features/game/hooks/useGameReport'
-import { startGame, endGame, saveGame, fetchResume, moveFloor, submitAnswer } from '@/features/session/api/sessionApi'
+import { startGame, restartGame, endGame, saveGame, fetchResume, moveFloor, submitAnswer } from '@/features/session/api/sessionApi'
 import { fetchClues, discoverClue } from '@/features/session/api/cluesApi'
 import { normalizeGameStartResponse, normalizeResumeResponse, normalizeGameEndResponse, normalizeClueListResponse, normalizeDiscoveredClueResponse } from '@/features/session/api/sessionMappers'
+import { fetchBookshelfSessions } from '@/features/user/api/userApi'
+import { createPath } from '@/app/routePaths'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
@@ -244,6 +246,12 @@ export default function GameRoom() {
     }
   }, [initialScenarioId])
 
+  useEffect(() => {
+    if (resumeSessionId) {
+      setGamePhase('main')
+    }
+  }, [resumeSessionId])
+
   // 시나리오 정보 조회 (API) - 이어하기가 아닐 때만 조회
   const { scenario, loading: scenarioLoading, error: scenarioError } = useScenarioById(activeScenarioId)
 
@@ -256,6 +264,12 @@ export default function GameRoom() {
   // 게임 페이즈: 'opening' -> 'victim' -> 'main'
   // 이어하기면 바로 'main'
   const [gamePhase, setGamePhase] = useState(resumeSessionId ? 'main' : 'opening')
+
+  const isSoloRoute = matchSolo && !resumeSessionId
+  const [resumePromptOpen, setResumePromptOpen] = useState(false)
+  const [existingSessionId, setExistingSessionId] = useState(null)
+  const [sessionCheckDone, setSessionCheckDone] = useState(false)
+  const [restartRequested, setRestartRequested] = useState(false)
 
   // API 단서 데이터
   const [apiClues, setApiClues] = useState([])
@@ -325,6 +339,60 @@ export default function GameRoom() {
 
     return Math.max(0, safeFloor - 1)
   }, [rooms])
+
+  const findExistingPlayingSession = useCallback(async (scenarioId) => {
+    if (!scenarioId) return null
+    try {
+      const response = await fetchBookshelfSessions()
+      const items = Array.isArray(response?.content) ? response.content : []
+      const playing = items.find((item) => (
+        item?.status === 'PLAYING' && Number(item.scenarioId) === Number(scenarioId)
+      ))
+      return playing?.sessionId ?? null
+    } catch (err) {
+      console.error('[GameRoom] 기존 세션 조회 실패:', err)
+      return null
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+
+    const checkExistingSession = async () => {
+      if (!isSoloRoute) {
+        setExistingSessionId(null)
+        setResumePromptOpen(false)
+        setRestartRequested(false)
+        setSessionCheckDone(true)
+        return
+      }
+
+      if (!activeScenarioId) {
+        setSessionCheckDone(true)
+        return
+      }
+
+      setSessionCheckDone(false)
+      setExistingSessionId(null)
+      setResumePromptOpen(false)
+      setRestartRequested(false)
+
+      const sessionId = await findExistingPlayingSession(activeScenarioId)
+      if (cancelled) return
+
+      if (sessionId) {
+        setExistingSessionId(sessionId)
+        setResumePromptOpen(true)
+      }
+      setSessionCheckDone(true)
+    }
+
+    checkExistingSession()
+
+    return () => {
+      cancelled = true
+    }
+  }, [isSoloRoute, activeScenarioId, findExistingPlayingSession])
   useEffect(() => {
     if (!sessionId) return
 
@@ -374,8 +442,10 @@ export default function GameRoom() {
     })
   }, [apiClues, rooms, roomsLoading])
 
+  const waitingForSessionCheck = isSoloRoute && !sessionCheckDone
+
   // 로딩 상태
-  const isLoading = scenarioLoading || roomsLoading || gameInitializing
+  const isLoading = scenarioLoading || roomsLoading || gameInitializing || waitingForSessionCheck
 
   // 에러 상태
   const hasError = scenarioError || (!scenario && !scenarioLoading)
@@ -413,6 +483,7 @@ export default function GameRoom() {
       }
 
       setSessionId(normalized.sessionId)
+      setRestartRequested(false)
       setHealth(100)
       setPlayTimeSeconds(0)
       setHintsUsed(0)
@@ -431,13 +502,27 @@ export default function GameRoom() {
 
       return normalized
     } catch (err) {
+      const isAlreadyPlaying = err?.code === 'SESSION-002'
+        || err?.message?.includes('이미 진행 중')
+
+      if (isAlreadyPlaying) {
+        const playingSessionId = await findExistingPlayingSession(activeScenarioId)
+        if (playingSessionId) {
+          setExistingSessionId(playingSessionId)
+          setResumePromptOpen(true)
+          setRestartRequested(false)
+          setGameInitError(null)
+          return
+        }
+      }
+
       console.error('[GameRoom] initializeNewGame 에러:', err)
       setGameInitError(err.message || '게임 시작에 실패했습니다.')
       toast.error(err.message || '게임 시작에 실패했습니다.')
     } finally {
       setGameInitializing(false)
     }
-  }, [activeScenarioId, addLog, getRoomIndexFromFloor])
+  }, [activeScenarioId, addLog, getRoomIndexFromFloor, findExistingPlayingSession])
   const resumeGame = useCallback(async (resumeId) => {
     try {
       setGameInitializing(true)
@@ -498,11 +583,33 @@ export default function GameRoom() {
     if (resumeSessionId) {
       // 이어하기 모드
       resumeGame(resumeSessionId)
-    } else if (activeScenarioId && scenario && !scenarioLoading) {
+      return
+    }
+
+    if (isSoloRoute) {
+      if (!sessionCheckDone) return
+      if (existingSessionId && !restartRequested) return
+    }
+
+    if (activeScenarioId && scenario && !scenarioLoading) {
       // 새 게임 시작 (시나리오 로딩 완료 후)
       initializeNewGame()
     }
-  }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError, initializeNewGame, resumeGame])
+  }, [
+    resumeSessionId,
+    activeScenarioId,
+    scenario?.id,
+    scenarioLoading,
+    sessionId,
+    gameInitializing,
+    gameInitError,
+    initializeNewGame,
+    resumeGame,
+    isSoloRoute,
+    sessionCheckDone,
+    existingSessionId,
+    restartRequested,
+  ])
 
   useLayoutEffect(() => {
     if (activeScenarioId) {
@@ -637,6 +744,66 @@ export default function GameRoom() {
       }
     }
   }, [rooms, visitedFloors, addLog, sessionId, refetchLogs])
+
+  const handleResumePromptYes = useCallback(() => {
+    if (!existingSessionId) return
+    setResumePromptOpen(false)
+    setRestartRequested(false)
+    setGameInitError(null)
+    setLocation(createPath.gameResume(existingSessionId))
+  }, [existingSessionId, setLocation])
+
+  const handleResumePromptNo = useCallback(async () => {
+    if (!activeScenarioId) return
+
+    try {
+      setGameInitializing(true)
+      setGameInitError(null)
+      setResumePromptOpen(false)
+      setRestartRequested(true)
+      setExistingSessionId(null)
+      setApiClues([])
+      resetLogs?.()
+      resetSession()
+
+      if (activeScenarioId) {
+        localStorage.removeItem(`board-items-${activeScenarioId}`)
+        localStorage.removeItem(`board-connections-${activeScenarioId}`)
+      }
+
+      const response = await restartGame(activeScenarioId)
+      const normalized = normalizeGameStartResponse(response)
+
+      if (!normalized.sessionId) {
+        throw new Error('세션 ID를 받지 못했습니다.')
+      }
+
+      setSessionId(normalized.sessionId)
+      setRestartRequested(false)
+      setHealth(100)
+      setPlayTimeSeconds(0)
+      setHintsUsed(0)
+
+      const startFloorNumber = clampFloor(
+        Number.isFinite(normalized.currentFloor)
+          ? normalized.currentFloor
+          : (normalized.currentRoom?.floorNumber ?? 1),
+        1,
+      )
+      const startIndex = getRoomIndexFromFloor(startFloorNumber)
+      setCurrentRoomIndex(startIndex)
+      setVisitedFloors(new Set([startFloorNumber]))
+      if (normalized.eventLog) {
+        addLog('system', '수사가 시작되었습니다.')
+      }
+    } catch (err) {
+      console.error('[GameRoom] restartGame 에러:', err)
+      setGameInitError(err.message || '게임 재시작에 실패했습니다.')
+      toast.error(err.message || '게임 재시작에 실패했습니다.')
+    } finally {
+      setGameInitializing(false)
+    }
+  }, [activeScenarioId, addLog, getRoomIndexFromFloor, resetLogs, resetSession, restartGame])
 
   const handleSendMessage = async (contactId, text) => {
     const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -832,6 +999,26 @@ export default function GameRoom() {
   const handleVictimComplete = useCallback(() => {
     setGamePhase('main')
   }, [])
+
+  if (resumePromptOpen) {
+    return (
+      <div className="min-h-screen bg-black/80 flex items-center justify-center p-4">
+        <Card className="w-full max-w-md bg-card/95 border border-border shadow-2xl">
+          <div className="p-6 text-center">
+            <p className="text-xs text-primary tracking-widest mb-2">GAME SESSION</p>
+            <h2 className="text-xl font-bold gold-glow mb-3">이미 진행 중인 게임입니다</h2>
+            <p className="text-sm text-muted-foreground">
+              {scenario?.title ? `"${scenario.title}"` : '이 시나리오를'} 이어서 하시겠습니까?
+            </p>
+            <div className="mt-6 flex items-center justify-center gap-3">
+              <Button variant="outline" onClick={handleResumePromptNo}>아니오</Button>
+              <Button variant="neon" onClick={handleResumePromptYes}>예</Button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    )
+  }
 
   // 로딩 상태 렌더링
   if (isLoading) {

@@ -30,6 +30,24 @@ export const startGame = async (scenarioId) => {
 };
 
 /**
+ * 게임 재시작 (POST /api/sessions/{scenarioId}/restart)
+ * @param {number} scenarioId
+ * @returns {Promise<GameStartResponse>}
+ * @throws {ApiError}
+ */
+export const restartGame = async (scenarioId) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.sessions.restart(scenarioId));
+    return response.data;
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error);
+    }
+    throw new ApiError("게임 재시작에 실패했습니다.");
+  }
+};
+
+/**
  * 이어하기 (GET /api/sessions/{sessionId}/resume)
  * @param {number} sessionId
  * @returns {Promise<GameResumeResponse>}
@@ -426,6 +444,7 @@ export const fetchChatHistory = async (sessionId, suspectId) => {
 export default {
   // Game lifecycle
   startGame,
+  restartGame,
   fetchResume,
   saveGame,
   endGame,

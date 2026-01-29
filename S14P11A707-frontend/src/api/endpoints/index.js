@@ -42,6 +42,7 @@ export const ENDPOINTS = {
   sessions: {
     // Game start (POST with scenarioId)
     start: (scenarioId) => `/api/sessions/${scenarioId}`,
+    restart: (scenarioId) => `/api/sessions/${scenarioId}/restart`,
 
     // Session detail operations
     detail: (sessionId) => `/api/sessions/${sessionId}`,

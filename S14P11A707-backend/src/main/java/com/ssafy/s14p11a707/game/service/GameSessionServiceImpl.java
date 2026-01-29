@@ -130,6 +130,29 @@ public class GameSessionServiceImpl implements GameSessionService {
         return buildStartResponse(session, scenario, startLog);
     }
 
+    @Override
+    @Transactional
+    public GameStartResponse restartGame(long scenarioId, OidcUser oidcUser) {
+        User user = getUser(oidcUser);
+        Scenario scenario = getValidScenario(scenarioId);
+
+        Optional<GameSession> existingSession = gameSessionRepository
+                .findByUserIdAndScenarioId(user.getId(), scenarioId);
+
+        GameSession session;
+        if (existingSession.isPresent()) {
+            session = existingSession.get();
+            resetSession(session);
+        } else {
+            session = createNewSession(user, scenario);
+            scenario.incrementPlayCount();
+            user.incrementTotalAttempts();
+        }
+
+        EventLog startLog = saveEventLog(session, GAME_START, null);
+        return buildStartResponse(session, scenario, startLog);
+    }
+
     private GameSession createNewSession(User user, Scenario scenario) {
         GameSession session = GameSession.builder()
                 .scenario(scenario)

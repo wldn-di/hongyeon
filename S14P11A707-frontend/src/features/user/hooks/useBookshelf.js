@@ -1,7 +1,11 @@
-import { useState, useEffect } from 'react'
-import { fetchBookshelfSessions, fetchBookshelfStats } from '../api/userApi'
-import { mapBookshelfSessionResponse, mapBookshelfStatsResponse, mapBookshelfItem } from '@/features/session/api/sessionMappers'
-import { toast } from 'sonner'
+import { useState, useEffect } from "react";
+import { fetchBookshelfSessions, fetchBookshelfStats } from "../api/userApi";
+import {
+  mapBookshelfSessionResponse,
+  mapBookshelfStatsResponse,
+  mapBookshelfItem,
+} from "@/features/session/api/sessionMappers";
+import { toast } from "sonner";
 
 /**
  * 내 책장 데이터 조회 Hook
@@ -13,60 +17,63 @@ export function useBookshelf() {
     completed: [],
     playing: [],
     failed: [],
-  })
+  });
   const [stats, setStats] = useState({
     totalAttempts: 0,
     totalClears: 0,
     clearRate: 0,
     sRankCount: 0,
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetch = async () => {
     try {
-      setLoading(true)
-      setError(null)
+      setLoading(true);
+      setError(null);
 
       // 병렬로 세션과 통계 조회
       const [sessionsResponse, statsResponse] = await Promise.all([
         fetchBookshelfSessions(),
         fetchBookshelfStats(),
-      ])
+      ]);
 
       // 세션 데이터 매핑 및 상태별 분류
-      const mappedSessions = mapBookshelfSessionResponse(sessionsResponse)
-      const items = mappedSessions.content.map(mapBookshelfItem)
+      const mappedSessions = mapBookshelfSessionResponse(sessionsResponse);
+      const items = mappedSessions.content.map(mapBookshelfItem);
 
-      const completed = items.filter(item => item.status === 'COMPLETED')
-      const playing = items.filter(item => item.status === 'PLAYING')
-      const failed = items.filter(item => item.status === 'FAILED')
+      const completed = items.filter((item) => item.status === "COMPLETED");
+      const playing = items.filter((item) => item.status === "PLAYING");
+      const failed = items.filter((item) => item.status === "FAILED");
 
-      setSessions({ completed, playing, failed })
+      setSessions({ completed, playing, failed });
 
       // 통계 데이터 매핑
-      const mappedStats = mapBookshelfStatsResponse(statsResponse)
-      setStats(mappedStats)
-
+      const mappedStats = mapBookshelfStatsResponse(statsResponse);
+      setStats(mappedStats);
     } catch (err) {
-      setError(err)
-      toast.error('책장 데이터를 불러오는데 실패했습니다.')
-      console.error('useBookshelf error:', err)
+      setError(err);
+      //toast.error('책장 데이터를 불러오는데 실패했습니다.')
+      console.error("useBookshelf error:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetch()
-  }, [])
+    fetch();
+  }, []);
 
   return {
     // 세션 데이터 (상태별 분류)
     completedSessions: sessions.completed,
     playingSessions: sessions.playing,
     failedSessions: sessions.failed,
-    allSessions: [...sessions.completed, ...sessions.playing, ...sessions.failed],
+    allSessions: [
+      ...sessions.completed,
+      ...sessions.playing,
+      ...sessions.failed,
+    ],
     // 통계
     totalAttempts: stats.totalAttempts,
     totalClears: stats.totalClears,
@@ -77,7 +84,7 @@ export function useBookshelf() {
     loading,
     error,
     refetch: fetch,
-  }
+  };
 }
 
 /**
@@ -90,29 +97,29 @@ export function useBookshelfStats() {
     totalClears: 0,
     clearRate: 0,
     sRankCount: 0,
-  })
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(null)
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   const fetch = async () => {
     try {
-      setLoading(true)
-      setError(null)
-      const response = await fetchBookshelfStats()
-      const mapped = mapBookshelfStatsResponse(response)
-      setStats(mapped)
+      setLoading(true);
+      setError(null);
+      const response = await fetchBookshelfStats();
+      const mapped = mapBookshelfStatsResponse(response);
+      setStats(mapped);
     } catch (err) {
-      setError(err)
-      toast.error('책장 통계를 불러오는데 실패했습니다.')
-      console.error('useBookshelfStats error:', err)
+      setError(err);
+      toast.error("책장 통계를 불러오는데 실패했습니다.");
+      console.error("useBookshelfStats error:", err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }
+  };
 
   useEffect(() => {
-    fetch()
-  }, [])
+    fetch();
+  }, []);
 
   return {
     totalAttempts: stats.totalAttempts,
@@ -123,7 +130,7 @@ export function useBookshelfStats() {
     loading,
     error,
     refetch: fetch,
-  }
+  };
 }
 
-export default useBookshelf
+export default useBookshelf;

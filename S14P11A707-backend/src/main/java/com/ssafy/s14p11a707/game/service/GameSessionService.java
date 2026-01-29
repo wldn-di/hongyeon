@@ -7,6 +7,8 @@ public interface GameSessionService {
 
     GameStartResponse startGame(long scenarioId, OidcUser oidcUser);
 
+    GameStartResponse restartGame(long scenarioId, OidcUser oidcUser);
+
     InvestigationReportResponse getInvestigationReport(long sessionId, OidcUser oidcUser);
 
     InvestigationReportResponse getOtherInvestigationReport(long sessionId, OidcUser oidcUser);

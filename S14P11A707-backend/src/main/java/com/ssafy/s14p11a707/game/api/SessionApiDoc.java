@@ -58,6 +58,26 @@ public interface SessionApiDoc {
     })
     ResponseEntity<GameStartResponse> startGame(long scenarioId, OidcUser oidcUser);
 
+    @Operation(summary = "게임 재시작", description = "기존 세션을 초기화하고 게임을 다시 시작합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "게임 재시작 성공",
+                    content = @Content(schema = @Schema(implementation = GameStartResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "404",
+                    description = "시나리오를 찾을 수 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<GameStartResponse> restartGame(long scenarioId, OidcUser oidcUser);
+
     @Operation(summary = "내 수사보고서 조회", description = "내 세션의 수사보고서를 조회합니다.")
     @ApiResponses({
             @ApiResponse(

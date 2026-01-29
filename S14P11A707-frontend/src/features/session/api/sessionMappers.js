@@ -38,11 +38,18 @@ const clampFloor = (value, fallback = 1) => {
 export const mapBookshelfItem = (item) => {
   if (!item) return null
 
+  const title = item.title || item.scenarioTitle || '알 수 없는 시나리오'
+
   return {
-    id: item.reviewId || item.id,
-    scenarioId: item.scenarioId,
-    scenarioTitle: item.scenarioTitle || '알 수 없는 시나리오',
-    userId: item.userId,
+    id: item.sessionId || item.reviewId || item.id,
+    sessionId: item.sessionId || item.id || null,
+    scenarioId: item.scenarioId || null,
+    title,
+    scenarioTitle: title,
+    synopsis: item.synopsis || '',
+    thumbnail: item.thumbnailUrl || item.thumbnail || null,
+    thumbnailUrl: item.thumbnailUrl || item.thumbnail || null,
+    userId: item.userId || null,
     nickname: item.nickname || '익명',
     status: item.status || 'UNKNOWN',
     playTime: item.playTime || 0,
