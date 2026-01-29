@@ -8,10 +8,7 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
   const [submitInitialConnections, setSubmitInitialConnections] = useState([])
   const [submitBoardState, setSubmitBoardState] = useState({ items: [], connections: [] })
   const [motive, setMotive] = useState('') // 범행동기 입력
-
-  // 보드의 중앙 위치 계산 (보드 크기: 너비 약 800px, 높이 600px, 카드 크기: 너비 176px, 높이 200px)
-  const CENTER_X = 312 // (800 - 176) / 2
-  const CENTER_Y = 200 // (600 - 200) / 2
+  const [validationError, setValidationError] = useState(null) // 사전 검증 에러 메시지
 
   useEffect(() => {
     if (!isOpen) return
@@ -217,35 +214,64 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
     setSubmitBoardState({ items: submitItems, connections: submitConnections })
   }, [isOpen, scenarioId])
 
+  // 백엔드 검증 조건에 맞춘 사전 검증
   const readyToSubmit = useMemo(() => {
     const items = Array.isArray(submitBoardState.items) ? submitBoardState.items : []
     const connections = Array.isArray(submitBoardState.connections) ? submitBoardState.connections : []
 
     const itemsById = new Map(items.map((item) => [item?.id, item]).filter(([id]) => id != null))
     const confirmedConnections = connections.filter((conn) => conn?.type === 'confirmed')
+
+    // 조건 1: 빨간선 정확히 4개
+    if (confirmedConnections.length !== 4) {
+      setValidationError(`빨간선 연결이 정확히 4개여야 합니다. (현재: ${confirmedConnections.length}개)`)
+      return false
+    }
+
     const nodeIdSet = new Set(confirmedConnections.flatMap((c) => [c.from, c.to]))
 
-    let hasSuspect = false
-    let hasEvidence = false
-    let hasLocation = false
+    // 조건 2: 4가지 타입 모두 연결 (VICTIM, SUSPECT, LOCATION, CLUE)
+    const requiredTypes = ['victim', 'suspect', 'location', 'evidence']
+    const connectedTypes = new Set()
 
     nodeIdSet.forEach((id) => {
       const item = itemsById.get(id)
       if (!item) return
-      if (item.type === 'suspect') hasSuspect = true
-      if (item.type === 'evidence') hasEvidence = true
-      if (item.type === 'location') hasLocation = true
+      if (requiredTypes.includes(item.type)) {
+        connectedTypes.add(item.type)
+      }
     })
 
-    return hasSuspect && hasEvidence && hasLocation
+    const missingTypes = requiredTypes.filter(type => !connectedTypes.has(type))
+    if (missingTypes.length > 0) {
+      const typeNames = {
+        victim: '피해자',
+        suspect: '용의자',
+        location: '장소',
+        evidence: '증거'
+      }
+      const missingNames = missingTypes.map(t => typeNames[t]).join(', ')
+      setValidationError(`모든 타입이 연결되어야 합니다. (미연결: ${missingNames})`)
+      return false
+    }
+
+    setValidationError(null)
+    return true
   }, [submitBoardState])
 
   const handleSubmit = () => {
-    if (!readyToSubmit) return
-    if (!motive.trim()) {
-      // 범행동기 입력 요청
+    // 사전 검증 실패 시 제출 불가
+    if (!readyToSubmit) {
       return
     }
+
+    // 범행동기 필수
+    if (!motive.trim()) {
+      setValidationError('범행 동기를 입력해주세요.')
+      return
+    }
+
+    setValidationError(null)
     onSubmit?.({
       submissionItems: submitBoardState.items,
       confirmedConnections: submitBoardState.connections,
@@ -283,32 +309,38 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, scenarioI
             />
           </div>
 
-          {!readyToSubmit && (
+          {/* 검증 에러 메시지 또는 안내 */}
+          {validationError ? (
             <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-              제출하려면 <span className="font-bold text-red-300">확정(빨간선)</span>으로{" "}
-              <span className="font-bold">용의자/증거/장소</span>를 최소 1개씩 연결하세요.
+              {validationError}
+            </div>
+          ) : (
+            <div className="text-sm text-muted-foreground bg-muted/20 border border-border rounded-lg p-4">
+              <p className="font-semibold mb-2">제출 조건:</p>
+              <ul className="list-disc list-inside space-y-1">
+                <li>빨간선(확정) 연결이 정확히 <span className="text-red-300 font-bold">4개</span>여야 합니다</li>
+                <li>피해자, 용의자, 장소, 증거 <span className="text-red-300 font-bold">4가지 타입</span>이 모두 연결되어야 합니다</li>
+              </ul>
             </div>
           )}
 
           {/* 범행동기 입력 폼 */}
-          {readyToSubmit && (
-            <div className="bg-muted/20 border border-border rounded-xl p-4">
-              <label className="block text-sm font-semibold mb-2">
-                범행 동기 <span className="text-red-400">*</span>
-              </label>
-              <textarea
-                value={motive}
-                onChange={(e) => setMotive(e.target.value)}
-                placeholder="범인의 범행 동기를 추론하여 입력해주세요..."
-                className="w-full min-h-[80px] p-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                maxLength={500}
-              />
-              <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                <span>최종 정답 제출 전에 범행 동기를 입력해주세요</span>
-                <span>{motive.length}/500</span>
-              </div>
+          <div className="bg-muted/20 border border-border rounded-xl p-4">
+            <label className="block text-sm font-semibold mb-2">
+              범행 동기 <span className="text-red-400">*</span>
+            </label>
+            <textarea
+              value={motive}
+              onChange={(e) => setMotive(e.target.value)}
+              placeholder="범인의 범행 동기를 추론하여 입력해주세요..."
+              className="w-full min-h-[80px] p-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+              maxLength={500}
+            />
+            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+              <span>최종 정답 제출 전에 범행 동기를 입력해주세요</span>
+              <span>{motive.length}/500</span>
             </div>
-          )}
+          </div>
         </div>
 
         <div className="p-4 border-t border-border flex gap-3">
