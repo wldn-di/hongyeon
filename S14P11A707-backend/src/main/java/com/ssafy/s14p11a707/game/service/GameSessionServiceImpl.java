@@ -44,6 +44,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import static com.ssafy.s14p11a707.game.entity.BoardNode.ItemType.MEMO;
 import static com.ssafy.s14p11a707.game.entity.EventLog.EventType.*;
 
 @Slf4j
@@ -141,6 +142,8 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .firstPlay(true)
                 .startedAt(Instant.now())
                 .playTime(0L)
+                .lastSavedAt(Instant.now())
+                .expiresAt(Instant.now().plusSeconds(7 * 24 * 60 * 60))
                 .build();
         gameSessionRepository.save(session);
         return session;
@@ -212,10 +215,8 @@ public class GameSessionServiceImpl implements GameSessionService {
         Instant now = Instant.now();
         saveDiscoveredClue(session,clue,now);
         saveEventLog(session,CLUE_FOUND, clue.getName());
-        session.updateProgress(session.getCurrentFloor(),
-                session.getVisitedFloorsJson(),
-                session.getHealth(),
-                session.getPlayTime());
+
+        session.updateProgress();
 
         return DiscoveredClueResponse.from(sessionId, clue, now);
     }
@@ -428,6 +429,10 @@ public class GameSessionServiceImpl implements GameSessionService {
         int health = 100 - (usedClueId == null ? 5 : 3);
         Long revealedClueId = null;
 
+        GameSession session = gameSessionRepository.findById(sessionId)
+                .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
+        saveEventLog(session, CHAT_STARTED, suspect.getName());
+
         return new SuspectChatResponse(
                 sessionId,
                 suspectId,
@@ -437,11 +442,18 @@ public class GameSessionServiceImpl implements GameSessionService {
                 revealedClueId
         );
     }
-    // TODO : 테스트 필요
+
     @Override
     public ChatHistoryResponse getChatHistory(long sessionId, long suspectId, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+
+        Suspect suspect = suspectRepository.findById(suspectId)
+                .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
+
+        if (suspect.getScenario().getId() != session.getScenario().getId()) {
+            throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
+        }
 
         List<ChatMessage> messages = chatMessageRepository
                 .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
@@ -452,7 +464,6 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      * 수사로그 섹션
      */
-    // TODO : 테스트 필요
     @Override
     public EventLogListResponse getLogs(long sessionId, OidcUser oidcUser) {
         User user = getUser(oidcUser);
@@ -502,10 +513,6 @@ public class GameSessionServiceImpl implements GameSessionService {
         if (isFirstVisit) {
             saveEventLog(session,FLOOR_MOVED, String.valueOf(targetFloor));
         }
-        session.updateProgress(session.getCurrentFloor(),
-                session.getVisitedFloorsJson(),
-                session.getHealth(),
-                session.getPlayTime());
 
         return FloorMoveResponse.from(sessionId, targetFloor, isFirstVisit, room, newLog);
     }
@@ -528,6 +535,8 @@ public class GameSessionServiceImpl implements GameSessionService {
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
         ItemType itemType = parseItemType(request.type());
 
+        // TODO: 타입과 targetId가 모두 일치하면 에러처리
+
         BoardNode node = BoardNode.builder()
                 .session(session)
                 .itemType(itemType)
@@ -537,10 +546,8 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .positionY(request.y())
                 .build();
         boardNodeRepository.save(node);
-        session.updateProgress(session.getCurrentFloor(),
-                session.getVisitedFloorsJson(),
-                session.getHealth(),
-                session.getPlayTime());
+
+        session.updateProgress();
 
         return buildBoardResponse(sessionId);
     }
@@ -553,10 +560,8 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         BoardNode node = getBoardNodeWithValidation(session, request.nodeId());
         node.updatePosition(request.x(), request.y());
-        session.updateProgress(session.getCurrentFloor(),
-                session.getVisitedFloorsJson(),
-                session.getHealth(),
-                session.getPlayTime());
+        session.updateProgress();
+
 
         return buildBoardResponse(sessionId);
     }
@@ -568,11 +573,13 @@ public class GameSessionServiceImpl implements GameSessionService {
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
         BoardNode node = getBoardNodeWithValidation(session, nodeId);
+
+        if(!MEMO.equals(node.getItemType())){
+            throw new BaseException(ErrorCode.BOARD_NOT_MEMO);
+        }
         node.updateMemoContent(request.memoContent());
-        session.updateProgress(session.getCurrentFloor(),
-                session.getVisitedFloorsJson(),
-                session.getHealth(),
-                session.getPlayTime());
+
+        session.updateProgress();
 
         return buildBoardResponse(sessionId);
     }
@@ -596,10 +603,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .build();
         boardConnectionRepository.save(connection);
 
-        session.updateProgress(session.getCurrentFloor(),
-                session.getVisitedFloorsJson(),
-                session.getHealth(),
-                session.getPlayTime());
+        session.updateProgress();
 
         return buildBoardResponse(sessionId);
     }
@@ -618,10 +622,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             boardNodeRepository.deleteBySessionIdAndIdIn(sessionId, request.nodeIds());
         }
 
-        session.updateProgress(session.getCurrentFloor(),
-                session.getVisitedFloorsJson(),
-                session.getHealth(),
-                session.getPlayTime());
+        session.updateProgress();
 
         return buildBoardResponse(sessionId);
     }
@@ -657,12 +658,12 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     private ItemType parseItemType(String type) {
         if (type == null || type.isBlank()) {
-            return ItemType.MEMO;
+            return MEMO;
         }
         try {
             return ItemType.valueOf(type.toUpperCase(Locale.ROOT));
         } catch (IllegalArgumentException e) {
-            return ItemType.MEMO;
+            return MEMO;
         }
     }
 
@@ -724,7 +725,6 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      * 제출 세션
      */
-
     @Override
     @Transactional
     public SubmitResponse submit(long sessionId, SubmitRequest request, OidcUser oidcUser) {
@@ -748,14 +748,14 @@ public class GameSessionServiceImpl implements GameSessionService {
                     "최대 제출 횟수를 초과하여 게임이 종료되었습니다.");
         }
 
-        // 3. 보드 검증: RED 연결 개수 확인 (정확히 4개)
+        // 3. 보드 검증: RED 연결 개수 확인 (정확히 3개)
         int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
-        if (redCount != 4) {
+        if (redCount != 3) {
             return SubmitResponse.boardInvalid(sessionId, "INVALID_RED_COUNT",
-                    "붉은 실 연결이 4개여야 합니다. (현재: " + redCount + "개)", attempts);
+                    "붉은 실 연결이 3개여야 합니다. (현재: " + redCount + "개)", attempts);
         }
 
-        // 4. 보드 검증: 5가지 타입 모두 RED로 연결되어 있는지 확인
+        // 4. 보드 검증: 4가지 타입 모두 RED로 연결되어 있는지 확인
         List<BoardConnection> redConnections = boardConnectionRepository
                 .findBySessionAndConnectionType(session, ConnectionType.RED);
 
@@ -766,7 +766,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         }
 
         Set<ItemType> requiredTypes = EnumSet.of(
-                ItemType.VICTIM, ItemType.SUSPECT, ItemType.MEMO, ItemType.LOCATION, ItemType.CLUE
+                ItemType.VICTIM, ItemType.SUSPECT, ItemType.LOCATION, ItemType.CLUE
         );
 
         if (!connectedTypes.containsAll(requiredTypes)) {

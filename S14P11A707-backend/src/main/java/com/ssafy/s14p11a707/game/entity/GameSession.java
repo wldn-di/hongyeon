@@ -15,6 +15,8 @@ import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+
+import java.time.Duration;
 import java.time.Instant;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -123,19 +125,28 @@ public class GameSession extends BaseEntity {
     }
 
     // 중간저장
-    public void updateProgress(int currentFloor, JsonNode visitedFloorsJson, int health, long playTime) {
-        this.currentFloor = currentFloor;
-        this.visitedFloorsJson = visitedFloorsJson;
-        this.health = health;
-        this.playTime = playTime;
-        this.lastSavedAt = Instant.now();
-        this.expiresAt = this.lastSavedAt.plusSeconds(7 * 24 * 60 * 60); // 7일 후 만료
+    public void updateProgress() {
+        Instant now = Instant.now();
+
+        if (this.lastSavedAt != null) {
+            long delta = Duration.between(this.lastSavedAt, now).getSeconds();
+            // 10분 이상 공백이면 이탈로 간주
+            if (delta < 600) {
+                this.playTime = (this.playTime != null ? this.playTime : 0) + delta;
+            }
+        }
+
+        this.lastSavedAt = now;
+        this.expiresAt = now.plusSeconds(7 * 24 * 60 * 60);
     }
+
     // 층이동
     public void moveFloor(int floor, JsonNode visitedFloorsJson) {
         this.currentFloor = floor;
         this.visitedFloorsJson = visitedFloorsJson;
+        updateProgress();
     }
+
     // 게임실패처리
     public void failGame() {
         this.status = Status.FAILED;

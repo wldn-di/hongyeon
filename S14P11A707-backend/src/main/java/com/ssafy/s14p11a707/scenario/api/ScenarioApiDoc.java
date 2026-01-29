@@ -127,7 +127,7 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioCreateResponse> createScenario(ScenarioCreateRequest request);
+    ResponseEntity<ScenarioCreateResponse> createScenario(ScenarioCreateRequest request, OidcUser oidcUser);
 
     @Operation(summary = "시나리오 삭제", description = "시나리오를 삭제합니다.")
     @ApiResponses({

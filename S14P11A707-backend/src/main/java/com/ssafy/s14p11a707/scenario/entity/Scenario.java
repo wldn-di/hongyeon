@@ -133,9 +133,26 @@ public class Scenario extends BaseEntity {
         this.playCount++;
     }
 
+    public void completeGeneration(String title, String synopsis, String synopsisDetail,
+                                  JsonNode storyConfig, JsonNode truthConfig, String motiveEmbedding) {
+        this.title = title;
+        this.synopsis = synopsis;
+        this.synopsisDetail = synopsisDetail;
+        this.storyConfigJson = storyConfig;
+        this.truthConfigJson = truthConfig;
+        this.correctMotiveEmbedding = motiveEmbedding;
+        this.generationStatus = GenerationStatus.COMPLETED;
+        this.playCount = 0;
+    }
+
     public enum GenerationStatus {
         GENERATING,
         COMPLETED,
         FAILED
+    }
+
+    public void failGeneration(String errorMessage) {
+        this.generationStatus = GenerationStatus.FAILED;
+        this.generationError = errorMessage;
     }
 }
