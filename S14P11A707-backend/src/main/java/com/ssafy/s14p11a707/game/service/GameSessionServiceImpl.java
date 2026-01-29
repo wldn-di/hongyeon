@@ -286,6 +286,30 @@ public class GameSessionServiceImpl implements GameSessionService {
                 ? aiConfig.get("speechStyle").asText()
                 : "정중하지만 불안한 말투";
 
+        // aiConfigJson에서 alibi_progression 및 weakness_clue.id 추출
+        String level1_lie = "알리바이: 사건 시간에 다른 장소에 있었습니다.";
+        String level2_weak = "알리바이가 깨지며 당황하는 상태입니다.";
+        Long weaknessClueId = null;  // weakness_clue의 id
+        if (aiConfig != null && aiConfig.has("secret")) {
+            JsonNode secret = aiConfig.get("secret");
+            if (secret.has("alibi_progression")) {
+                JsonNode alibiProgression = secret.get("alibi_progression");
+                if (alibiProgression.has("level1_lie")) {
+                    level1_lie = alibiProgression.get("level1_lie").asText();
+                }
+                if (alibiProgression.has("level2_partial")) {
+                    level2_weak = alibiProgression.get("level2_partial").asText();
+                }
+            }
+            if (secret.has("weakness_clue") && secret.get("weakness_clue").has("id")) {
+                weaknessClueId = secret.get("weakness_clue").get("id").asLong();
+            }
+        }
+
+        // usedClueId와 weakness_clue.id 비교
+        Long usedClueId = request.usedClueId();
+        boolean isWeaknessClueUsed = usedClueId != null && usedClueId.equals(weaknessClueId);
+
         // 용의자 심문을 위한 프롬프트 구성
         String commonClueRule = """
                 ## 단서(아이템/클루) 대응 전략 - 필수 규칙
@@ -294,7 +318,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                    - 대신 "제 것이 맞네요"라고 인정하되, 그것이 왜 사건 현장이나 의심스러운 장소에서 발견되었는지에 대해 '사건과 무관한 그럴싸한 가짜 서사'를 즉흥적으로 만들어 답변하세요. (예: 잃어버렸다, 빌려줬다, 사건 전 방문했다 등)
                 
                 2. 논리적 허점의 배치:
-                   - 변명을 할 때는 타임라인이나 다른 증거와 대조했을 때 찾아낼 수 있는 '미세한 모순'을 포함하세요.
+                   - 변명을 할 때는 타임라인이나 다른 증거와 대조했을 때 찾아낼 수 있는 '미세한 모순'을 포함하세요. 
                    - 범인이라면 수사를 혼선시키기 위해, 일반 용의자라면 자신의 개인적인 비밀을 감추기 위해 이 방식을 사용하세요.
                 
                 3. 질문에 대한 태도:
@@ -304,6 +328,9 @@ public class GameSessionServiceImpl implements GameSessionService {
                 4. 점진적 실토(Layered Truth):
                    - 처음에는 완전한 거짓말을 하고, 사용자가 모순을 지적하면 그제야 '개인적인 비밀'이나 '부분적인 진실'을 말하며 수사 방향을 흐리십시오.
                    - 명확한 증거가 제시되기 전까지는 "왜 저만 몰아세우죠?", "그 물건이 누군가에 의해 조작되었을 가능성은 없나요?"라며 수사관의 논리를 공격하거나 화제를 전환하세요.
+                
+                5. 아이템 제시 상황
+                   - 제시한 "usedClueId" 가 "weakness_clue" 의 "id" 와 일치하면 "alibi_progression" 의 state를 "level1_lie" 에서 "level2_weak" 로 변경하십시오.
                 
                 """;
 
@@ -319,14 +346,16 @@ public class GameSessionServiceImpl implements GameSessionService {
         } else {
             behaviorGuideline = """
                     - 당신은 무고하지만, 살인보다 더 숨기고 싶은 치명적인 사생활(비리, 추문 등)이 있습니다.
-                    - 단서가 제시될 때 본인의 비밀과 관련이 있다면 극도로 당황하며 횡설수설하거나 거짓말을 하세요.
+                    - 단서가 제시될 때 본인의 비밀과 관련이 있다면 본인의 페르소나를 유지하는 선에서 당황하거나 본인의 비밀을 보호하기 위한 거짓말을 하세요.
                     - 하지만 흉기에 대해서는 "맹세코 처음 보는 물건이다"라며 결백을 주장하십시오.
                     - 범인으로 의심받는 상황을 견디지 못하고 다른 수상한 인물에 대해 아는 바를 실토할 수 있습니다.
                     """;
         }
 
+
 // 최종 시스템 메시지 결합
         String systemMessage = String.format("""
+                        
                         당신은 용의자 '%s'입니다.
                         
                         ## 시나리오 배경 정보
@@ -348,26 +377,46 @@ public class GameSessionServiceImpl implements GameSessionService {
                         
                         %s
                         
+                        ## 핵심 아이템 제시 전과 후의 상태 변화
+                        
+                        - 1) 명확한 증거가 제출되지 않았을 때와 2) 약점 증거와 일치하지 않는 양쪽의 경우 모두 false로 판단 
+                        -> false인 경우 본인의 알리바이를 고수하여, 비밀을 부인하며 언급하지 않기, alibi_progression{level1_lie} 를 유지
+                        
+                        - user가 탐문하는 과정에서 아이템을 제출 후 해당 아이템의 id와 suspect의 weakness_clue가 일치하는 경우 true
+                        -> true인 경우 알리바이가 깨지며 취약상태가 되며 탐문 내용이 본인의 sectret의 content와 충분히 유사하거나 모순이 깨지는 경우 해당 비밀을 말할수 있도록 한다, 자연스럽게 해당 대답을 유도하는 경우 숨겨진 진실에 대한 진술할수 있도록 한다
+                        
+                        if %b:
+                        %s
+                        
+                        else:
+                        %s
+                        
                         ## 심문 규칙
                         1. 위 시나리오 배경 정보를 기반으로 답변하되, 자신의 비밀이나 범행을 숨기기 위한 기만적 서사를 생성하세요.
                         2. 이전 대화의 모순을 기억하고, 지적당하면 당황하거나 말을 바꾸는 연기를 하세요.
                         3. 직업과 성격에 맞는 페르소나를 유지하세요.
+                        
+                        최종 출력 전에, clues 배열의 모든 name/description/revealed_truth/discovery_script/assistant_comment에 사람 이름/소유 표현/직업 지목/범인 단정 표현이 포함되어 있는지 자체 점검하고, 발견되면 중립 표현으로 수정한 뒤 출력하십시오.
                         """,
                 suspect.getName(),
                 scenarioContext,
                 suspect.getAge() != null ? suspect.getAge() : 30,
                 suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
-                suspect.getOccupation() != null ? suspect.getOccupation() : "무직",
+                suspect.getOccupation() != null ? suspect.getOccupation() : "없음",
                 suspect.getOneLiner() != null ? suspect.getOneLiner() : "없음",
                 personality,
                 speechStyle,
                 suspect.getMotive() != null ? suspect.getMotive() : "없음",
                 behaviorGuideline,
-                commonClueRule);
+                commonClueRule,
+                isWeaknessClueUsed,
+                level2_weak,
+                level1_lie
+        );
 
 
         String userMessage = request.message() == null ? "" : request.message().trim();
-        Long usedClueId = request.usedClueId();
+        // usedClueId는 이미 위에서 선언됨
 
         // 단서를 사용한 경우 단서 정보 조회 후 AI에게 전달
         if (usedClueId != null) {

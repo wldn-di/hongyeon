@@ -83,18 +83,34 @@ public class CustomChatMemoryRepository implements ChatMemoryRepository {
             return; // suspect가 없으면 저장하지 않고 건너뜀
         }
 
-        for (Message message : messages) {
-            ChatMessage chatMessage = ChatMessage.builder()
-                    .session(session)
-                    .suspect(suspect)
-                    .role(getRoleFromMessage(message))
-                    .content(message.getText())
-                    .usedClueId(null)
-                    .responseLevel(null)
-                    .keyTalk(false)
-                    .build();
+        // 기존 저장된 메시지 개수 확인
+        List<ChatMessage> existingMessages = chatMessageRepository
+                .findBySessionIdAndSuspectIdOrderByCreatedAtDesc(key.sessionId, key.suspectId);
+        int existingCount = existingMessages.size();
 
-            chatMessageRepository.save(chatMessage);
+        // 새로운 메시지만 저장 (Spring AI가 전체 메시지 리스트를 전달하므로 중복 방지)
+        int startIndex = Math.max(0, messages.size() - existingCount - 2); // +2는 user+assistant 쌍 고려
+        for (int i = startIndex; i < messages.size(); i++) {
+            Message message = messages.get(i);
+
+            // 중복 체크: 동일한 role과 content를 가진 최근 메시지가 있는지 확인
+            boolean isDuplicate = existingMessages.stream()
+                    .anyMatch(existing -> existing.getRole().equals(getRoleFromMessage(message))
+                            && existing.getContent().equals(message.getText()));
+
+            if (!isDuplicate) {
+                ChatMessage chatMessage = ChatMessage.builder()
+                        .session(session)
+                        .suspect(suspect)
+                        .role(getRoleFromMessage(message))
+                        .content(message.getText())
+                        .usedClueId(null)
+                        .responseLevel(null)
+                        .keyTalk(false)
+                        .build();
+
+                chatMessageRepository.save(chatMessage);
+            }
         }
     }
 
