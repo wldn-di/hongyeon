@@ -9,8 +9,6 @@ public interface BoardNodeRepository extends JpaRepository<BoardNode, Long> {
 
     List<BoardNode> findBySessionId(long sessionId);
 
-    void deleteBySessionIdAndIdIn(long sessionId, List<Long> ids);
-
-    void deleteBySessionId(long sessionId);
+    void deleteBySessionId(Long sessionId);
 
 }
