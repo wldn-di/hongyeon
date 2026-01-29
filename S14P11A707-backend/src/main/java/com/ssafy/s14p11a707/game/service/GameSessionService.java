@@ -25,15 +25,7 @@ public interface GameSessionService {
 
     BoardResponse getBoard(long sessionId, OidcUser oidcUser);
 
-    BoardResponse addBoardNode(long sessionId, BoardNodeAddRequest request, OidcUser oidcUser);
-
-    BoardResponse moveBoardNode(long sessionId, BoardItemMoveRequest request, OidcUser oidcUser);
-
-    BoardResponse updateBoardMemo(long sessionId, long nodeId, BoardMemoUpdateRequest request, OidcUser oidcUser);
-
-    BoardResponse addBoardConnection(long sessionId, BoardConnectionAddRequest request, OidcUser oidcUser);
-
-    BoardResponse deleteBoard(long sessionId, BoardDeleteRequest request, OidcUser oidcUser);
+    BoardResponse saveBoard(long sessionId, BoardSaveRequest request, OidcUser oidcUser);
 
     SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
 
