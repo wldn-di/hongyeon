@@ -9,7 +9,7 @@ variables:
   FRONTEND_DIR: "S14P11A707-frontend"
   BACKEND_DIR: "S14P11A707-backend"
   REMOTE_COMPOSE_DIR: "/home/ubuntu/infra"
-  IMAGE_REPO: "$CI_REGISTRY_IMAGE/backend"
+  REGISTRY_HOST: "$CI_SERVER_HOST:5050"
   IMAGE_TAG: "$CI_COMMIT_REF_SLUG"
 
   # dind (Docker-in-Docker) 사용
@@ -32,10 +32,11 @@ build:
     - if: '$CI_COMMIT_REF_NAME == "test-build"'
   script:
     - set -euo pipefail
-    - export IMAGE_REPO="$(printf '%s' "$IMAGE_REPO" | tr '[:upper:]' '[:lower:]')"
+    - export PROJECT_PATH_LOWER="$(printf '%s' "$CI_PROJECT_PATH" | tr '[:upper:]' '[:lower:]')"
+    - export IMAGE_REPO="$REGISTRY_HOST/$PROJECT_PATH_LOWER/backend"
     - export IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
-    - echo "CI_REGISTRY=$CI_REGISTRY"
-    - echo "CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE"
+    - echo "REGISTRY_HOST=$REGISTRY_HOST"
+    - echo "CI_PROJECT_PATH=$CI_PROJECT_PATH"
     - echo "IMAGE_REPO=$IMAGE_REPO"
     - echo "IMAGE_TAG=$IMAGE_TAG"
     - echo "IMAGE_NAME=$IMAGE_NAME"
@@ -58,8 +59,8 @@ build:
     # GitLab Container Registry 인증 설정 (~/.docker/config.json)
     - mkdir -p ~/.docker
     - |
-      auth="$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 -w0)"
-      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$auth" > ~/.docker/config.json
+      auth="$(printf "%s:%s" "gitlab-ci-token" "$CI_JOB_TOKEN" | base64 -w0)"
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$REGISTRY_HOST" "$auth" > ~/.docker/config.json
 
     # 스프링부트 이미지 빌드 + push
     - cd "$BACKEND_DIR"
@@ -85,7 +86,7 @@ deploy:
     - ssh-keyscan i14a707.p.ssafy.io >> ~/.ssh/known_hosts
   script:
     - |
-      printf '%s' "$CI_REGISTRY_PASSWORD" | ssh ubuntu@i14a707.p.ssafy.io "docker login \"$CI_REGISTRY\" -u \"$CI_REGISTRY_USER\" --password-stdin && cd \"$REMOTE_COMPOSE_DIR\" && docker compose pull backend && docker compose up -d --remove-orphans && docker compose ps"
+      printf '%s' "$CI_JOB_TOKEN" | ssh ubuntu@i14a707.p.ssafy.io "docker login \"$REGISTRY_HOST\" -u gitlab-ci-token --password-stdin && cd \"$REMOTE_COMPOSE_DIR\" && docker compose pull backend && docker compose up -d --remove-orphans && docker compose ps"
 
   environment:
     name: production
