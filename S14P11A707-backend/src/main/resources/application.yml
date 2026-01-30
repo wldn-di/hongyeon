@@ -39,20 +39,18 @@ spring:
     oauth2:
       client:
         provider:
-          cognito:
-            authorization-uri: ${COGNITO_AUTHORIZATION_URI}
-            token-uri: ${COGNITO_TOKEN_URI}
-            user-info-uri: ${COGNITO_USER_INFO_URI}
-            jwk-set-uri: ${COGNITO_JWK_SET_URI}
-            user-name-attribute: sub
+          keycloak:
+            issuer-uri: ${KEYCLOAK_ISSUER_URI}
         registration:
-          cognito:
-            client-id: ${COGNITO_CLIENT_ID}
+          keycloak:
+            # Public client + PKCE (no client secret)
+            client-id: ${KEYCLOAK_CLIENT_ID}
             client-authentication-method: none
             authorization-grant-type: authorization_code
             scope:
               - openid
               - email
+              - profile
             redirect-uri: "{baseUrl}/oauth2/code/{registrationId}"
   ai:
     google:
@@ -90,7 +88,7 @@ app:
     # 로그인 완료 후 이동할 URL (상대경로 또는 절대 URL)
     # - 예) /swagger-ui/index.html
     # - 예) https://hongyeon.cloud-ip.cc/
-    default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/swagger-ui/index.html}
+    default-redirect-url: ${APP_AUTH_DEFAULT_REDIRECT_URL:/}
     # 절대 URL 리다이렉트를 허용할 origin allowlist (comma-separated)
     # - 예) https://hongyeon.cloud-ip.cc,http://localhost:5173
     allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:}

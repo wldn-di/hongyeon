@@ -10,7 +10,7 @@ import org.springframework.security.oauth2.client.OAuth2AuthorizedClientService;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 
 /**
- * Cognito OAuth2 토큰 갱신 지원을 위한 클라이언트 매니저 설정
+ * OAuth2 토큰 갱신 지원을 위한 클라이언트 매니저 설정
  * <p>
  * {@link OAuth2AuthorizedClientManager}를 구성해 Authorization Code 흐름으로 발급된 토큰에 대해
  * Refresh Token 기반 갱신을 시도할 수 있도록 한다.

@@ -15,7 +15,7 @@ import org.springframework.util.StringUtils;
 /**
  * 사용자({@link User}) upsert 애플리케이션 서비스
  * <p>
- * Cognito OIDC 로그인 과정에서 전달받은 {@code email}을 기준으로 사용자를 조회하고,
+ * OIDC 로그인 과정에서 전달받은 {@code email}을 기준으로 사용자를 조회하고,
  * 없으면 생성한 뒤 반환한다.
  * </p>
  * <p><b>트랜잭션</b></p>
@@ -30,7 +30,7 @@ import org.springframework.util.StringUtils;
  * <p><b>설계 메모</b></p>
  *
  * @see UserRepository
- * @see com.ssafy.s14p11a707.security.oidc.CognitoOidcUserService
+ * @see com.ssafy.s14p11a707.security.oidc.OidcUserSyncService
  */
 @Service
 @RequiredArgsConstructor
@@ -50,7 +50,7 @@ public class UserService {
      * </p>
      *
      * @param rawGoogleId OIDC subject(= google_id)
-     * @param rawEmail Cognito 클레임 등에서 전달받은 원본 이메일
+     * @param rawEmail OIDC 클레임 등에서 전달받은 원본 이메일
      * @return 조회/생성/복구된 {@link User}
      * @throws BaseException googleId/email이 비어 있는 경우
      */

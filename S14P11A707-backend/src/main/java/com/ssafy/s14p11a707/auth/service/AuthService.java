@@ -18,7 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 /**
- * Cognito OAuth2 로그인 BFF 애플리케이션 서비스
+ * Keycloak(OIDC) OAuth2 로그인 BFF 애플리케이션 서비스
  * <p>
  * {@link com.ssafy.s14p11a707.auth.api.AuthApi}에서 호출되며,
  * 로그인 시작(인가 엔드포인트로 리다이렉트), 현재 사용자 조회, (선택) 토큰 갱신을 담당한다.
@@ -48,7 +48,7 @@ public class AuthService {
         UNAUTHORIZED
     }
 
-    private static final String REGISTRATION_ID = "cognito";
+    private static final String REGISTRATION_ID = "keycloak";
 
     private final AuthRedirectService authRedirectService;
     private final OAuth2AuthorizedClientManager authorizedClientManager;
@@ -58,7 +58,7 @@ public class AuthService {
      * OAuth2 로그인 시작 URL 반환
      * <p>
      * 프론트가 요청한 리다이렉트 경로를 {@link AuthRedirectService}에 저장한 뒤,
-     * Spring Security의 기본 인가 시작 엔드포인트({@code /oauth2/authorization/cognito})로 이동할 URI를 반환한다.
+     * Spring Security의 기본 인가 시작 엔드포인트({@code /oauth2/authorization/keycloak})로 이동할 URI를 반환한다.
      * </p>
      *
      * @param redirect 로그인 성공 후 이동할 경로/URL(예: {@code /swagger-ui/index.html}, {@code https://hongyeon.cloud-ip.cc/})
@@ -73,7 +73,7 @@ public class AuthService {
     /**
      * OIDC 사용자 기반 내 정보 응답 생성
      * <p>
-     * Cognito(OIDC) 로그인만 사용하는 전제를 두고 {@link OidcUser}만을 입력으로 받는다.
+     * OIDC 로그인만 사용하는 전제를 두고 {@link OidcUser}만을 입력으로 받는다.
      * OIDC 사용자 주입이 실패한 경우(예: principal 타입 불일치)에는 {@link BaseException}({@link ErrorCode#UNAUTHORIZED})을 발생시킨다.
      * </p>
      *
@@ -102,7 +102,7 @@ public class AuthService {
 
     public RefreshResult refresh(HttpServletRequest request, HttpServletResponse response, Authentication authentication) {
         // 1) authorize() 호출에 필요한 컨텍스트 구성
-        // - clientRegistrationId: 어떤 OAuth2 클라이언트 설정을 쓸지(cognito)
+        // - clientRegistrationId: 어떤 OAuth2 클라이언트 설정을 쓸지(keycloak)
         // - principal(Authentication): "누가" 요청했는지(세션/인증 정보)로 기존 Authorized Client를 조회/갱신
         // - request/response: 세션 기반 저장소 사용 시 Authorized Client 로드/저장에 필요할 수 있음
         OAuth2AuthorizeRequest authorizeRequest = OAuth2AuthorizeRequest.withClientRegistrationId(REGISTRATION_ID)

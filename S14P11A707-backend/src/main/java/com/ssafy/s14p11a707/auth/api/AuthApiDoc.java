@@ -15,13 +15,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 
-@Tag(name = "Auth API", description = "세션 기반(Cognito OIDC) 인증 API")
+@Tag(name = "Auth API", description = "세션 기반(Keycloak OIDC) 인증 API")
 public interface AuthApiDoc {
 
     @Operation(
             summary = "로그인 시작",
             description = """
-                    Cognito(OIDC) 로그인 플로우를 시작합니다.
+                    Keycloak(OIDC) 로그인 플로우를 시작합니다.
 
                     - redirect 파라미터로 로그인 성공/실패 후 이동할 경로/URL을 지정할 수 있습니다.
                     - 상대 경로(/...) 또는 allowlist 기반 절대 URL만 허용합니다.
@@ -29,7 +29,7 @@ public interface AuthApiDoc {
                     """
     )
     @ApiResponses({
-            @ApiResponse(responseCode = "302", description = "Cognito 인가 엔드포인트로 리다이렉트"),
+            @ApiResponse(responseCode = "302", description = "Keycloak 인가 엔드포인트로 리다이렉트"),
             @ApiResponse(
                     responseCode = "500",
                     description = "서버 오류",
