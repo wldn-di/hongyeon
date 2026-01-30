@@ -7,12 +7,13 @@ import { cn } from "@/lib/utils"
 export default function BottomBoardPanel({
   isOpen,
   onOpenChange,
+  sessionId,    // ✅ 추가
   scenarioId,
   leftOffsetPx = 0,
   rightOffsetPx = 0,
   pendingAddItem = null,
   onConsumePendingAddItem = null,
-  victim = null, // scenario.victim 전달받음
+  victim = null,
 }) {
   const containerRef = useRef(null)
 
@@ -64,6 +65,7 @@ export default function BottomBoardPanel({
         )}>
           <div className="p-4">
             <InvestigationBoard
+              sessionId={sessionId}    // ✅ 추가
               scenarioId={scenarioId}
               title="개인 추리보드"
               victim={victim}

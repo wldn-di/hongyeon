@@ -1,19 +1,18 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchBoard, fetchClues, moveBoardNode } from '../api/sessionApi'
+import { fetchBoard } from '../api/sessionApi'
+import { fetchClues } from '../api/cluesApi'
 import { fetchScenarioSuspects } from '@/features/scenarios/api/scenariosApi'
 import {
   normalizeBoardResponse,
   normalizeClueListResponse,
   normalizeSuspectListResponse,
-  createBoardItems,
 } from '../api/sessionMappers'
 import { getErrorMessage } from '@/api/errors/errorHandler'
 
 /**
- * Board data management hook
- * @param {number} sessionId - Session ID
- * @param {number} [scenarioId] - Scenario ID (optional, for fetching suspects)
- * @returns {UseBoardReturn}
+ * 추리보드 데이터 관리 Hook
+ * - localStorage 기반으로 작동
+ * - API는 조회만 사용 (저장은 InvestigationBoard에서 직접)
  */
 export const useBoard = (sessionId, scenarioId) => {
   const [boardData, setBoardData] = useState(null)
@@ -25,7 +24,7 @@ export const useBoard = (sessionId, scenarioId) => {
   const [error, setError] = useState(null)
 
   /**
-   * Fetch board data
+   * 보드 데이터 로드 (API에서 조회)
    */
   const fetchBoardData = useCallback(async () => {
     if (!sessionId) return
@@ -34,7 +33,7 @@ export const useBoard = (sessionId, scenarioId) => {
     setError(null)
 
     try {
-      // Fetch board and clues in parallel
+      // 보드, 단서 병렬 조회
       const [boardResponse, cluesResponse] = await Promise.all([
         fetchBoard(sessionId),
         fetchClues(sessionId),
@@ -46,26 +45,15 @@ export const useBoard = (sessionId, scenarioId) => {
       setBoardData(normalizedBoard)
       setClues(normalizedClues.clues)
 
-      // Fetch suspects if scenarioId is provided
+      // 용의자 조회
       if (scenarioId) {
         try {
           const suspectsResponse = await fetchScenarioSuspects(scenarioId)
           const normalizedSuspects = normalizeSuspectListResponse(suspectsResponse)
           setSuspects(normalizedSuspects.suspects)
-
-          // Create UI board items
-          const items = createBoardItems(normalizedBoard, normalizedSuspects.suspects, normalizedClues.clues)
-          setBoardItems(items)
         } catch (suspectErr) {
           console.error('Failed to fetch suspects:', suspectErr)
-          // Continue without suspects - board items will be created without suspect data
-          const items = createBoardItems(normalizedBoard, [], normalizedClues.clues)
-          setBoardItems(items)
         }
-      } else {
-        // Create UI board items without suspects
-        const items = createBoardItems(normalizedBoard, [], normalizedClues.clues)
-        setBoardItems(items)
       }
     } catch (err) {
       console.error('Board data load failed:', err)
@@ -81,46 +69,25 @@ export const useBoard = (sessionId, scenarioId) => {
   }, [sessionId, scenarioId])
 
   /**
-   * Update node position
-   * @param {number} nodeId - Node ID
-   * @param {number} x - X position
-   * @param {number} y - Y position
+   * 노드 위치 업데이트 (로컬 상태만)
    */
-  const updateNodePosition = useCallback(async (nodeId, x, y) => {
-    if (!sessionId || isSaving) return
-
-    // Optimistic update
+  const updateNodePosition = useCallback((nodeId, x, y) => {
     setBoardItems(prev =>
       prev.map(item =>
         item.id === nodeId ? { ...item, x, y } : item
       )
     )
-
-    setIsSaving(true)
-    try {
-      await moveBoardNode(sessionId, { nodeId, x, y })
-    } catch (err) {
-      console.error('Board node position update failed:', err)
-      // Revert on error
-      setBoardItems(prev =>
-        prev.map(item =>
-          item.id === nodeId ? { ...item, x: item.x, y: item.y } : item
-        )
-      )
-    } finally {
-      setIsSaving(false)
-    }
-  }, [sessionId, isSaving])
+  }, [])
 
   /**
-   * Refetch board data
+   * 보드 새로고침
    */
   const refetch = useCallback(() => {
     fetchBoardData()
   }, [fetchBoardData])
 
   /**
-   * Initial load
+   * 초기 로드
    */
   useEffect(() => {
     fetchBoardData()
@@ -139,19 +106,5 @@ export const useBoard = (sessionId, scenarioId) => {
     updateNodePosition,
   }
 }
-
-/**
- * @typedef {Object} UseBoardReturn
- * @property {Object|null} boardData - Raw board data from API
- * @property {Array} clues - List of clues
- * @property {Array} suspects - List of suspects
- * @property {Array} boardItems - UI-compatible board items
- * @property {Function} setBoardItems - Set board items state
- * @property {boolean} isLoading - Loading state
- * @property {boolean} isSaving - Saving state
- * @property {string|null} error - Error message
- * @property {Function} refetch - Refetch board data
- * @property {Function} updateNodePosition - Update node position
- */
 
 export default useBoard

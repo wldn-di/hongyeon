@@ -151,116 +151,26 @@ export const fetchBoard = async (sessionId) => {
 };
 
 /**
- * 보드 노드 추가 (POST /api/sessions/{sessionId}/board/nodes)
+ * 보드 전체 저장 (PUT /api/sessions/{sessionId}/board)
  * @param {number} sessionId
- * @param {BoardNodeAddRequest} data - { type, targetId, memoContent, x, y }
+ * @param {BoardSaveRequest} data - { nodes: [{ type, targetId, memoContent, x, y }], connections: [{ fromIndex, toIndex, type }] }
  * @returns {Promise<BoardResponse>}
  * @throws {ApiError}
  */
-export const addBoardNode = async (sessionId, data) => {
+export const saveBoard = async (sessionId, data) => {
   try {
-    const response = await apiClient.post(
-      ENDPOINTS.sessions.boardNodes(sessionId),
-      data,
-    );
-    return response.data;
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error);
-    }
-    throw new ApiError("보드 노드 추가에 실패했습니다.");
-  }
-};
-
-/**
- * 보드 노드 위치 이동 (PATCH /api/sessions/{sessionId}/board/nodes/position)
- * @param {number} sessionId
- * @param {BoardItemMoveRequest} data - { nodeId, x, y }
- * @returns {Promise<BoardResponse>}
- * @throws {ApiError}
- */
-export const moveBoardNode = async (sessionId, data) => {
-  try {
-    const response = await apiClient.patch(
-      ENDPOINTS.sessions.boardNodePosition(sessionId),
-      data,
-    );
-    return response.data;
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error);
-    }
-    throw new ApiError("보드 노드 이동에 실패했습니다.");
-  }
-};
-
-/**
- * 보드 메모 수정 (PATCH /api/sessions/{sessionId}/board/nodes/{nodeId})
- * @param {number} sessionId
- * @param {number} nodeId
- * @param {BoardMemoUpdateRequest} data - { memoContent }
- * @returns {Promise<BoardResponse>}
- * @throws {ApiError}
- */
-export const updateBoardMemo = async (sessionId, nodeId, data) => {
-  try {
-    const response = await apiClient.patch(
-      ENDPOINTS.sessions.boardNodeUpdate(sessionId, nodeId),
-      data,
-    );
-    return response.data;
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error);
-    }
-    throw new ApiError("메모 수정에 실패했습니다.");
-  }
-};
-
-/**
- * 보드 연결선 추가 (POST /api/sessions/{sessionId}/board/connections)
- * @param {number} sessionId
- * @param {BoardConnectionAddRequest} data - { fromNodeId, toNodeId, type }
- * @returns {Promise<BoardResponse>}
- * @throws {ApiError}
- */
-export const addBoardConnection = async (sessionId, data) => {
-  try {
-    const response = await apiClient.post(
-      ENDPOINTS.sessions.boardConnections(sessionId),
-      data,
-    );
-    return response.data;
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error);
-    }
-    throw new ApiError("연결선 추가에 실패했습니다.");
-  }
-};
-
-/**
- * 보드 삭제 (DELETE /api/sessions/{sessionId}/board)
- * @param {number} sessionId
- * @param {BoardDeleteRequest} data - { nodeIds, connectionIds }
- * @returns {Promise<BoardResponse>}
- * @throws {ApiError}
- */
-export const deleteBoard = async (sessionId, data) => {
-  try {
-    const response = await apiClient.delete(
+    const response = await apiClient.put(
       ENDPOINTS.sessions.board(sessionId),
-      { data },
+      data
     );
     return response.data;
   } catch (error) {
     if (error.response?.data) {
       throw ApiError.fromAxiosError(error);
     }
-    throw new ApiError("보드 삭제에 실패했습니다.");
+    throw new ApiError("보드 저장에 실패했습니다.");
   }
 };
-
 // ========================================
 // Clues API
 // ========================================
@@ -449,13 +359,9 @@ export default {
   saveGame,
   endGame,
   moveFloor,
-  // Board
+  // Board (조회/저장만)
   fetchBoard,
-  addBoardNode,
-  moveBoardNode,
-  updateBoardMemo,
-  addBoardConnection,
-  deleteBoard,
+  saveBoard,
   // Clues
   fetchClues,
   fetchClueDetail,

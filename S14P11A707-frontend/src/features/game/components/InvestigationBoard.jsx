@@ -1,12 +1,18 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/Button'
-import { X, Pin, Save, Check, Plus } from 'lucide-react'
+import { X, Pin, Save, Check, Plus, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MemoInputModal } from '@/features/game/modals'
+import { fetchBoard, saveBoard } from '@/features/session/api/sessionApi'
+import { toast } from 'sonner'
 
-export function InvestigationBoard({ 
+/**
+ * 추리 보드 컴포넌트 (localStorage + 저장 버튼 API 연동)
+ */
+export function InvestigationBoard({
+  sessionId = null,
   scenarioId = 1,
-  victim = null, 
+  victim = null,
   isModal = false,
   onClose = null,
   readOnly = false,
@@ -14,37 +20,43 @@ export function InvestigationBoard({
   acceptExternalDrop = false,
   pendingAddItem = null,
   onConsumePendingAddItem = null,
-  mode = 'investigation', // 'investigation' | 'submit'
+  mode = 'investigation',
   initialBoardItems = null,
   initialConnections = null,
   persist = true,
   allowMemo = true,
-  allowedLineModes = null, // default: investigation = ['confirmed','suspected'], submit = ['confirmed']
+  allowedLineModes = null,
   hideFilter = false,
   hideSave = false,
   onBoardStateChange = null,
 }) {
   const isSubmitMode = mode === 'submit'
   const effectiveAllowedLineModes =
-    allowedLineModes ??
-    (isSubmitMode ? ['confirmed'] : ['confirmed', 'suspected'])
+    allowedLineModes ?? (isSubmitMode ? ['confirmed'] : ['confirmed', 'suspected'])
 
-  const storageEnabled = persist && !readOnly && !isSubmitMode
+  const canSaveToApi = Boolean(sessionId) && !isSubmitMode && !readOnly
+  const storageKey = sessionId ? `board-${sessionId}` : `board-scenario-${scenarioId}`
 
+  // ========================================
+  // State
+  // ========================================
   const [filter, setFilter] = useState('all')
   const [selectedItem, setSelectedItem] = useState(null)
-  const [boardItems, setBoardItems] = useState(() => [])
-  const [connections, setConnections] = useState(() => [])
+  const [boardItems, setBoardItems] = useState([])
+  const [connections, setConnections] = useState([])
   const [saveStatus, setSaveStatus] = useState(null)
   const [memoModalOpen, setMemoModalOpen] = useState(false)
-  const [lineMode, setLineMode] = useState(null) // 'confirmed' | 'suspected' | null
-  const [pendingConnectFrom, setPendingConnectFrom] = useState(null) // itemId
-  const [selectedConnectionKey, setSelectedConnectionKey] = useState(null) // for delete ui
-  const [selectedConnectionPos, setSelectedConnectionPos] = useState(null) // { x, y }
+  const [lineMode, setLineMode] = useState(null)
+  const [pendingConnectFrom, setPendingConnectFrom] = useState(null)
+  const [selectedConnectionKey, setSelectedConnectionKey] = useState(null)
+  const [selectedConnectionPos, setSelectedConnectionPos] = useState(null)
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 })
-  
+  const [isLoading, setIsLoading] = useState(false)
+  const [isSaving, setIsSaving] = useState(false)
+
   const boardRef = useRef(null)
   const autosaveTimerRef = useRef(null)
+  const pendingConnectFromRef = useRef(null)
   const modalDragRef = useRef({
     isDragging: false,
     startX: 0,
@@ -62,217 +74,9 @@ export function InvestigationBoard({
     didMove: false,
   })
 
-  useEffect(() => {
-    onBoardStateChange?.({ items: boardItems, connections })
-  }, [onBoardStateChange, boardItems, connections])
-
-  useEffect(() => {
-    const safeJsonParse = (value, fallback) => {
-      if (!value) return fallback
-      try {
-        return JSON.parse(value)
-      } catch {
-        return fallback
-      }
-    }
-
-    const normalizeBoardState = (itemsRaw, connectionsRaw) => {
-      const itemsArray = Array.isArray(itemsRaw) ? itemsRaw : []
-      const connectionsArray = Array.isArray(connectionsRaw) ? connectionsRaw : []
-
-      const idMap = new Map()
-
-      const normalizeItemId = (item, index) => {
-        const type = item?.type
-        const originalId = item?.id
-        const originalIdStr = String(originalId ?? '')
-
-        const parseNumeric = (value) => {
-          const num = Number(value)
-          return Number.isFinite(num) ? num : null
-        }
-
-        const parseFromPrefix = (prefix) => {
-          if (!originalIdStr.startsWith(prefix)) return null
-          const num = parseNumeric(originalIdStr.slice(prefix.length))
-          return num
-        }
-
-        if (type === 'evidence') {
-          const inferredId = item?.evidenceId ?? parseFromPrefix('evidence-') ?? parseNumeric(originalId)
-          const nextId = originalIdStr.startsWith('evidence-')
-            ? originalIdStr
-            : inferredId != null
-              ? `evidence-${inferredId}`
-              : `evidence-${Date.now()}-${index}`
-          return { id: nextId, patch: { evidenceId: item?.evidenceId ?? inferredId } }
-        }
-
-        if (type === 'suspect') {
-          const inferredId = item?.suspectId ?? parseFromPrefix('suspect-') ?? parseNumeric(originalId)
-          const nextId = originalIdStr.startsWith('suspect-')
-            ? originalIdStr
-            : inferredId != null
-              ? `suspect-${inferredId}`
-              : `suspect-${Date.now()}-${index}`
-          return { id: nextId, patch: { suspectId: item?.suspectId ?? inferredId } }
-        }
-
-        if (type === 'location') {
-          const inferredId = item?.locationId ?? parseFromPrefix('location-') ?? parseNumeric(originalId)
-          const nextId = originalIdStr.startsWith('location-')
-            ? originalIdStr
-            : inferredId != null
-              ? `location-${inferredId}`
-              : `location-${Date.now()}-${index}`
-          return { id: nextId, patch: { locationId: item?.locationId ?? inferredId } }
-        }
-
-        if (type === 'victim') {
-          const inferredId = item?.victimId ?? parseFromPrefix('victim-') ?? parseNumeric(originalId)
-          const nextId = originalIdStr.startsWith('victim-')
-            ? originalIdStr
-            : inferredId != null
-              ? `victim-${inferredId}`
-              : `victim-${Date.now()}-${index}`
-          return { id: nextId, patch: { victimId: item?.victimId ?? inferredId } }
-        }
-
-        if (type === 'note') {
-          const nextId = originalIdStr.startsWith('note-')
-            ? originalIdStr
-            : originalIdStr
-              ? `note-${originalIdStr}`
-              : `note-${Date.now()}-${index}`
-          return { id: nextId, patch: null }
-        }
-
-        const nextId = originalIdStr || `item-${Date.now()}-${index}`
-        return { id: nextId, patch: null }
-      }
-
-      const normalizedItems = itemsArray.map((item, index) => {
-        const { id, patch } = normalizeItemId(item, index)
-        const originalIdStr = item?.id == null ? '' : String(item.id)
-        if (originalIdStr) idMap.set(originalIdStr, id)
-        idMap.set(id, id)
-        return patch ? { ...item, ...patch, id } : { ...item, id }
-      })
-
-      const getIdentityKey = (item) => {
-        if (!item) return 'unknown:'
-        if (item.type === 'evidence') {
-          if (item.evidenceId != null) return `evidence:${item.evidenceId}`
-          if (item.name) return `evidenceName:${item.name}`
-          return `evidenceId:${item.id}`
-        }
-        if (item.type === 'suspect') {
-          if (item.suspectId != null) return `suspect:${item.suspectId}`
-          if (item.name) return `suspectName:${item.name}`
-          return `suspectId:${item.id}`
-        }
-        if (item.type === 'location') {
-          if (item.locationId != null) return `location:${item.locationId}`
-          if (item.name) return `locationName:${item.name}`
-          return `locationId:${item.id}`
-        }
-        if (item.type === 'victim') {
-          if (item.victimId != null) return `victim:${item.victimId}`
-          if (item.name) return `victimName:${item.name}`
-          return `victimId:${item.id}`
-        }
-        if (item.type === 'note') return `note:${item.id}`
-        return `${item.type ?? 'item'}:${item.id}`
-      }
-
-      const dedupedItems = []
-      const seenIdentity = new Map() // identityKey -> keptId
-      const seenIds = new Set()
-
-      normalizedItems.forEach((item) => {
-        const id = String(item?.id ?? '')
-        if (!id) return
-
-        const identityKey = getIdentityKey(item)
-        const existingId = seenIdentity.get(identityKey)
-        if (existingId) {
-          if (id !== existingId) idMap.set(id, existingId)
-          return
-        }
-
-        if (seenIds.has(id)) return
-        seenIds.add(id)
-        seenIdentity.set(identityKey, id)
-        dedupedItems.push(item)
-      })
-
-      const mapEndpoint = (value) => {
-        const key = String(value ?? '')
-        return idMap.get(key) ?? key
-      }
-
-      const normalizedConnectionsRaw = connectionsArray
-        .map((conn) => {
-          const from = mapEndpoint(conn?.from)
-          const to = mapEndpoint(conn?.to)
-          const type = conn?.type === 'suspected' ? 'suspected' : 'confirmed'
-          return { from, to, type }
-        })
-        .filter((conn) => conn.from && conn.to && conn.from !== conn.to)
-
-      const itemIdSet = new Set(dedupedItems.map((item) => item.id))
-      const normalizedConnections = normalizedConnectionsRaw.filter(
-        (conn) => itemIdSet.has(conn.from) && itemIdSet.has(conn.to)
-      )
-
-      const getConnectionKeyForNormalize = (fromId, toId) => {
-        const a = String(fromId ?? '')
-        const b = String(toId ?? '')
-        return a < b ? `${a}__${b}` : `${b}__${a}`
-      }
-
-      const connectionByKey = new Map()
-      normalizedConnections.forEach((conn) => {
-        const key = getConnectionKeyForNormalize(conn.from, conn.to)
-        const existing = connectionByKey.get(key)
-        if (!existing) {
-          connectionByKey.set(key, conn)
-          return
-        }
-        if (existing.type === 'suspected' && conn.type === 'confirmed') {
-          connectionByKey.set(key, conn)
-        }
-      })
-
-      return { items: dedupedItems, connections: [...connectionByKey.values()] }
-    }
-
-    const resetUiState = () => {
-      setSelectedItem(null)
-      setLineMode(null)
-      setPendingConnectFrom(null)
-      setSelectedConnectionKey(null)
-      setSelectedConnectionPos(null)
-    }
-
-    if (Array.isArray(initialBoardItems) || Array.isArray(initialConnections)) {
-      setBoardItems(Array.isArray(initialBoardItems) ? initialBoardItems : [])
-      setConnections(Array.isArray(initialConnections) ? initialConnections : [])
-      resetUiState()
-      return
-    }
-
-    const itemsRaw = localStorage.getItem(`board-items-${scenarioId}`)
-    const connectionsRaw = localStorage.getItem(`board-connections-${scenarioId}`)
-    const parsedItems = safeJsonParse(itemsRaw, [])
-    const parsedConnections = safeJsonParse(connectionsRaw, [])
-    const normalized = normalizeBoardState(parsedItems, parsedConnections)
-
-    setBoardItems(normalized.items)
-    setConnections(normalized.connections)
-    resetUiState()
-  }, [scenarioId, initialBoardItems, initialConnections])
-
+  // ========================================
+  // 유틸리티 함수
+  // ========================================
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
   const getConnectionKey = (fromId, toId) => {
@@ -290,9 +94,249 @@ export function InvestigationBoard({
     return Math.abs(hash)
   }
 
+  // ========================================
+  // localStorage 저장/로드
+  // ========================================
+  const saveToLocalStorage = useCallback((items, conns) => {
+    try {
+      localStorage.setItem(`${storageKey}-items`, JSON.stringify(items))
+      localStorage.setItem(`${storageKey}-connections`, JSON.stringify(conns))
+    } catch (e) {
+      console.error('localStorage 저장 실패:', e)
+    }
+  }, [storageKey])
+
+  const loadFromLocalStorage = useCallback(() => {
+    try {
+      const itemsRaw = localStorage.getItem(`${storageKey}-items`)
+      const connsRaw = localStorage.getItem(`${storageKey}-connections`)
+      return {
+        items: itemsRaw ? JSON.parse(itemsRaw) : [],
+        connections: connsRaw ? JSON.parse(connsRaw) : [],
+      }
+    } catch (e) {
+      console.error('localStorage 로드 실패:', e)
+      return { items: [], connections: [] }
+    }
+  }, [storageKey])
+
+  // ========================================
+  // API: 보드 전체 저장 (PUT /api/sessions/{sessionId}/board)
+  // ========================================
+  const saveBoardToApi = useCallback(async () => {
+    if (!canSaveToApi || isSaving) return false
+
+    setIsSaving(true)
+    setSaveStatus('saving')
+
+    try {
+      // UI 데이터를 API 형식으로 변환
+      const nodes = boardItems.map(item => {
+        let type = 'MEMO'
+        let targetId = null
+
+        if (item.type === 'evidence') {
+          type = 'CLUE'
+          targetId = item.evidenceId ?? Number(String(item.id).replace('evidence-', ''))
+        } else if (item.type === 'suspect') {
+          type = 'SUSPECT'
+          targetId = item.suspectId ?? Number(String(item.id).replace('suspect-', ''))
+        } else if (item.type === 'victim') {
+          type = 'VICTIM'
+          targetId = item.victimId ?? Number(String(item.id).replace('victim-', ''))
+        } else if (item.type === 'location') {
+          type = 'LOCATION'
+          targetId = item.locationId ?? Number(String(item.id).replace('location-', ''))
+        }
+
+        return {
+          type,
+          targetId: targetId || null,
+          memoContent: item.type === 'note' ? item.note : null,
+          x: Math.round(item.x || 0),
+          y: Math.round(item.y || 0),
+        }
+      })
+
+      // 연결선: UI id -> nodes 배열 인덱스로 변환
+      const itemIdToIndex = new Map()
+      boardItems.forEach((item, index) => {
+        itemIdToIndex.set(item.id, index)
+      })
+
+      const apiConnections = connections
+        .map(conn => {
+          const fromIndex = itemIdToIndex.get(conn.from)
+          const toIndex = itemIdToIndex.get(conn.to)
+          if (fromIndex === undefined || toIndex === undefined) return null
+
+          return {
+            fromIndex,
+            toIndex,
+            type: conn.type === 'suspected' ? 'YELLOW' : 'RED',
+          }
+        })
+        .filter(Boolean)
+
+      await saveBoard(sessionId, {
+        nodes,
+        connections: apiConnections,
+      })
+
+      setSaveStatus('saved')
+      toast.success('보드가 저장되었습니다.')
+      setTimeout(() => setSaveStatus(null), 2000)
+      return true
+    } catch (err) {
+      console.error('보드 저장 실패:', err)
+      setSaveStatus(null)
+      toast.error('보드 저장에 실패했습니다.')
+      return false
+    } finally {
+      setIsSaving(false)
+    }
+  }, [canSaveToApi, isSaving, sessionId, boardItems, connections])
+
+  // ========================================
+  // API: 보드 불러오기 (GET /api/sessions/{sessionId}/board)
+  // ========================================
+  const loadBoardFromApi = useCallback(async () => {
+    if (!sessionId) return false
+
+    setIsLoading(true)
+    try {
+      const response = await fetchBoard(sessionId)
+
+      if (!response?.nodes?.length) {
+        // API에 데이터 없으면 localStorage에서 로드
+        const local = loadFromLocalStorage()
+        setBoardItems(local.items)
+        setConnections(local.connections)
+        return false
+      }
+
+      // API 데이터를 UI 형식으로 변환
+      const uiItems = response.nodes.map(node => {
+        const nodeId = node.nodeId
+        let type = 'note'
+        let id = `note-${nodeId}`
+        let extraProps = {}
+
+        if (node.type === 'CLUE') {
+          type = 'evidence'
+          id = `evidence-${node.targetId}`
+          extraProps = { evidenceId: node.targetId }
+        } else if (node.type === 'SUSPECT') {
+          type = 'suspect'
+          id = `suspect-${node.targetId}`
+          extraProps = { suspectId: node.targetId }
+        } else if (node.type === 'VICTIM') {
+          type = 'victim'
+          id = `victim-${node.targetId}`
+          extraProps = { victimId: node.targetId }
+        } else if (node.type === 'LOCATION') {
+          type = 'location'
+          id = `location-${node.targetId}`
+          extraProps = { locationId: node.targetId }
+        }
+
+        return {
+          id,
+          type,
+          name: node.memoContent || type,
+          x: node.x || 0,
+          y: node.y || 0,
+          note: node.memoContent || '',
+          nodeId,
+          ...extraProps,
+        }
+      })
+
+      // nodeId -> UI id 매핑
+      const nodeIdToUiId = new Map()
+      response.nodes.forEach((node, idx) => {
+        nodeIdToUiId.set(node.nodeId, uiItems[idx]?.id)
+      })
+
+      // 연결선 변환
+      const uiConnections = (response.connections || []).map(conn => {
+        const fromUiId = nodeIdToUiId.get(conn.fromNodeId)
+        const toUiId = nodeIdToUiId.get(conn.toNodeId)
+        if (!fromUiId || !toUiId) return null
+
+        return {
+          from: fromUiId,
+          to: toUiId,
+          type: conn.type === 'YELLOW' ? 'suspected' : 'confirmed',
+        }
+      }).filter(Boolean)
+
+      setBoardItems(uiItems)
+      setConnections(uiConnections)
+
+      // localStorage에도 동기화
+      saveToLocalStorage(uiItems, uiConnections)
+
+      return true
+    } catch (err) {
+      console.error('보드 불러오기 실패:', err)
+      // 실패 시 localStorage에서 로드
+      const local = loadFromLocalStorage()
+      setBoardItems(local.items)
+      setConnections(local.connections)
+      return false
+    } finally {
+      setIsLoading(false)
+    }
+  }, [sessionId, loadFromLocalStorage, saveToLocalStorage])
+
+  // ========================================
+  // 초기 데이터 로드
+  // ========================================
+  useEffect(() => {
+    if (Array.isArray(initialBoardItems) || Array.isArray(initialConnections)) {
+      setBoardItems(Array.isArray(initialBoardItems) ? initialBoardItems : [])
+      setConnections(Array.isArray(initialConnections) ? initialConnections : [])
+      return
+    }
+
+    if (sessionId) {
+      loadBoardFromApi()
+    } else {
+      const local = loadFromLocalStorage()
+      setBoardItems(local.items)
+      setConnections(local.connections)
+    }
+  }, [sessionId, initialBoardItems, initialConnections])
+
+  // ========================================
+  // 보드 상태 변경 콜백
+  // ========================================
+  useEffect(() => {
+    onBoardStateChange?.({ items: boardItems, connections })
+  }, [onBoardStateChange, boardItems, connections])
+
+  // ========================================
+  // localStorage 자동 저장 (디바운스)
+  // ========================================
+  useEffect(() => {
+    if (readOnly || isSubmitMode) return
+
+    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = setTimeout(() => {
+      saveToLocalStorage(boardItems, connections)
+    }, 300)
+
+    return () => {
+      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
+    }
+  }, [boardItems, connections, readOnly, isSubmitMode, saveToLocalStorage])
+
+  // ========================================
+  // 아이템 추가 함수들
+  // ========================================
   const addEvidenceItem = useCallback((evidence, { x, y } = {}) => {
-    if (readOnly) return
-    if (!evidence || evidence.id == null) return
+    if (readOnly || !evidence?.id) return
 
     const rect = boardRef.current?.getBoundingClientRect()
     const fallbackX = rect ? rect.width / 2 - 88 : 350
@@ -300,53 +344,31 @@ export function InvestigationBoard({
     const maxX = rect ? Math.max(0, rect.width - 176) : 750
     const maxY = rect ? Math.max(0, rect.height - 200) : 500
 
-    const nextX = Number.isFinite(x) ? x : fallbackX
-    const nextY = Number.isFinite(y) ? y : fallbackY
-
     const nextItemId = `evidence-${evidence.id}`
-    const nextItem = {
-      id: nextItemId,
-      type: 'evidence',
-      evidenceId: evidence.id,
-      name: evidence.name,
-      x: clamp(nextX, 0, maxX),
-      y: clamp(nextY, 0, maxY),
-      image: evidence.image ?? null,
-      note: evidence.location || '',
-    }
 
-    setBoardItems((prev) => {
-      const evidenceIdStr = String(evidence.id)
-
-      const matchesEvidence = (item) => {
-        if (!item || item.type !== 'evidence') return false
-
-        if (item.evidenceId != null && String(item.evidenceId) === evidenceIdStr) return true
-
-        const itemIdStr = String(item.id ?? '')
-        if (itemIdStr === nextItemId) return true
-        if (itemIdStr.startsWith('evidence-') && itemIdStr.slice('evidence-'.length) === evidenceIdStr) return true
-
-        return Boolean(evidence.name) && item.name === evidence.name
-      }
-
-      const firstMatchIndex = prev.findIndex(matchesEvidence)
-      if (firstMatchIndex === -1) {
+    setBoardItems(prev => {
+      if (prev.some(item => item.id === nextItemId)) {
         setSelectedItem(nextItemId)
-        return [...prev, nextItem]
+        return prev
       }
 
-      const keepId = prev[firstMatchIndex]?.id ?? nextItemId
-      setSelectedItem(keepId)
-      return prev.map((item, index) =>
-        index === firstMatchIndex ? { ...item, ...nextItem, id: keepId } : item
-      )
+      const nextItem = {
+        id: nextItemId,
+        type: 'evidence',
+        evidenceId: evidence.id,
+        name: evidence.name,
+        x: clamp(Number.isFinite(x) ? x : fallbackX, 0, maxX),
+        y: clamp(Number.isFinite(y) ? y : fallbackY, 0, maxY),
+        image: evidence.image || evidence.detailImageUrl || null,
+        note: evidence.description || evidence.location || '',
+      }
+      setSelectedItem(nextItemId)
+      return [...prev, nextItem]
     })
   }, [readOnly])
 
   const addSuspectItem = useCallback((suspect, { x, y } = {}) => {
-    if (readOnly) return
-    if (!suspect || suspect.id == null) return
+    if (readOnly || !suspect?.id) return
 
     const rect = boardRef.current?.getBoundingClientRect()
     const fallbackX = rect ? rect.width / 2 - 88 : 350
@@ -354,53 +376,32 @@ export function InvestigationBoard({
     const maxX = rect ? Math.max(0, rect.width - 176) : 750
     const maxY = rect ? Math.max(0, rect.height - 200) : 500
 
-    const nextX = Number.isFinite(x) ? x : fallbackX
-    const nextY = Number.isFinite(y) ? y : fallbackY
-
     const nextItemId = `suspect-${suspect.id}`
-    const nextItem = {
-      id: nextItemId,
-      type: 'suspect',
-      suspectId: suspect.id,
-      name: suspect.name,
-      x: clamp(nextX, 0, maxX),
-      y: clamp(nextY, 0, maxY),
-      image: suspect.image ?? null,
-      note: suspect.role || '',
-    }
 
-    setBoardItems((prev) => {
-      const suspectIdStr = String(suspect.id)
-
-      const matchesSuspect = (item) => {
-        if (!item || item.type !== 'suspect') return false
-
-        if (item.suspectId != null && String(item.suspectId) === suspectIdStr) return true
-
-        const itemIdStr = String(item.id ?? '')
-        if (itemIdStr === nextItemId) return true
-        if (itemIdStr.startsWith('suspect-') && itemIdStr.slice('suspect-'.length) === suspectIdStr) return true
-
-        return Boolean(suspect.name) && item.name === suspect.name
-      }
-
-      const firstMatchIndex = prev.findIndex(matchesSuspect)
-      if (firstMatchIndex === -1) {
+    setBoardItems(prev => {
+      if (prev.some(item => item.id === nextItemId)) {
         setSelectedItem(nextItemId)
-        return [...prev, nextItem]
+        return prev
       }
 
-      const keepId = prev[firstMatchIndex]?.id ?? nextItemId
-      setSelectedItem(keepId)
-      return prev.map((item, index) =>
-        index === firstMatchIndex ? { ...item, ...nextItem, id: keepId } : item
-      )
+      const nextItem = {
+        id: nextItemId,
+        type: 'suspect',
+        suspectId: suspect.id,
+        name: suspect.name,
+        x: clamp(Number.isFinite(x) ? x : fallbackX, 0, maxX),
+        y: clamp(Number.isFinite(y) ? y : fallbackY, 0, maxY),
+        image: suspect.image || suspect.portraitUrl || null,
+        role: suspect.role || suspect.occupation || '',
+        note: suspect.oneLiner || '',
+      }
+      setSelectedItem(nextItemId)
+      return [...prev, nextItem]
     })
   }, [readOnly])
 
   const addLocationItem = useCallback((location, { x, y } = {}) => {
-    if (readOnly) return
-    if (!location || location.id == null) return
+    if (readOnly || !location?.id) return
 
     const rect = boardRef.current?.getBoundingClientRect()
     const fallbackX = rect ? rect.width / 2 - 88 : 350
@@ -408,125 +409,59 @@ export function InvestigationBoard({
     const maxX = rect ? Math.max(0, rect.width - 176) : 750
     const maxY = rect ? Math.max(0, rect.height - 200) : 500
 
-    const nextX = Number.isFinite(x) ? x : fallbackX
-    const nextY = Number.isFinite(y) ? y : fallbackY
-
     const nextItemId = `location-${location.id}`
-    const nextItem = {
-      id: nextItemId,
-      type: 'location',
-      locationId: location.id,
-      name: location.name,
-      x: clamp(nextX, 0, maxX),
-      y: clamp(nextY, 0, maxY),
-      image: null,
-      note: '장소',
-    }
 
-    setBoardItems((prev) => {
-      const locationIdStr = String(location.id)
-
-      const matchesLocation = (item) => {
-        if (!item || item.type !== 'location') return false
-
-        if (item.locationId != null && String(item.locationId) === locationIdStr) return true
-
-        const itemIdStr = String(item.id ?? '')
-        if (itemIdStr === nextItemId) return true
-        if (itemIdStr.startsWith('location-') && itemIdStr.slice('location-'.length) === locationIdStr) return true
-
-        return Boolean(location.name) && item.name === location.name
-      }
-
-      const firstMatchIndex = prev.findIndex(matchesLocation)
-      if (firstMatchIndex === -1) {
+    setBoardItems(prev => {
+      if (prev.some(item => item.id === nextItemId)) {
         setSelectedItem(nextItemId)
-        return [...prev, nextItem]
+        return prev
       }
 
-      const keepId = prev[firstMatchIndex]?.id ?? nextItemId
-      setSelectedItem(keepId)
-      return prev.map((item, index) =>
-        index === firstMatchIndex ? { ...item, ...nextItem, id: keepId } : item
-      )
+      const nextItem = {
+        id: nextItemId,
+        type: 'location',
+        locationId: location.id,
+        name: location.name,
+        x: clamp(Number.isFinite(x) ? x : fallbackX, 0, maxX),
+        y: clamp(Number.isFinite(y) ? y : fallbackY, 0, maxY),
+        image: location.image || null,
+        floorNumber: location.floorNumber || location.id,
+        note: location.description || '',
+      }
+      setSelectedItem(nextItemId)
+      return [...prev, nextItem]
     })
   }, [readOnly])
 
-const addVictimItem = useCallback((victimData, { x, y } = {}) => {
-  if (readOnly) return
-  if (!victimData || victimData.id == null) return
+  const addVictimItem = useCallback((victimData, { x, y } = {}) => {
+    if (readOnly || !victimData?.id) return
 
-  const rect = boardRef.current?.getBoundingClientRect()
-  const fallbackX = rect ? rect.width / 2 - 88 : 350
-  const fallbackY = rect ? rect.height / 2 - 100 : 200
-  const maxX = rect ? Math.max(0, rect.width - 176) : 750
-  const maxY = rect ? Math.max(0, rect.height - 200) : 500
+    const rect = boardRef.current?.getBoundingClientRect()
+    const fallbackX = rect ? rect.width / 2 - 88 : 350
+    const fallbackY = rect ? rect.height / 2 - 100 : 200
+    const maxX = rect ? Math.max(0, rect.width - 176) : 750
+    const maxY = rect ? Math.max(0, rect.height - 200) : 500
 
-  const nextX = Number.isFinite(x) ? x : fallbackX
-  const nextY = Number.isFinite(y) ? y : fallbackY
+    const nextItemId = `victim-${victimData.id}`
 
-  const nextItemId = `victim-${victimData.id}`
-  const nextItem = {
-    id: nextItemId,
-    type: 'victim',
-    victimId: victimData.id,
-    name: victimData.name ?? '피해자',
-    x: clamp(nextX, 0, maxX),
-    y: clamp(nextY, 0, maxY),
-    image: victimData.portraitUrl ?? null,
-    note: victimData.occupation || '', // 원하면 background 같은 걸로 바꿔도 됨
-  }
+    setBoardItems(prev => {
+      if (prev.some(item => item.id === nextItemId)) return prev
 
-  setBoardItems((prev) => {
-    const victimIdStr = String(victimData.id)
-    const exists = prev.some((it) =>
-      it?.type === 'victim' && (String(it.victimId ?? '') === victimIdStr || String(it.id) === nextItemId)
-    )
-    if (exists) return prev
-
-    setSelectedItem(nextItemId)
-    return [...prev, nextItem]
-  })
-}, [readOnly])
-
-
-  const upsertConnection = useCallback((fromId, toId, type) => {
-    if (readOnly) return
-    if (!fromId || !toId) return
-    if (String(fromId) === String(toId)) return
-
-    const key = getConnectionKey(fromId, toId)
-
-    setConnections((prev) => {
-      const existingIndex = prev.findIndex((conn) => getConnectionKey(conn.from, conn.to) === key)
-      if (existingIndex === -1) return [...prev, { from: fromId, to: toId, type }]
-
-      const existing = prev[existingIndex]
-      if (existing?.type === type) return prev
-
-      const next = [...prev]
-      next[existingIndex] = { ...existing, type }
-      return next
+      const nextItem = {
+        id: nextItemId,
+        type: 'victim',
+        victimId: victimData.id,
+        name: victimData.name ?? '피해자',
+        x: clamp(Number.isFinite(x) ? x : fallbackX, 0, maxX),
+        y: clamp(Number.isFinite(y) ? y : fallbackY, 0, maxY),
+        image: victimData.portraitUrl ?? victimData.image ?? null,
+        occupation: victimData.occupation || '',
+        note: victimData.background || '',
+      }
+      setSelectedItem(nextItemId)
+      return [...prev, nextItem]
     })
   }, [readOnly])
-
-  const removeConnectionByKey = useCallback((keyToRemove) => {
-    if (readOnly) return
-    if (!keyToRemove) return
-    setConnections((prev) => prev.filter((conn) => getConnectionKey(conn.from, conn.to) !== keyToRemove))
-  }, [readOnly])
-
-  const removeItemById = useCallback((itemId) => {
-  if (readOnly) return
-  if (!itemId) return
-
-  setBoardItems((prev) => prev.filter((it) => it.id !== itemId))
-  setConnections((prev) => prev.filter((c) => c.from !== itemId && c.to !== itemId))
-
-  setSelectedItem((prev) => (prev === itemId ? null : prev))
-  setPendingConnectFrom((prev) => (prev === itemId ? null : prev))
-}, [readOnly])
-
 
   const addNoteItem = useCallback((text, { x, y } = {}) => {
     if (readOnly || isSubmitMode || !allowMemo) return
@@ -539,33 +474,74 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
     const maxX = rect ? Math.max(0, rect.width - 176) : 750
     const maxY = rect ? Math.max(0, rect.height - 200) : 500
 
-    const nextX = Number.isFinite(x) ? x : fallbackX
-    const nextY = Number.isFinite(y) ? y : fallbackY
-
     const nextItemId = `note-${Date.now()}`
     const nextItem = {
       id: nextItemId,
       type: 'note',
       name: '메모',
-      x: clamp(nextX, 0, maxX),
-      y: clamp(nextY, 0, maxY),
+      x: clamp(Number.isFinite(x) ? x : fallbackX, 0, maxX),
+      y: clamp(Number.isFinite(y) ? y : fallbackY, 0, maxY),
       note: normalized,
     }
 
-    setBoardItems((prev) => [...prev, nextItem])
+    setBoardItems(prev => [...prev, nextItem])
     setSelectedItem(nextItemId)
   }, [readOnly, isSubmitMode, allowMemo])
 
+  // ========================================
+  // 연결선 관리
+  // ========================================
+  const setPendingConnectFromWithRef = useCallback((value) => {
+    pendingConnectFromRef.current = value
+    setPendingConnectFrom(value)
+  }, [])
+
+  const upsertConnection = useCallback((fromId, toId, type) => {
+    if (readOnly || !fromId || !toId || fromId === toId) return
+
+    const key = getConnectionKey(fromId, toId)
+
+    setConnections(prev => {
+      const existingIndex = prev.findIndex(conn =>
+        getConnectionKey(conn.from, conn.to) === key
+      )
+
+      if (existingIndex !== -1) {
+        if (prev[existingIndex].type === type) return prev
+        const next = [...prev]
+        next[existingIndex] = { ...prev[existingIndex], type }
+        return next
+      }
+
+      return [...prev, { from: fromId, to: toId, type }]
+    })
+  }, [readOnly])
+
+  const removeConnectionByKey = useCallback((keyToRemove) => {
+    if (readOnly || !keyToRemove) return
+    setConnections(prev => prev.filter(conn =>
+      getConnectionKey(conn.from, conn.to) !== keyToRemove
+    ))
+  }, [readOnly])
+
+  const removeItemById = useCallback((itemId) => {
+    if (readOnly || !itemId) return
+    setBoardItems(prev => prev.filter(it => it.id !== itemId))
+    setConnections(prev => prev.filter(c => c.from !== itemId && c.to !== itemId))
+    setSelectedItem(prev => prev === itemId ? null : prev)
+  }, [readOnly])
+
+  // ========================================
+  // 드래그 핸들러
+  // ========================================
   useEffect(() => {
     if (!isModal) return
 
     const handleMove = (e) => {
       if (!modalDragRef.current.isDragging) return
-      const deltaX = e.clientX - modalDragRef.current.startX
-      const deltaY = e.clientY - modalDragRef.current.startY
       setModalOffset({
-        x: modalDragRef.current.originX + deltaX,
-        y: modalDragRef.current.originY + deltaY,
+        x: modalDragRef.current.originX + (e.clientX - modalDragRef.current.startX),
+        y: modalDragRef.current.originY + (e.clientY - modalDragRef.current.startY),
       })
     }
 
@@ -582,21 +558,18 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
   }, [isModal])
 
   const handleHeaderPointerDown = useCallback((e) => {
-    if (!isModal || readOnly) return
-    if (e.button != null && e.button !== 0) return
-
-    const target = e.target
-    const isInteractive =
-      target?.closest?.('button, a, input, textarea, select, [role="button"], [data-no-modal-drag]')
-    if (isInteractive) return
+    if (!isModal || readOnly || e.button !== 0) return
+    if (e.target?.closest?.('button, a, input, [data-no-modal-drag]')) return
 
     e.preventDefault()
-    modalDragRef.current.isDragging = true
-    modalDragRef.current.startX = e.clientX
-    modalDragRef.current.startY = e.clientY
-    modalDragRef.current.originX = modalOffset.x
-    modalDragRef.current.originY = modalOffset.y
-  }, [isModal, readOnly, modalOffset.x, modalOffset.y])
+    modalDragRef.current = {
+      isDragging: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      originX: modalOffset.x,
+      originY: modalOffset.y,
+    }
+  }, [isModal, readOnly, modalOffset])
 
   const handleExternalDragOver = useCallback((e) => {
     if (!acceptExternalDrop || readOnly || isSubmitMode) return
@@ -608,66 +581,42 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
     e.preventDefault()
     e.stopPropagation()
 
-    const itemDataStr =
-      e.dataTransfer?.getData('itemData') ||
-      e.dataTransfer?.getData('text/plain')
-    if (!itemDataStr) return
-
     try {
-      const parsed = JSON.parse(itemDataStr)
-      const type = parsed?.type
-      const data = parsed?.data
+      const itemDataStr = e.dataTransfer?.getData('itemData') || e.dataTransfer?.getData('text/plain')
+      if (!itemDataStr) return
 
+      const { type, data } = JSON.parse(itemDataStr)
       const rect = boardRef.current?.getBoundingClientRect()
-      if (!rect) {
-        if (type === 'evidence') addEvidenceItem(data)
-        if (type === 'suspect') addSuspectItem(data)
-        if (type === 'location') addLocationItem(data)
-        return
-      }
-
-      const point = {
-        x: e.clientX - rect.left - 88,
-        y: e.clientY - rect.top - 100,
-      }
+      const point = rect ? { x: e.clientX - rect.left - 88, y: e.clientY - rect.top - 100 } : {}
 
       if (type === 'evidence') addEvidenceItem(data, point)
       if (type === 'suspect') addSuspectItem(data, point)
       if (type === 'location') addLocationItem(data, point)
-    } catch {
-      // ignore invalid drops
-    }
+    } catch {}
   }, [acceptExternalDrop, readOnly, isSubmitMode, addEvidenceItem, addSuspectItem, addLocationItem])
 
+  // pendingAddItem 처리
   useEffect(() => {
-    if (!pendingAddItem) return
-    if (readOnly || isSubmitMode) return
+    if (!pendingAddItem || readOnly || isSubmitMode) return
 
     const rect = boardRef.current?.getBoundingClientRect()
-    const dropClientX = pendingAddItem?.dropClientX
-    const dropClientY = pendingAddItem?.dropClientY
-    const hasDropPoint =
-      rect &&
-      Number.isFinite(dropClientX) &&
-      Number.isFinite(dropClientY)
+    const point = rect && Number.isFinite(pendingAddItem.dropClientX) ? {
+      x: pendingAddItem.dropClientX - rect.left - 88,
+      y: pendingAddItem.dropClientY - rect.top - 100,
+    } : {}
 
-    const point = hasDropPoint
-      ? {
-          x: dropClientX - rect.left - 88,
-          y: dropClientY - rect.top - 100,
-        }
-      : undefined
+    const { type, data } = pendingAddItem
+    if (type === 'evidence') addEvidenceItem(data, point)
+    if (type === 'suspect') addSuspectItem(data, point)
+    if (type === 'location') addLocationItem(data, point)
 
-    if (pendingAddItem.type === 'evidence') addEvidenceItem(pendingAddItem.data, point)
-    if (pendingAddItem.type === 'suspect') addSuspectItem(pendingAddItem.data, point)
-    if (pendingAddItem.type === 'location') addLocationItem(pendingAddItem.data, point)
     onConsumePendingAddItem?.()
   }, [pendingAddItem, readOnly, isSubmitMode, addEvidenceItem, addSuspectItem, addLocationItem, onConsumePendingAddItem])
 
+  // 아이템 드래그
   const handleMouseDown = (e, itemId) => {
-    if (readOnly) return
-    e.preventDefault()
-    const item = boardItems.find(i => i.id === itemId)
+    if (readOnly || e.button !== 0) return
+    const item = boardItems.find(it => it.id === itemId)
     if (!item) return
 
     dragRef.current = {
@@ -691,66 +640,57 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
     if (!dragRef.current.didMove && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
       dragRef.current.didMove = true
     }
+
     const rect = boardRef.current?.getBoundingClientRect()
     const maxX = rect ? Math.max(0, rect.width - 176) : 750
     const maxY = rect ? Math.max(0, rect.height - 200) : 500
 
-    setBoardItems(prev => prev.map(item => {
-      if (item.id === dragRef.current.itemId) {
-        const newX = Math.max(0, Math.min(maxX, dragRef.current.offsetX + deltaX))
-        const newY = Math.max(0, Math.min(maxY, dragRef.current.offsetY + deltaY))
-        return { ...item, x: newX, y: newY }
-      }
-      return item
-    }))
+    setBoardItems(prev => prev.map(item =>
+      item.id === dragRef.current.itemId
+        ? { ...item, x: clamp(dragRef.current.offsetX + deltaX, 0, maxX), y: clamp(dragRef.current.offsetY + deltaY, 0, maxY) }
+        : item
+    ))
   }, [readOnly])
 
   const handleMouseUp = useCallback(() => {
     dragRef.current.isDragging = false
     dragRef.current.itemId = null
+    dragRef.current.didMove = false
     document.body.style.cursor = ''
   }, [])
 
   const toggleLineMode = useCallback((nextMode) => {
-    if (readOnly) return
-    if (!effectiveAllowedLineModes.includes(nextMode)) return
-    setLineMode((prev) => (prev === nextMode ? null : nextMode))
-    setPendingConnectFrom(null)
+    if (readOnly || !effectiveAllowedLineModes.includes(nextMode)) return
+    setLineMode(prev => prev === nextMode ? null : nextMode)
+    setPendingConnectFromWithRef(null)
     setSelectedConnectionKey(null)
     setSelectedConnectionPos(null)
-  }, [readOnly, effectiveAllowedLineModes])
+  }, [readOnly, effectiveAllowedLineModes, setPendingConnectFromWithRef])
 
   const handleCardClick = useCallback((itemId) => {
-    if (readOnly) return
-    if (dragRef.current.didMove) return
+    if (readOnly || dragRef.current.didMove) return
 
     setSelectedItem(itemId)
     setSelectedConnectionKey(null)
     setSelectedConnectionPos(null)
 
-    if (!lineMode) return
-    if (!effectiveAllowedLineModes.includes(lineMode)) return
+    if (!lineMode || !effectiveAllowedLineModes.includes(lineMode)) return
 
-    if (!pendingConnectFrom) {
-      setPendingConnectFrom(itemId)
+    const currentPending = pendingConnectFromRef.current
+
+    if (!currentPending) {
+      setPendingConnectFromWithRef(itemId)
       return
     }
 
-    if (pendingConnectFrom === itemId) {
-      setPendingConnectFrom(null)
+    if (currentPending === itemId) {
+      setPendingConnectFromWithRef(null)
       return
     }
 
-    upsertConnection(pendingConnectFrom, itemId, lineMode)
-    setPendingConnectFrom(null)
-  }, [readOnly, lineMode, pendingConnectFrom, upsertConnection, effectiveAllowedLineModes])
-
-  useEffect(() => {
-    if (!lineMode) return
-    if (effectiveAllowedLineModes.includes(lineMode)) return
-    setLineMode(null)
-    setPendingConnectFrom(null)
-  }, [effectiveAllowedLineModes, lineMode])
+    upsertConnection(currentPending, itemId, lineMode)
+    setPendingConnectFromWithRef(null)
+  }, [readOnly, lineMode, effectiveAllowedLineModes, upsertConnection, setPendingConnectFromWithRef])
 
   useEffect(() => {
     document.addEventListener('mousemove', handleMouseMove)
@@ -761,54 +701,45 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
     }
   }, [handleMouseMove, handleMouseUp])
 
+  // 피해자 자동 추가 (API 로드 완료 후, 중복 방지)
   useEffect(() => {
-    if (!storageEnabled) return
+    if (readOnly || !victim?.id || isLoading) return
 
-    if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-    autosaveTimerRef.current = setTimeout(() => {
-      localStorage.setItem(`board-items-${scenarioId}`, JSON.stringify(boardItems))
-      localStorage.setItem(`board-connections-${scenarioId}`, JSON.stringify(connections))
-    }, 200)
+    // setBoardItems 내부에서 중복 체크
+    setBoardItems(prev => {
+      const victimId = `victim-${victim.id}`
+      if (prev.some(item => item.id === victimId)) {
+        return prev  // 이미 있으면 그대로 반환
+      }
 
-    return () => {
-      if (autosaveTimerRef.current) clearTimeout(autosaveTimerRef.current)
-    }
-  }, [scenarioId, storageEnabled, boardItems, connections])
+      const rect = boardRef.current?.getBoundingClientRect()
+      const fallbackX = rect ? rect.width / 2 - 88 : 350
+      const fallbackY = rect ? rect.height / 2 - 100 : 200
+      const maxX = rect ? Math.max(0, rect.width - 176) : 750
+      const maxY = rect ? Math.max(0, rect.height - 200) : 500
 
-  const handleSave = () => {
-    if (!storageEnabled) return
-    setSaveStatus('saving')
-    localStorage.setItem(`board-items-${scenarioId}`, JSON.stringify(boardItems))
-    localStorage.setItem(`board-connections-${scenarioId}`, JSON.stringify(connections))
-    setTimeout(() => {
-      setSaveStatus('saved')
-      setTimeout(() => setSaveStatus(null), 2000)
-    }, 500)
-  }
+      return [...prev, {
+        id: victimId,
+        type: 'victim',
+        victimId: victim.id,
+        name: victim.name ?? '피해자',
+        x: clamp(fallbackX, 0, maxX),
+        y: clamp(fallbackY, 0, maxY),
+        image: victim.portraitUrl ?? victim.image ?? null,
+        occupation: victim.occupation || '',
+        note: victim.background || '',
+      }]
+    })
+  }, [victim?.id, readOnly, isLoading])
 
+  // submit 모드에서 필터 초기화
   useEffect(() => {
-  if (readOnly) return
-  if (!victim || victim.id == null) return
-
-  // submit 모드/개인 모드 둘 다 victim은 떠도 됨 (원하면 submit만/개인만 조건 걸어도 됨)
-  const hasVictim = boardItems.some((it) => it?.type === 'victim' && String(it.victimId ?? '') === String(victim.id))
-  if (hasVictim) return
-
-  // 보드가 아직 초기화 전이면(빈 배열로 잠깐) 여기서 넣어버리면 중복될 수 있어서,
-  // "초기화 완료 후" 느낌으로 한번만 넣고 싶으면 조건을 하나 더 둬도 됨.
-  // 지금은 단순하게: victim 없으면 삽입.
-  addVictimItem(victim)
-}, [victim?.id, readOnly, boardItems, addVictimItem])
-
-
-  useEffect(() => {
-    if (!isSubmitMode) return
-    setFilter('all')
+    if (isSubmitMode) setFilter('all')
   }, [isSubmitMode])
 
-  const filteredItems = boardItems.filter((item) => {
+  // 필터링된 아이템
+  const filteredItems = boardItems.filter(item => {
     if (isSubmitMode && item.type === 'note') return false
-    // 피해자 카드는 항상 표시
     if (item.type === 'victim') return true
     if (filter === 'all') return true
     return item.type === filter
@@ -823,6 +754,9 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
     ...(!isSubmitMode ? [{ value: 'note', label: '메모' }] : []),
   ]
 
+  // ========================================
+  // 렌더링
+  // ========================================
   return (
     <div
       className={cn("bg-card rounded-lg", isModal && "p-0")}
@@ -836,7 +770,12 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
         )}
         onPointerDown={handleHeaderPointerDown}
       >
-        <h2 className="text-xl font-bold gold-glow">{title}</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-xl font-bold gold-glow">{title}</h2>
+          {(isLoading || isSaving) && (
+            <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
+          )}
+        </div>
         <div className="flex gap-3 items-center">
           {!readOnly && effectiveAllowedLineModes.length > 0 && (
             <div className="flex items-center gap-2">
@@ -868,7 +807,6 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
                   의심
                 </button>
               )}
-
               {lineMode && (
                 <span className="text-[11px] text-muted-foreground whitespace-nowrap">
                   {pendingConnectFrom ? '1/2 선택' : '2개 클릭'}
@@ -884,16 +822,16 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
             </Button>
           )}
 
-          {!hideSave && storageEnabled && (
+          {!hideSave && canSaveToApi && (
             <Button
               variant="outline"
               size="sm"
-              onClick={handleSave}
-              disabled={saveStatus === 'saving'}
+              onClick={saveBoardToApi}
+              disabled={isSaving}
             >
-              {saveStatus === 'saving' ? (
+              {isSaving ? (
                 <>
-                  <div className="w-4 h-4 mr-2 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                   저장 중...
                 </>
               ) : saveStatus === 'saved' ? (
@@ -910,273 +848,282 @@ const addVictimItem = useCallback((victimData, { x, y } = {}) => {
             </Button>
           )}
 
-          {!hideFilter && !isSubmitMode && (
-            <select
-              value={filter}
-              onChange={(e) => setFilter(e.target.value)}
-              className="h-9 bg-muted/40 border border-border rounded-lg px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            >
-              {filterOptions.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          )}
-
-          {onClose && (
-            <Button variant="ghost" size="sm" onClick={onClose}>
-              <X className="w-4 h-4" />
+          {isModal && onClose && (
+            <Button variant="ghost" size="icon" onClick={onClose} data-no-modal-drag>
+              <X className="w-5 h-5" />
             </Button>
           )}
         </div>
       </div>
 
-      {/* 보드 */}
+      {/* 필터 */}
+      {!hideFilter && (
+        <div className="p-3 border-b border-border bg-muted/20 flex gap-2 overflow-x-auto">
+          {filterOptions.map(opt => (
+            <button
+              key={opt.value}
+              onClick={() => setFilter(opt.value)}
+              className={cn(
+                "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors",
+                filter === opt.value
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted/50 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 보드 영역 */}
       <div
         ref={boardRef}
-        className="relative overflow-hidden"
+        className="relative overflow-auto"
         style={{
-          background: 'linear-gradient(135deg, #ffffff 0%, #f8f8f8 100%)',
-          boxShadow: 'inset 0 0 30px rgba(0,0,0,0.08)',
+          height: isModal ? '65vh' : '500px',
+          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)',
+          backgroundImage: `
+            linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
+            linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)
+          `,
+          backgroundSize: '30px 30px, 30px 30px, 100% 100%',
+        }}
+        onDragOver={handleExternalDragOver}
+        onDrop={handleExternalDrop}
+        onClick={() => {
+          setSelectedItem(null)
+          setPendingConnectFromWithRef(null)
+          setSelectedConnectionKey(null)
+          setSelectedConnectionPos(null)
         }}
       >
-	        <div
-	          className="relative w-full h-[600px]"
-	          onClick={() => {
-	            setSelectedConnectionKey(null)
-	            setSelectedConnectionPos(null)
-	          }}
-	          onDragOver={acceptExternalDrop && !readOnly ? handleExternalDragOver : undefined}
-	          onDrop={acceptExternalDrop && !readOnly ? handleExternalDrop : undefined}
-	        >
-          {/* 그리드 */}
-          <div
-            className="absolute inset-0 opacity-20"
-            style={{
-              backgroundImage: `
-                linear-gradient(rgba(0,0,0,0.015) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0,0,0,0.015) 1px, transparent 1px)
-              `,
-              backgroundSize: '30px 30px',
+        {isLoading && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30 z-50">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        )}
+
+        {/* 연결선 */}
+        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '100%', minHeight: '100%' }}>
+          {connections.map(conn => {
+            if (!conn?.from || !conn?.to) return null
+            const fromItem = boardItems.find(item => item.id === conn.from)
+            const toItem = boardItems.find(item => item.id === conn.to)
+            if (!fromItem || !toItem) return null
+
+            const key = getConnectionKey(conn.from, conn.to)
+            const hash = hashString(key)
+            const fromX = fromItem.x + 88, fromY = fromItem.y + 100
+            const toX = toItem.x + 88, toY = toItem.y + 100
+            const midX = (fromX + toX) / 2, midY = (fromY + toY) / 2
+            const controlX = midX + ((hash % 7) - 3) * 10
+            const controlY = midY - 50 + ((hash % 5) - 2) * 5
+            const pathD = `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toX} ${toY}`
+            const isConfirmed = conn.type !== 'suspected'
+
+            return (
+              <g key={key}>
+                <path
+                  d={pathD}
+                  stroke="transparent"
+                  strokeWidth={20}
+                  fill="none"
+                  style={{ pointerEvents: 'stroke' }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPendingConnectFromWithRef(null)
+                    setSelectedItem(null)
+                    setSelectedConnectionPos({ x: controlX, y: controlY })
+                    setSelectedConnectionKey(prev => prev === key ? null : key)
+                  }}
+                />
+                <path
+                  d={pathD}
+                  stroke={isConfirmed ? '#dc2626' : '#f59e0b'}
+                  strokeWidth={isConfirmed ? 4 : 3}
+                  strokeDasharray={isConfirmed ? undefined : '8 8'}
+                  fill="none"
+                  style={{ pointerEvents: 'none', filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))' }}
+                />
+              </g>
+            )
+          })}
+        </svg>
+
+        {/* 연결선 삭제 버튼 */}
+        {!readOnly && selectedConnectionKey && selectedConnectionPos && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation()
+              removeConnectionByKey(selectedConnectionKey)
+              setSelectedConnectionKey(null)
+              setSelectedConnectionPos(null)
             }}
-          />
-
-          {/* 연결선 */}
-          <svg
-            className="absolute top-0 left-0 w-full h-full"
-            style={{ zIndex: 1, pointerEvents: 'none' }}
+            className="absolute w-7 h-7 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 flex items-center justify-center text-sm border border-white/20"
+            style={{ left: selectedConnectionPos.x, top: selectedConnectionPos.y, transform: 'translate(-50%, -50%)', zIndex: 5 }}
           >
-            {connections.map((conn) => {
-              if (!conn?.from || !conn?.to) return null
+            ✕
+          </button>
+        )}
 
-              const fromItem = boardItems.find((item) => item.id === conn.from)
-              const toItem = boardItems.find((item) => item.id === conn.to)
-              if (!fromItem || !toItem) return null
+        {/* 아이템 카드 - 폴라로이드 스타일 */}
+        {filteredItems.map(item => {
+          // 타입별 색상 및 라벨
+          const typeConfig = {
+            victim: { label: '피해자', color: 'bg-red-500', borderColor: 'border-red-400' },
+            suspect: { label: '용의자', color: 'bg-amber-500', borderColor: 'border-amber-400' },
+            evidence: { label: '증거', color: 'bg-blue-500', borderColor: 'border-blue-400' },
+            location: { label: '장소', color: 'bg-green-500', borderColor: 'border-green-400' },
+            note: { label: '메모', color: 'bg-gray-500', borderColor: 'border-gray-400' },
+          }
+          const config = typeConfig[item.type] || typeConfig.note
 
-              const key = getConnectionKey(conn.from, conn.to)
-              const hash = hashString(key)
-
-              const fromX = fromItem.x + 88
-              const fromY = fromItem.y + 100
-              const toX = toItem.x + 88
-              const toY = toItem.y + 100
-
-              const midX = (fromX + toX) / 2
-              const midY = (fromY + toY) / 2
-
-              const controlX = midX + ((hash % 7) - 3) * 10
-              const controlY = midY - 50 + ((hash % 5) - 2) * 5
-
-              const pathD = `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toX} ${toY}`
-
-              const type = conn.type === 'suspected' ? 'suspected' : 'confirmed'
-              const strokeColor = type === 'confirmed' ? '#dc2626' : '#f59e0b'
-              const strokeWidth = type === 'confirmed' ? 4 : 3
-              const strokeDasharray = type === 'suspected' ? '8 8' : undefined
-
-              return (
-                <g key={key}>
-                  <path
-                    d={pathD}
-                    stroke="transparent"
-                    strokeWidth={20}
-                    fill="none"
-                    style={{ pointerEvents: 'stroke' }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setPendingConnectFrom(null)
-                      setSelectedItem(null)
-                      setSelectedConnectionPos({ x: controlX, y: controlY })
-                      setSelectedConnectionKey((prev) => (prev === key ? null : key))
-                    }}
-                  />
-                  <path
-                    d={pathD}
-                    stroke={strokeColor}
-                    strokeWidth={strokeWidth}
-                    strokeDasharray={strokeDasharray}
-                    fill="none"
-                    style={{
-                      pointerEvents: 'none',
-                      filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))',
-                    }}
-                  />
-                </g>
-              )
-            })}
-          </svg>
-
-          {!readOnly && selectedConnectionKey && selectedConnectionPos && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation()
-                removeConnectionByKey(selectedConnectionKey)
-                setSelectedConnectionKey(null)
-                setSelectedConnectionPos(null)
-              }}
-              aria-label="연결 삭제"
-              title="삭제"
-              className="absolute w-7 h-7 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 flex items-center justify-center text-sm border border-white/20"
-              style={{
-                left: `${selectedConnectionPos.x}px`,
-                top: `${selectedConnectionPos.y}px`,
-                transform: 'translate(-50%, -50%)',
-                zIndex: 5,
-              }}
-            >
-              ✕
-            </button>
-          )}
-
-          {/* 아이템 */}
-          {filteredItems.map((item) => (
+          return (
             <div
               key={item.id}
               className={cn(
                 "absolute group select-none",
-                lineMode && pendingConnectFrom === item.id && (
-                  lineMode === 'confirmed' ? "ring-2 ring-red-500" : "ring-2 ring-amber-500"
-                ),
+                lineMode && pendingConnectFrom === item.id && (lineMode === 'confirmed' ? "ring-4 ring-red-500 ring-offset-2" : "ring-4 ring-amber-500 ring-offset-2"),
                 !readOnly && "cursor-move"
               )}
-              style={{
-                left: `${item.x}px`,
-                top: `${item.y}px`,
-                zIndex: selectedItem === item.id ? 10 : 2,
-              }}
+              style={{ left: item.x, top: item.y, zIndex: selectedItem === item.id ? 10 : 2 }}
               onMouseDown={(e) => handleMouseDown(e, item.id)}
-              onClick={() => handleCardClick(item.id)}
+              onClick={(e) => {
+                e.stopPropagation()
+                handleCardClick(item.id)
+              }}
             >
-              {/* 압정 */}
+              {/* 핀 */}
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
-                <Pin
-                  className="w-6 h-6 text-red-600 fill-red-600"
-                  style={{ filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }}
-                />
+                <Pin className="w-6 h-6 text-red-600 fill-red-600" style={{ filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }} />
               </div>
 
-              {/* 카드 */}
+              {/* 폴라로이드 카드 */}
               <div
-                className="w-44 relative transition-transform duration-300"
+                className={cn(
+                  "w-44 bg-white transition-all duration-300",
+                  selectedItem === item.id && "ring-2 ring-primary"
+                )}
                 style={{
-                  transform: selectedItem === item.id
-                    ? 'scale(1.05) rotate(0deg)'
-                    : `rotate(${(hashString(item.id) % 2 === 0 ? 1 : -1) * 2}deg)`,
+                  transform: selectedItem === item.id ? 'scale(1.05) rotate(0deg)' : `rotate(${(hashString(item.id) % 2 === 0 ? 1 : -1) * 2}deg)`,
+                  boxShadow: '4px 4px 12px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.05)'
                 }}
               >
-                {item.image ? (
-                  <div
-                    className="bg-white p-2 pb-10"
-                    style={{ boxShadow: '4px 4px 12px rgba(0,0,0,0.25)' }}
-                  >
-                    <img 
-                      src={item.image}
-                      alt={item.name}
-                      className="w-full h-32 object-cover"
-                      onError={(e) => {
-                        e.target.style.display = 'none'
-                        e.target.nextSibling.style.display = 'flex'
-                      }}
-                    />
-                    <div 
-                      className="w-full h-32 bg-gray-200 items-center justify-center text-gray-400 text-xs hidden"
-                    >
-                      [이미지]
+                {/* 이미지 영역 */}
+                <div className="p-2 pb-0">
+                  {item.image ? (
+                    <div className="relative">
+                      <img
+                        src={item.image}
+                        alt={item.name}
+                        className="w-full h-28 object-cover bg-gray-200"
+                        onError={(e) => {
+                          e.target.onerror = null
+                          e.target.src = ''
+                          e.target.className = 'w-full h-28 bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center'
+                        }}
+                      />
+                      {/* 타입 뱃지 */}
+                      <span className={cn(
+                        "absolute top-1 right-1 px-2 py-0.5 text-[10px] font-bold text-white rounded",
+                        config.color
+                      )}>
+                        {config.label}
+                      </span>
                     </div>
-                    <p className="text-center mt-2 text-sm text-gray-800 font-bold">
-                      {item.name}
-                    </p>
-                    {item.note && (
-                      <p className="text-center text-xs text-gray-500 mt-1 whitespace-pre-line">
-                        {item.note}
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <div
-                    className="p-4 min-h-[180px]"
-                    style={{
-                      background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
-                      boxShadow: '4px 4px 10px rgba(0,0,0,0.2)',
-                    }}
-                  >
-                    <h3 className="text-sm font-bold mb-2 text-gray-900">
-                      {item.name}
-                    </h3>
-                    <p className="text-xs text-gray-700 whitespace-pre-line leading-relaxed">
+                  ) : (
+                    <div className={cn(
+                      "w-full h-28 flex items-center justify-center relative",
+                      item.type === 'note'
+                        ? "bg-gradient-to-br from-amber-100 to-amber-200"
+                        : "bg-gradient-to-br from-gray-200 to-gray-300"
+                    )}>
+                      {item.type === 'note' ? (
+                        <span className="text-4xl">📝</span>
+                      ) : item.type === 'location' ? (
+                        <span className="text-4xl">📍</span>
+                      ) : item.type === 'evidence' ? (
+                        <span className="text-4xl">🔍</span>
+                      ) : (
+                        <span className="text-4xl">👤</span>
+                      )}
+                      {/* 타입 뱃지 */}
+                      <span className={cn(
+                        "absolute top-1 right-1 px-2 py-0.5 text-[10px] font-bold text-white rounded",
+                        config.color
+                      )}>
+                        {config.label}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 정보 영역 */}
+                <div className="p-2 pt-2 pb-3 text-center">
+                  {/* 이름 */}
+                  <p className="text-sm font-bold text-gray-900 truncate">{item.name || '이름 없음'}</p>
+
+                  {/* 역할/타입 */}
+                  {item.type === 'victim' && item.occupation && (
+                    <p className="text-xs text-gray-500 mt-0.5">{item.occupation}</p>
+                  )}
+                  {item.type === 'suspect' && item.role && (
+                    <p className="text-xs text-gray-500 mt-0.5">{item.role}</p>
+                  )}
+
+                  {/* 설명 (메모, 장소, 증거) */}
+                  {(item.type === 'note' || item.type === 'location' || item.type === 'evidence') && item.note && (
+                    <p className="text-[11px] text-gray-600 mt-1 line-clamp-2 leading-tight px-1">
                       {item.note}
                     </p>
-                  </div>
-                )}
+                  )}
+
+                  {/* 장소: 층 정보 */}
+                  {item.type === 'location' && item.floorNumber && (
+                    <p className="text-[10px] text-green-600 font-semibold mt-1">{item.floorNumber}층</p>
+                  )}
+                </div>
               </div>
 
-              {/* 삭제 버튼 (피해자 제외) */}
+              {/* 삭제 버튼 - victim 제외 */}
               {!readOnly && selectedItem === item.id && item.type !== 'victim' && (
                 <button
                   type="button"
-                  aria-label="카드 삭제"
-                  title="삭제"
                   onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
                   onClick={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
                     removeItemById(item.id)
                   }}
-                  className="absolute -top-2 -right-2 w-7 h-7 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 flex items-center justify-center text-sm border border-white/20"
+                  className="absolute -top-2 -right-2 w-7 h-7 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 flex items-center justify-center text-sm font-bold border-2 border-white transition-transform hover:scale-110"
                   style={{ zIndex: 20 }}
                 >
                   ✕
                 </button>
               )}
             </div>
-          ))}
-        </div>
+          )
+        })}
       </div>
 
-	      {/* 범례 */}
-	      <div className="p-4 flex gap-6 justify-center items-center text-sm border-t border-border">
-	        <div className="flex items-center gap-2">
-	          <div className="w-8 h-1 bg-red-600 rounded" />
-	          <span className="text-muted-foreground">확정</span>
-	        </div>
-	        {effectiveAllowedLineModes.includes('suspected') && (
-	          <div className="flex items-center gap-2">
-	            <div
-	              className="w-8 h-1 rounded"
-	              style={{ backgroundImage: 'repeating-linear-gradient(90deg, #f59e0b 0, #f59e0b 4px, transparent 4px, transparent 8px)' }}
-	            />
-	            <span className="text-muted-foreground">의심</span>
-	          </div>
-	        )}
-	      </div>
+      {/* 범례 */}
+      <div className="p-4 flex gap-6 justify-center items-center text-sm border-t border-border">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-1 bg-red-600 rounded" />
+          <span className="text-muted-foreground">확정</span>
+        </div>
+        {effectiveAllowedLineModes.includes('suspected') && (
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-1 rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #f59e0b 0, #f59e0b 4px, transparent 4px, transparent 8px)' }} />
+            <span className="text-muted-foreground">의심</span>
+          </div>
+        )}
+      </div>
 
-      <MemoInputModal
-        isOpen={memoModalOpen}
-        onClose={() => setMemoModalOpen(false)}
-        onSubmit={addNoteItem}
-      />
+      <MemoInputModal isOpen={memoModalOpen} onClose={() => setMemoModalOpen(false)} onSubmit={addNoteItem} />
     </div>
   )
 }

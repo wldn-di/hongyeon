@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { Link } from 'wouter'
+import { Link, useLocation } from 'wouter'
 
 import { Button } from '@/components/ui/Button'
 import { useBookshelf } from '@/features/user/hooks/useBookshelf'
 import {
   Trophy, XCircle, ChevronLeft, ChevronRight, Clock, Award,
-  X, Share2, FileText
+  X, Share2, FileText, BookOpen
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -64,15 +64,15 @@ function ReportModal({ isOpen, onClose, book }) {
 
   if (!isOpen || !book) return null
 
-  // API 데이터 기반 보고서 (실제 API 연동 시 fetchMyReport 사용)
+  // API 데이터 기반 보고서
   const report = {
     playerName: "탐정",
     scenarioTitle: book.title,
     playTime: book.playTime ? `${Math.floor(book.playTime / 60)}:${String(book.playTime % 60).padStart(2, '0')}` : '--:--',
     grade: book.rankGrade || 'F',
     accuracy: book.rankGrade === 'S' ? 95 : book.rankGrade === 'A' ? 85 : 75,
-    hintsUsed: 0, // API에서 제공 시 사용
-    interrogations: 5, // API에서 제공 시 사용
+    hintsUsed: 0,
+    interrogations: 5,
     summary: book.rankGrade === 'S'
       ? "완벽한 추리력을 보여주셨습니다! 모든 증거를 정확하게 분석하고 범인을 정확히 특정했습니다."
       : book.rankGrade === 'A'
@@ -188,12 +188,20 @@ function ReportModal({ isOpen, onClose, book }) {
 // 책 표지 카드
 // =========================
 function BookCard({ book, mode, isActive, onViewReport }) {
+  const [, setLocation] = useLocation()
+
   // mode: 'solved' | 'progress' | 'failed'
   if (!book) return <div className="w-40 flex-shrink-0" />
 
   const isSolved = mode === 'solved'
   const isProgress = mode === 'progress'
   const isFailed = mode === 'failed'
+
+  // 이어하기 클릭 핸들러
+  const handleResume = () => {
+    // sessionId를 사용하여 resume 경로로 이동
+    setLocation(`/room/${book.sessionId}/resume`)
+  }
 
   return (
     <div
@@ -210,21 +218,31 @@ function BookCard({ book, mode, isActive, onViewReport }) {
           isActive && "shadow-2xl shadow-primary/20"
         )}
       >
-        <img
-          src={book.thumbnail}
-          alt={book.title}
-          className="absolute inset-0 w-full h-full object-cover"
-          onError={(e) => { e.target.style.display = 'none' }}
-        />
+        {/* 썸네일 이미지 */}
+        {book.thumbnail ? (
+          <img
+            src={book.thumbnail}
+            alt={book.title}
+            className="absolute inset-0 w-full h-full object-cover"
+            onError={(e) => { e.target.style.display = 'none' }}
+          />
+        ) : (
+          // 썸네일 없을 때 기본 배경
+          <div className="absolute inset-0 bg-gradient-to-br from-gray-800 to-gray-900 flex items-center justify-center">
+            <BookOpen className="w-12 h-12 text-muted-foreground/30" />
+          </div>
+        )}
 
         <div className="absolute inset-0 bg-gradient-to-t from-black via-black/60 to-transparent" />
 
         <div className="absolute bottom-0 left-0 right-0 p-3">
-          <h3 className={cn("font-bold text-white mb-1 line-clamp-1", isActive ? "text-base" : "text-sm")}>
-            {book.title}
+          {/* 제목 */}
+          <h3 className={cn("font-bold text-white mb-1 line-clamp-2", isActive ? "text-base" : "text-sm")}>
+            {book.title || '제목 없음'}
           </h3>
 
-          {isActive && (
+          {/* 시놉시스 (활성 상태일 때만) */}
+          {isActive && book.synopsis && (
             <p className="text-xs text-gray-300 line-clamp-2 mb-2">
               {book.synopsis}
             </p>
@@ -247,11 +265,15 @@ function BookCard({ book, mode, isActive, onViewReport }) {
             <div className="space-y-1">
               <div className="flex justify-between text-xs text-gray-400">
                 <span>남은 시간</span>
-                <span className="text-primary font-bold">7일</span>
+                <span className="text-primary font-bold">
+                  {book.expiresAt ? `${Math.ceil((new Date(book.expiresAt) - new Date()) / (1000 * 60 * 60 * 24))}일` : '7일'}
+                </span>
               </div>
-              <div className="text-xs text-gray-400">
-                {book.expiresAt && `만료: ${new Date(book.expiresAt).toLocaleDateString('ko-KY')}`}
-              </div>
+              {book.expiresAt && (
+                <div className="text-xs text-gray-400">
+                  만료: {new Date(book.expiresAt).toLocaleDateString('ko-KR')}
+                </div>
+              )}
             </div>
           )}
 
@@ -284,12 +306,15 @@ function BookCard({ book, mode, isActive, onViewReport }) {
                 수사보고서 열람
               </Button>
             ) : (
-              // 진행중/실패 둘 다 "이어하기"로 처리(실패는 재도전 개념)
-              <Link href={`/board/${book.scenarioId}`}>
-                <Button variant="neon" size="sm" className="shadow-lg">
-                  이어하기
-                </Button>
-              </Link>
+              // 진행중/실패 둘 다 "이어하기"로 처리
+              <Button
+                variant="neon"
+                size="sm"
+                className="shadow-lg"
+                onClick={handleResume}
+              >
+                이어하기
+              </Button>
             )}
           </div>
         )}
@@ -404,7 +429,7 @@ function BookShelf({ books, mode, title, onViewReport }) {
             <div className="flex items-center justify-center gap-6 relative z-10 min-h-[320px]">
               {visibleBooks.map((book, idx) => (
                 <BookCard
-                  key={book?.id || `empty-${idx}`}
+                  key={book?.sessionId || `empty-${idx}`}
                   book={book}
                   mode={mode}
                   isActive={idx === 1}

@@ -38,28 +38,32 @@ const clampFloor = (value, fallback = 1) => {
 export const mapBookshelfItem = (item) => {
   if (!item) return null
 
-  const title = item.title || item.scenarioTitle || '알 수 없는 시나리오'
-
   return {
-    id: item.sessionId || item.reviewId || item.id,
-    sessionId: item.sessionId || item.id || null,
-    scenarioId: item.scenarioId || null,
-    title,
-    scenarioTitle: title,
+    // 세션/시나리오 ID
+    sessionId: item.sessionId,
+    scenarioId: item.scenarioId,
+
+    // 시나리오 정보 (API 필드명 그대로 사용)
+    title: item.title || '알 수 없는 시나리오',
     synopsis: item.synopsis || '',
-    thumbnail: item.thumbnailUrl || item.thumbnail || null,
-    thumbnailUrl: item.thumbnailUrl || item.thumbnail || null,
-    userId: item.userId || null,
-    nickname: item.nickname || '익명',
+    thumbnail: item.thumbnailUrl || null,
+
+    // 세션 상태
     status: item.status || 'UNKNOWN',
     playTime: item.playTime || 0,
     rankGrade: item.rankGrade || null,
     hasReport: item.hasReport || false,
+
+    // 시간 정보
     lastSavedAt: item.lastSavedAt || null,
     expiresAt: item.expiresAt || null,
-    createdAt: item.createdAt || null,
+
+    // 하위 호환성을 위한 필드 (기존 코드에서 사용할 수 있음)
+    id: item.sessionId,
+    scenarioTitle: item.title || '알 수 없는 시나리오',
   }
 }
+
 
 /**
  * Map bookshelf stats response from API
@@ -206,6 +210,7 @@ export const normalizeClue = (clue) => {
     description: clue.description || '',
     detailImageUrl: clue.detailImageUrl || '',
     assistantComment: clue.assistantComment || '',
+    transform: clue.transform || null,
     discovered: clue.discovered || false,
     discoveredAt: clue.discoveredAt || null,
   }
@@ -473,6 +478,8 @@ export const normalizeResumeResponse = (response) => {
       health: 0,
       submitAttempts: 0,
       playTime: 0,
+      submitAttempts: response.submitAttempts || 0,
+      remainingAttempts: Math.max(0, 3 - (response.submitAttempts || 0)),
       lastSavedAt: null,
       expiresAt: null,
       inventory: { clues: [] },
@@ -497,6 +504,7 @@ export const normalizeResumeResponse = (response) => {
       : [],
     health: response.health || 0,
     submitAttempts: response.submitAttempts || 0,
+    remainingAttempts: Math.max(0, 3 - (response.submitAttempts || 0)),  // ✅ 남은 제출 횟수
     playTime: response.playTime || 0,
     lastSavedAt: response.lastSavedAt || null,
     expiresAt: response.expiresAt || null,

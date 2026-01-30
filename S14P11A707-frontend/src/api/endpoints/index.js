@@ -51,12 +51,8 @@ export const ENDPOINTS = {
     end: (sessionId) => `/api/sessions/${sessionId}/end`,
     moveFloor: (sessionId) => `/api/sessions/${sessionId}/move-floor`,
 
-    // Board operations
+    // Board operations (조회/저장만)
     board: (sessionId) => `/api/sessions/${sessionId}/board`,
-    boardNodes: (sessionId) => `/api/sessions/${sessionId}/board/nodes`,
-    boardNodePosition: (sessionId) => `/api/sessions/${sessionId}/board/nodes/position`,
-    boardNodeUpdate: (sessionId, nodeId) => `/api/sessions/${sessionId}/board/nodes/${nodeId}`,
-    boardConnections: (sessionId) => `/api/sessions/${sessionId}/board/connections`,
 
     // Clue operations
     clues: (sessionId) => `/api/sessions/${sessionId}/clues`,
