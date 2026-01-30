@@ -766,7 +766,8 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Transactional(readOnly = true)
     public ScenarioListResponse listScenarios() {
         // TODO: COMPLETED 목록만 내려주기
-        List<ScenarioListProjection> scenarios = scenarioRepository.findAllProjectedBy();
+        List<ScenarioListProjection> scenarios = scenarioRepository
+                .findAllByGenerationStatus(Scenario.GenerationStatus.COMPLETED);
 
         List<ScenarioListResponse.Item> items = scenarios.stream()
                 .map(this::toScenarioListItem)
