@@ -1,6 +1,7 @@
 import { apiClient } from '@/api/client/axios'
 import { ENDPOINTS } from '@/api/endpoints'
 import { ApiError } from '@/api/errors/ApiError'
+import { mapReviewCreateRequest, mapReviewUpdateRequest } from './reviewMappers'
 
 /**
  * Review API Module
@@ -38,7 +39,8 @@ export const fetchReviews = async (scenarioId, page = 0, size = 10) => {
  */
 export const createReview = async (scenarioId, data) => {
   try {
-    const response = await apiClient.post(ENDPOINTS.reviews.create(scenarioId), data)
+    const payload = mapReviewCreateRequest(data)
+    const response = await apiClient.post(ENDPOINTS.reviews.create(scenarioId), payload)
     return response.data
   } catch (error) {
     if (error.response?.data) {
@@ -57,7 +59,8 @@ export const createReview = async (scenarioId, data) => {
  */
 export const updateReview = async (reviewId, data) => {
   try {
-    const response = await apiClient.patch(ENDPOINTS.reviews.update(reviewId), data)
+    const payload = mapReviewUpdateRequest(data)
+    const response = await apiClient.patch(ENDPOINTS.reviews.update(reviewId), payload)
     return response.data
   } catch (error) {
     if (error.response?.data) {

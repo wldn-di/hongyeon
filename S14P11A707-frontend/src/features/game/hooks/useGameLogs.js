@@ -41,6 +41,8 @@ export function useGameLogs(sessionId) {
 
   // sessionId를 ref로 관리하여 refetch 시 최신 값 사용
   const sessionIdRef = useRef(sessionId);
+  const isLoadedRef = useRef(false);  // 로드 중복 방지
+  
   useEffect(() => {
     sessionIdRef.current = sessionId;
   }, [sessionId]);
@@ -53,6 +55,14 @@ export function useGameLogs(sessionId) {
       setLoading(false);
       return;
     }
+
+    // 이미 로드 중이면 스킵 (같은 sessionId에 대해)
+    if (isLoadedRef.current && sessionIdRef.current === currentSessionId) {
+      console.log('[useGameLogs] 이미 로드됨 - 스킵');
+      return;
+    }
+    
+    isLoadedRef.current = true;
 
     try {
       setLoading(true);
@@ -83,6 +93,11 @@ export function useGameLogs(sessionId) {
       fetchLogs(sessionId);
     }
   }, [sessionId, fetchLogs]);
+
+  // sessionId 변경 시 플래그 리셋
+  useEffect(() => {
+    isLoadedRef.current = false;
+  }, [sessionId]);
 
   // 로컬에 로그 추가 (API 호출 없이)
   const addLog = useCallback((type, message) => {
