@@ -1,20 +1,7 @@
 package com.ssafy.s14p11a707.scenario.api;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
-import com.ssafy.s14p11a707.game.dto.GameStartResponse;
-import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
-import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
-import com.ssafy.s14p11a707.review.dto.ReviewResponse;
-import com.ssafy.s14p11a707.scenario.dto.RoomListResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateRequest;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioDeleteResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioDetailResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioRankingResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioStatusResponse;
-import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
-import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
+import com.ssafy.s14p11a707.scenario.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;

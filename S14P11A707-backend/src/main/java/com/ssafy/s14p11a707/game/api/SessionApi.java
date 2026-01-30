@@ -1,11 +1,8 @@
 package com.ssafy.s14p11a707.game.api;
 
-import com.ssafy.s14p11a707.exception.BaseException;
-import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.game.dto.*;
-import com.ssafy.s14p11a707.game.entity.GameSession;
-import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
+import com.ssafy.s14p11a707.security.authorization.GameSessionAccessPolicy;
 import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +16,7 @@ import org.springframework.web.bind.annotation.*;
 public class SessionApi implements SessionApiDoc {
 
     private final GameSessionService gameSessionService;
-    private final GameSessionRepository gameSessionRepository;
+    private final GameSessionAccessPolicy gameSessionAccessPolicy;
     private final CurrentUserIdResolver currentUserIdResolver;
 
     @PostMapping("/{scenarioId}")
@@ -49,7 +46,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.getInvestigationReport(sessionId));
     }
 
@@ -60,20 +57,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        GameSession session = requireSession(sessionId);
-        if (session.getStatus() != GameSession.Status.COMPLETED) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
-        boolean hasCompletedScenario = gameSessionRepository.existsByScenarioIdAndUserIdAndStatus(
-                session.getScenario().getId(),
-                userId,
-                GameSession.Status.COMPLETED
-        );
-        if (!hasCompletedScenario) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
+        gameSessionAccessPolicy.assertCanReadOtherReport(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.getOtherInvestigationReport(sessionId));
     }
 
@@ -85,7 +69,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.discoverClue(sessionId, clueId));
     }
 
@@ -96,7 +80,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.getDiscoveredClues(sessionId));
     }
 
@@ -108,7 +92,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.getDiscoveredClue(sessionId, clueId));
     }
 
@@ -119,7 +103,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.getLogs(sessionId));
     }
 
@@ -130,7 +114,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.resumeGame(sessionId));
     }
 
@@ -142,7 +126,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.moveFloor(sessionId, request));
     }
 
@@ -153,7 +137,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.getBoard(sessionId));
     }
 
@@ -165,7 +149,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.saveBoard(sessionId, request));
     }
 
@@ -177,7 +161,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.submit(sessionId, request));
     }
 
@@ -190,7 +174,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.chatWithSuspect(sessionId, suspectId, request));
     }
 
@@ -202,19 +186,7 @@ public class SessionApi implements SessionApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureSessionOwnership(sessionId, userId);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
         return ResponseEntity.ok(gameSessionService.getChatHistory(sessionId, suspectId));
-    }
-
-    private void ensureSessionOwnership(long sessionId, long userId) {
-        GameSession session = requireSession(sessionId);
-        if (session.getUser().getId() != userId) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-    }
-
-    private GameSession requireSession(long sessionId) {
-        return gameSessionRepository.findByIdWithUserAndScenario(sessionId)
-                .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
     }
 }

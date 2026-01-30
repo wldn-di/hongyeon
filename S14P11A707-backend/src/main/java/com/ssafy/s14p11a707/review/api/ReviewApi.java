@@ -1,14 +1,12 @@
 package com.ssafy.s14p11a707.review.api;
 
-import com.ssafy.s14p11a707.exception.BaseException;
-import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
 import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
-import com.ssafy.s14p11a707.review.repository.ReviewRepository;
 import com.ssafy.s14p11a707.review.service.ReviewService;
 import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
+import com.ssafy.s14p11a707.security.authorization.ReviewAccessPolicy;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -25,7 +23,7 @@ import org.springframework.web.bind.annotation.*;
 public class ReviewApi implements ReviewApiDoc {
 
     private final ReviewService reviewService;
-    private final ReviewRepository reviewRepository;
+    private final ReviewAccessPolicy reviewAccessPolicy;
     private final CurrentUserIdResolver currentUserIdResolver;
 
     @GetMapping("/{scenarioId}/reviews")
@@ -58,7 +56,7 @@ public class ReviewApi implements ReviewApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureReviewOwnership(reviewId, userId);
+        reviewAccessPolicy.assertReviewOwner(userId, reviewId);
         return ResponseEntity.ok(reviewService.updateReview(reviewId, request));
     }
 
@@ -69,15 +67,7 @@ public class ReviewApi implements ReviewApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
-        ensureReviewOwnership(reviewId, userId);
+        reviewAccessPolicy.assertReviewOwner(userId, reviewId);
         return ResponseEntity.ok(reviewService.deleteReview(reviewId));
-    }
-
-    private void ensureReviewOwnership(long reviewId, long userId) {
-        var review = reviewRepository.findByIdWithUser(reviewId)
-                .orElseThrow(() -> new BaseException(ErrorCode.REVIEW_NOT_FOUND));
-        if (review.getUser().getId() != userId) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
     }
 }
