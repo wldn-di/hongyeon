@@ -661,6 +661,11 @@ export default function GameRoom() {
   useEffect(() => {
     if (!activeScenarioId) return
 
+    isInitializedRef.current = false
+    setSessionId(null)
+    setGameInitError(null)
+    setGameInitializing(false)
+
     resetSession()
     setCurrentRoomIndex(0)
     setSelectedEvidence(null)
