@@ -134,6 +134,7 @@ export const updateMethods = {
         }
     
         // ✅ 증거 하이라이트 업데이트(반짝/글로우/스파클)
+        this.updateClueVisibilityByFlashlight();
         this.updateFlashlightDust(time);
         this.updateNearestClueHighlight(time);
     

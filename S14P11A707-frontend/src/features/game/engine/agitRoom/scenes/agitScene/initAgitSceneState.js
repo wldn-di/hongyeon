@@ -25,6 +25,9 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.flashJitterSeed = Math.random() * 1000;
     scene.flashJitterSeed2 = Math.random() * 1000;
     scene.flashJitterSeed3 = Math.random() * 1000;
+    scene.FLASHLIGHT_CLUE_REVEAL_MIN_ALPHA = 0.15;
+    scene.FLASHLIGHT_CLUE_REVEAL_RADIUS = 210;
+    scene.FLASHLIGHT_CLUE_REVEAL_HALF_ANGLE = Math.PI / 10;
 
     // 노이즈/그레인
     scene.staticNoise = null;
@@ -184,4 +187,3 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.onRoomChanged = null;
     scene.initialRoomIndex = 0;
 }
-

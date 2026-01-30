@@ -1,6 +1,74 @@
 import Phaser from "phaser";
 
 export const clueMethods = {
+    isFlashlightRevealingClues() {
+        const minAlpha = this.FLASHLIGHT_CLUE_REVEAL_MIN_ALPHA ?? 0.15;
+        return Boolean(this.flashlight && this.isFlashlightOn && this.flashAlpha > minAlpha);
+    },
+
+    isPointInFlashlightCone(x, y) {
+        if (!this.isFlashlightRevealingClues()) return false;
+
+        const originX = this.flashlight.x;
+        const originY = this.flashlight.y;
+
+        const dx = x - originX;
+        const dy = y - originY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+
+        const baseRadius = this.FLASHLIGHT_CLUE_REVEAL_RADIUS ?? 210;
+        const radius = baseRadius * (this.flashlight.scaleX ?? 1);
+        if (dist > radius) return false;
+
+        const angleToPoint = Math.atan2(dy, dx);
+        const delta = Phaser.Math.Angle.Wrap(angleToPoint - this.flashlight.rotation);
+
+        const halfAngle = this.FLASHLIGHT_CLUE_REVEAL_HALF_ANGLE ?? Math.PI / 10;
+        return Math.abs(delta) <= halfAngle;
+    },
+
+    updateClueVisibilityByFlashlight() {
+        if (!Array.isArray(this.clues) || this.clues.length === 0) {
+            return;
+        }
+
+        const revealing = this.isFlashlightRevealingClues();
+
+        for (const clue of this.clues) {
+            if (!clue || !clue.active) continue;
+
+            const baseY = clue.getData("baseY") ?? clue.y;
+            const shouldReveal = revealing && this.isPointInFlashlightCone(clue.x, baseY);
+            if (shouldReveal) {
+                if (!clue.visible) {
+                    clue.setVisible(true);
+                    clue.y = baseY;
+                    clue.setDepth(baseY);
+                    this.resetClueVisual(clue);
+                }
+                continue;
+            }
+
+            if (clue.visible) {
+                const baseY = clue.getData("baseY") ?? clue.y;
+                clue.y = baseY;
+                clue.setDepth(baseY);
+                this.resetClueVisual(clue);
+                clue.setVisible(false);
+            }
+        }
+
+        // 손전등 밖으로 나가서 타겟이 숨겨졌으면 즉시 정리
+        if (this.highlightTarget && (!this.highlightTarget.active || !this.highlightTarget.visible)) {
+            this.highlightTarget = null;
+            if (this.interactGlow) {
+                this.interactGlow.setVisible(false);
+                this.interactGlow.setAlpha(0);
+            }
+            this.setClueSparkle(false);
+        }
+    },
+
     createClueSparkle() {
         if (!this.textures.exists("clue_spark")) {
             const g = this.make.graphics({ x: 0, y: 0, add: false });
@@ -141,6 +209,7 @@ export const clueMethods = {
             clue.setScale(this.CLUE_SCALE);
             clue.setDepth(y);
             clue.setTint(0xffffff);
+            clue.setVisible(false);
             clue.setData("clueId", clueId ?? null);
             clue.setData("evidenceId", evidenceId ?? null);
             clue.setData("title", title ?? "Unknown");
@@ -188,7 +257,7 @@ export const clueMethods = {
         let best = null;
         let bestD = Infinity;
         for (const obj of this.clues) {
-            if (!obj || !obj.active) continue;
+            if (!obj || !obj.active || !obj.visible) continue;
             const dx = obj.x - this.player.x;
             const dy = obj.y - this.player.y;
             const d = Math.sqrt(dx * dx + dy * dy);
