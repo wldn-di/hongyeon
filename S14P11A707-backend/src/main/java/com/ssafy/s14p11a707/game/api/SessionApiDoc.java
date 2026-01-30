@@ -352,12 +352,22 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = SuspectChatResponse.class))
             ),
             @ApiResponse(
+                    responseCode = "401",
+                    description = "인증 필요",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "403",
+                    description = "접근 권한 없음",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
                     responseCode = "404",
                     description = "세션/용의자를 찾을 수 없음",
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<SuspectChatResponse> chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
+    ResponseEntity<SuspectChatResponse> chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request, OidcUser oidcUser);
 
     @Operation(summary = "심문 기록 조회", description = "특정 용의자와의 대화 기록을 조회합니다.")
     @ApiResponses({

@@ -29,7 +29,7 @@ public interface GameSessionService {
 
     BoardResponse saveBoard(long sessionId, BoardSaveRequest request, OidcUser oidcUser);
 
-    SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request);
+    SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request, OidcUser oidcUser);
 
     ChatHistoryResponse getChatHistory(long sessionId, long suspectId, OidcUser oidcUser);
 

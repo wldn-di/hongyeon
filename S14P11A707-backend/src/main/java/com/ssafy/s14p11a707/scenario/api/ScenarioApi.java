@@ -69,14 +69,18 @@ public class ScenarioApi implements ScenarioApiDoc {
     @Override
     public ResponseEntity<ScenarioCreateResponse> createScenario(
             @RequestBody ScenarioCreateRequest request,
-            @AuthenticationPrincipal OidcUser oidcUser) {
+            @AuthenticationPrincipal OidcUser oidcUser
+    ) {
         return ResponseEntity.ok(scenarioService.createScenario(request, oidcUser));
     }
 
     @DeleteMapping("/{scenarioId}")
     @Override
-    public ResponseEntity<ScenarioDeleteResponse> deleteScenario(@PathVariable long scenarioId) {
-        return ResponseEntity.ok(scenarioService.deleteScenario(scenarioId));
+    public ResponseEntity<ScenarioDeleteResponse> deleteScenario(
+            @PathVariable long scenarioId,
+            @AuthenticationPrincipal OidcUser oidcUser
+    ) {
+        return ResponseEntity.ok(scenarioService.deleteScenario(scenarioId, oidcUser));
     }
 
     @GetMapping("/{scenarioId}/rankings")

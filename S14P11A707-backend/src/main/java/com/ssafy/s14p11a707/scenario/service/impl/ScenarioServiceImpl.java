@@ -2,8 +2,6 @@ package com.ssafy.s14p11a707.scenario.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ssafy.s14p11a707.exception.BaseException;
-import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.scenario.dto.*;
@@ -19,9 +17,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
-import org.springframework.transaction.support.TransactionTemplate;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -61,37 +57,20 @@ public class ScenarioServiceImpl implements ScenarioService {
 
     // ★ 랜덤 가구 배치 서비스 주입
     private final RoomLayoutService roomLayoutService;
-    private final PlatformTransactionManager transactionManager;
 
     @Override
-    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request, OidcUser user){
-
-        User creator = userRepository.findByGoogleId(user.getSubject())
-                .orElseThrow(()-> new BaseException(ErrorCode.UNAUTHORIZED));
-
-        // 이미 생성 중인 시나리오가 있는지 확인
-        boolean hasGenerating = scenarioRepository.existsByCreatorIdAndGenerationStatus(
-                creator.getId(), Scenario.GenerationStatus.GENERATING);
-
-        if (hasGenerating) {
-            throw new BaseException(ErrorCode.SCENARIO_ALREADY_GENERATING);
+    @Transactional
+    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request, OidcUser oidcUser) {
+        // 사용자 인증
+        if (oidcUser == null) {
+            throw new IllegalArgumentException("User not authenticated");
         }
-
+        String googleId = oidcUser.getSubject();
+        User creator = userRepository.findByGoogleId(googleId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
         int estimatedSeconds = Math.max(20, Math.min(120, 25 + request.suspectCount() * 10));
 
         ScenarioCreateResponse.OriginalRequest originalRequest = new ScenarioCreateResponse.OriginalRequest(request.title(), request.userSynopsis(), request.genre(), request.suspectCount());
-
-        // GENERATING 상태로 먼저 저장
-        Scenario scenario = Scenario.builder()
-                .creator(creator)
-                .title(request.title())
-                .userSynopsis(request.userSynopsis())
-                .genre(request.genre())
-                .suspectCount(request.suspectCount())
-                .generationStatus(Scenario.GenerationStatus.GENERATING)
-                .build();
-        scenarioRepository.saveScenario(scenario);
-
         try {
             // 1. 사용자 입력 메시지
             String userMessage = String.format("""
@@ -103,26 +82,25 @@ public class ScenarioServiceImpl implements ScenarioService {
                     }
                     """, request.title(), request.genre(), request.suspectCount(), request.userSynopsis());
 
-            // 2. 첫 번째 AI 호출: 사건 타임라인 생성
+            // ========================================================================
+            // 1단계: 타임라인 생성
+            // ========================================================================
             String timelineSystemMessage = """
-                    추리 게임의 시나리오를 생성하기 위한 작업이야 아래에 명시해주는 내용과 형식 기반으로 응답을 하고 그 외에 사담을 섞지 말고 응답을 제공해:
-                    
-                    첫번째 AI 호출 작업 = Timeline 생성
-                    
                     Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
-                    당신은 사용자가 제공한 '장르', '인원수', '간단한 시놉시스'를 바탕으로 사건의 타임라인을 우선 작성해야 합니다 작업의 순서는 다음과 같습니다:
-                    
+                    당신은 사용자가 제공한 '장르', '인원수', '간단한 시놉시스'를 바탕으로 사건의 타임라인을 우선 작성해야 합니다. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오, 작업의 순서는 다음과 같습니다:
+
                     사건이 일어난 하루의 타임라인을 30분 간격으로 JSON 배열 형식으로 작성하십시오.
-                    
-                    1) 사건과 사건이 일어난 하루의 TImeline 생성 단계 수행
-                    
-                    1) 사건과 사건이 일어난 하루의 TImeline 생성 단계 수행 시 주의사항:
-                    
-                    - 범인 은닉: 타임라인상에서 범인의 이름을 직접적으로 살해 행위("사건 발생 — 최도윤이 안준호를 살해")와 연결하지 마십시오. 대신 "사건 발생 시각", "비명 소리 발생", 또는 "정전 발생"과 같이 객관적인 현상 위주로 서술하십시오.
-                    - 중립적 서술: 모든 용의자의 행동은 범행 여부와 관계없이 의심스럽거나 알리바이를 증명하는 활동 위주로 구성하십시오. (예: "서재 근처에서 목격됨", "자리를 비움" 등)
-                    - 결말 포함 금지: 1단계 타임라인에서는 '범인 체포', '범행 자백', '사인 확인'과 같은 수사 결과나 엔딩 내용을 포함하지 마십시오. 타임라인은 사건 발생 및 발견 시점까지만 구성하거나, 발견 이후의 혼란 상황까지만 묘사하십시오.
-                    - 증거 위주 구성: 특정 인물을 범인으로 확정 짓는 문구 대신, 나중에 단서가 될 수 있는 복선(예: "소매가 뜯어짐", "무언가를 떨어뜨림")을 간접적으로 배치하십시오.
-                    
+
+                    당신은 전문 추리 게임 시나리오 작가입니다. 사용자의 입력을 바탕으로 사건의 트릭과 개연성이 확보된 타임라인을 작성하십시오. 사담 없이 JSON 형식으로만 응답하십시오.
+
+                    [작성 규칙]
+                    1. 사건 당일의 타임라인을 30분 간격으로 구성하십시오.
+                    2. 범인 은닉: 살해 행위를 특정 인물과 연결하지 말고 "비명 소리", "사건 발생" 등 객관적 현상으로 서술하십시오.
+                    3. 중립적 서술: 모든 인물의 행동은 알리바이 증명이나 의심스러운 정황 위주로 구성하십시오.
+                    4. 결말 포함 금지: 사인 확인이나 엔딩 내용은 배제하고 사건 발견 직후의 혼란 상황까지만 묘사하십시오.
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
                     출력 예시:
                     {
                       "timeline": [
@@ -143,270 +121,313 @@ public class ScenarioServiceImpl implements ScenarioService {
                     .blockLast();
 
             String timelineJson = timelineSb.toString();
+            timelineJson = timelineJson.replaceAll("```json\\s*", "")
+                    .replaceAll("```\\s*$", "")
+                    .trim();
 
-            // 3. 두 번째 AI 호출: 타임라인을 바탕으로 시나리오 전체 생성
-            // ★ 중요: rooms 부분 프롬프트 수정 (room_type을 명확하게 지정)
-            String scenarioSystemMessage = """
-                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다. 이때 당신은 유저가 직접 단서를 통해 사건의 동기, 범인, 범행 수법 등을 스스로 추리하며 알아낼 수 있도록 논리적 근거와 함께 증거물과 시나리오를 구성하여야 합니다.
-                    
-                    아래의 사건 타임라인을 참고하여 시나리오를 JSON 형식으로 작성하세요.
-                    
-                    각 필드에 해당하는 내용을 작성하세요:
-                    
-                    2-1) 사건 및 타임라인 기반 시나리오 생성 단계 수행
-                    아래의 사건 타임라인을 참고하여 시나리오를 JSON 형식으로 작성하십시오.
-                    각 필드에 해당하는 내용을 제목과 형식을 동일하게 유지하며 그에 맞춰서 작성하십시오.
-                    
-                    사건 및 타임라인 기반 시나리오 생성 단계 수행 시 다음 규칙을 엄격히 준수하십시오:
-                    
-                        - 타임라인 객체 확장: 1단계에서 생성한 모든 타임라인 항목을 하나도 빠짐없이 story_config_json 내의 timeline 배열에 집어넣으십시오.
-                    
-                        - Witness 필드 필수 추가: 각 타임라인 객체는 {"time": "HH:MM", "event": "내용""} 형식을 유지해야 합니다.
-                    
-                        - 데이터 정합성: 1단계의 30분 단위 기록을 요약하지 말고, 엔딩 시점까지의 모든 JSON 배열 원소를 그대로 유지하십시오.
-                    
-                        - Room 정보 생성은 6개 생성으로 고정.
-                        - 각 층에는 무조건 방 하나씩이 있는 형태.
-                        - 증거품의 수는 최대 20개를 넘어가지 않도록 제한.
-                    
+            log.info("1단계 타임라인 생성 완료: {}", timelineJson);
+
+            // ========================================================================
+            // 2단계: 시나리오 기본 정보 생성 (타임라인 기반)
+            // ========================================================================
+            String scenarioSystemMessage1 = String.format("""
+                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
+                    당신은 [1단계 타임라인]을 참고하여 시나리오의 전체 설정을 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+
+                    [작성 규칙]
+                    1. 유저가 입력한 제목과 시놉시스를 확장하여 200자 내외의 synopsisDetail을 작성하십시오.
+                    2. story_config_json 내의 timeline에는 1단계의 내용을 포함하되, 각 항목에 witness(목격자 ID, 없을 시 0) 필드를 추가하십시오.
+                    3. narration 섹션(오프닝, 에필로그 등)을 극적인 톤으로 작성하십시오.
+                    4. 아직 인물 이름이 미정이므로 '용의자 A', 'B' 등으로 임시 지칭하십시오.
+
+                    [1단계 타임라인 데이터]:
+                    %s
+
+                    [1단계 타임라인 데이터] 기반으로 scenario 객체(title, synopsis, synopsisDetail, story_config_json)를 생성하십시오.
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
                     시나리오 작성 형식:
                     {
                       "scenario": {
-                        "title": "[?�나리오 ?�목]",
-                        "synopsis": "[??�??�약]",
-                        "synopsisDetail": "[?�세 줄거�?200???�외]",
-                        "thumbnailUrl": "[?�네???��?지 URL]",
+                        "title": "[시나리오 제목]",
+                        "synopsis": "[한 줄 요약]",
+                        "synopsisDetail": "[상세 줄거리]",
+                        "thumbnailUrl": "[썸네일 이미지 URL]",
                         "story_config_json": {
-                          "incident_time": "[?�건 발생 ?�각]",
-                          "twist": "[반전 ?�소]",
-                          "timeline": "[?�건 ?�간??배열]",
+                          "incident_time": "[YYYY-MM-DD HH:MM 형식의 발생 시각]",
+                          "twist": "[반전 요소]",
+                          "timeline": [
+                            {
+                              "time": "HH:MM",
+                              "event": "내용",
+                              "witness": 0
+                            }
+                          ],
                           "narration": {
-                            "opening": "[게임 ?�작 ?�레?�션]",
-                            "epilogue": "[?�건 ?�결 ?�딩 ?�레?�션]",
-                            "culprit_monologue": "[범인 ?�백]",
-                            "unsolved_monologue": "[미해�??�백]"
+                            "opening": "[시작 나레이션]",
+                            "epilogue": "[엔딩 나레이션]",
+                            "culprit_monologue": "[범인 검거 시 독백]",
+                            "unsolved_monologue": "[미해결 시 독백]"
                           }
-                        },
-                        "truth_config_json": {
-                          "culprit_id": "[범인 ID]",
-                          "motive": "[범행 ?�기]",
-                          "weapon_clue_id": "[?�기 ?�서 ID]",
-                          "method": "[범행 ?�법]",
-                          "location_floor": "[범행 발생 �?번호]",
-                          "cause_of_death": "[?�인]"
                         }
+                      }
+                    }
+                    """, timelineJson);
+
+            StringBuilder step1Sb = new StringBuilder();
+            chatClient.prompt()
+                    .system(scenarioSystemMessage1)
+                    .user("Generate scenario based on the timeline above.")
+                    .stream()
+                    .content()
+                    .doOnNext(step1Sb::append)
+                    .blockLast();
+
+            String step1Response = step1Sb.toString();
+            step1Response = step1Response.replaceAll("```json\\s*", "")
+                    .replaceAll("```\\s*$", "")
+                    .trim();
+
+            log.info("2단계 기본 정보 생성 완료: {}", step1Response);
+
+            // ========================================================================
+            // 3단계: 용의자, 피해자, 증거 정보 생성
+            // ========================================================================
+            String scenarioSystemMessage2 = String.format("""
+                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
+                    당신은 이전 호출에서 생성한 [scenario 객체(Timeline, title, synopsis, synopsisDetail, story_config_json) 를 포함한 이전 시나리오 설정]을 바탕으로 용의자, 피해자, 증거를 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+
+                    [작성 규칙]
+                    1. 고유 ID: 모든 인물과 단서에 고유 ID를 부여하고 truth_config_json에서 이를 참조하십시오.
+                    2. 정합성: 모든 용의자의 weakness_clue는 반드시 하단의 clues 배열에 동일한 정보로 존재해야 합니다.
+                    3. 레드 헤링: 단서 중 최소 2개는 사건과 무관한 용의자의 개인적 비밀(도박, 불륜 등)을 담으십시오.
+                    4. 익명화: revealed_truth에서 "A의 지문" 대신 "누군가의 지문"과 같이 서술하여 유저의 대조 추리를 유도하십시오.
+                    5. 실명 금지: 메모나 일기 단서에서 용의자 이름을 직접 쓰지 말고 이니셜이나 지칭어를 사용하십시오.
+                    6. 증거 개수: clues 배열은 반드시 8개 이상 12개 이하로 구성하십시오.
+                    7. 용의자 수는 %d명으로 반드시 일치해야 합니다.
+
+                    [이전 단계 생성 정보]:
+                    %s
+
+                    위 설정을 바탕으로 victim, suspects 배열, clues 배열, truth_config_json을 생성하십시오.
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
+                    시나리오 작성 형식:
+                    {
+                      "truth_config_json": {
+                        "culprit_id": 0,
+                        "motive": "[상세 동기]",
+                        "weapon_clue_id": 0,
+                        "method": "[상세 수법]",
+                        "location_floor": 0,
+                        "cause_of_death": "[사인 상세]"
                       },
                       "victim": {
-                        "name": "[?�름]",
-                        "age": "[?�이]",
-                        "gender": "[?�별]",
+                        "name": "[이름]",
+                        "age": 0,
+                        "gender": "[남성/여성]",
                         "occupation": "[직업]",
-                        "background": "[배경]",
-                        "discovery_location": "[발견 ?�소]",
-                        "estimated_death_time": "[?�망 ?�각]",
-                        "cause_of_death": "[?�인]",
+                        "background": "[배경 설명]",
+                        "discovery_location": "[장소]",
+                        "estimated_death_time": "[시각]",
+                        "cause_of_death": "[사인]",
                         "victim_detail_json": {
-                          "secret": "[비�?]",
-                          "hidden_info": "[?�겨�??�보]"
+                          "secret": "[비밀]",
+                          "hidden_info": "[정보]"
                         }
                       },
                       "suspects": [
                         {
-                          "name": "[?�름]",
-                          "age": "[?�이]",
-                          "gender": "[?�별]",
+                          "name": "[이름]",
+                          "age": 0,
+                          "gender": "[성별]",
                           "occupation": "[직업]",
-                          "one_liner": "[??�??�개]",
-                          "is_culprit": "[범인 ?��?]",
-                          "motive": "[?�기]",
+                          "one_liner": "[성격 요약]",
+                          "is_culprit": false,
+                          "motive": "[동기]",
                           "ai_config_json": {
-                            "personality": "[?�격]",
-                            "relationship": "[관�?",
+                            "personality": "[성격]",
+                            "relationship": "[관계]",
                             "knowledge_scope": {
-                              "knows_about": [],
-                              "doesnt_know": []
+                              "knows_about": "[아는 정보 목록 문자열]",
+                              "doesnt_know": "[모르는 정보 목록 문자열]"
                             },
                             "secret": {
-                              "title": "[비�? ?�목]",
-                              "content": "[비�? ?�용]",
+                              "title": "[비밀 제목]",
+                              "content": "[비밀 내용]",
                               "weakness_clue": {
-                                "id": "[?�점 ?�서 ID]",
-                                "name": "[?�름]",
-                                "description": "[?�명]"
+                                "id": 0,
+                                "name": "[단서명]",
+                                "description": "[설명]"
                               },
                               "alibi_progression": {
-                                "level1_lie": "...",
-                                "level2_partial": "...",
-                                "level3_truth": "..."
+                                "level1_lie": "[거짓말 확고 태도]",
+                                "level2_weak": "[거짓말 붕괴 태도]"
                               }
                             },
                             "deflection_strategy": {
-                              "target_name": "...",
-                              "suspicion_point": "...",
-                              "dialogue_hint": "..."
+                              "target_name": "[타겟 이름]",
+                              "suspicion_point": "[의심 포인트]",
+                              "dialogue_hint": "[대화 힌트]"
                             },
-                            "timeline_alibi": "..."
+                            "timeline_alibi": [
+                              {
+                                "time": "HH:MM",
+                                "location": "장소",
+                                "activity": "활동",
+                                "is_verified": false
+                              }
+                            ]
                           }
                         }
                       ],
                       "clues": [
                         {
-                          "name": "[?�름]",
-                          "description": "[?�명]",
-                          "importance": "CRITICAL",
-                          "assistant_comment": "[코멘??",
+                          "name": "[단서명]",
+                          "description": "[설명]",
+                          "importance": "[LOW/MEDIUM/HIGH/CRITICAL]",
+                          "assistant_comment": "[조수 코멘트]",
                           "clue_detail_json": {
-                            "revealed_truth": "...",
-                            "related_suspect_ids": "...",
-                            "discovery_script": "...",
-                            "is_weakness_clue_for": "..."
+                            "revealed_truth": "[밝혀지는 사실]",
+                            "related_suspect_ids": [0, 1],
+                            "discovery_script": "[발견 대사]",
+                            "is_weakness_clue_for": 0
                           }
-                        }
-                      ],
-                      "rooms": [
-                        {
-                          "floor_number": "[�?번호 - ?�자]",
-                          "room_type": "[?�수: living, kitchen, bedroom, bathroom, basement �??�나�??�택]",
-                          "room_name": "[�??�름 - ?? 거실, 부??",
-                          "description": "[�??�명]",
-                          "assistant_comment": "[코멘??"
                         }
                       ]
                     }
-                            "title": "[시나리오 제목]",
-                            "synopsis": "[한 줄 요약]",
-                            "synopsisDetail": "[상세 줄거리 200자 내외]",
-                            "thumbnailUrl": "[썸네일 이미지 URL]",
-                            "story_config_json": {
-                              "incident_time": "[YYYY-MM-DD HH:MM 형식의 발생 시각]",
-                              "twist": "[반전 요소]",
-                              "timeline": [
-                                { "time": "HH:MM", "event": "내용", "witness": 0 }
-                              ],
-                              "narration": {
-                                "opening": "[시작 나레이션]",
-                                "epilogue": "[엔딩 나레이션]",
-                                "culprit_monologue": "[범인 검거 시 독백]",
-                                "unsolved_monologue": "[미해결 시 독백]"
-                              }
-                            },
-                            "truth_config_json": {
-                              "culprit_id": 0,
-                              "motive": "[상세 동기]",
-                              "weapon_clue_id": 0,
-                              "method": "[상세 수법]",
-                              "location_floor": 0,
-                              "cause_of_death": "[사인 상세]"
-                            }
-                          },
-                          "victim": {
-                            "name": "[이름]",
-                            "age": 0,
-                            "gender": "[남성/여성]",
-                            "occupation": "[직업]",
-                            "background": "[배경 설명]",
-                            "discovery_location": "[장소]",
-                            "estimated_death_time": "[시각]",
-                            "cause_of_death": "[사인]",
-                            "victim_detail_json": {
-                              "secret": "[비밀]",
-                              "hidden_info": "[정보]"
-                            }
-                          },
-                          "suspects": [
-                            {
-                              "name": "[이름]",
-                              "age": 0,
-                              "gender": "[성별]",
-                              "occupation": "[직업]",
-                              "one_liner": "[성격 요약]",
-                              "is_culprit": false,
-                              "motive": "[동기]",
-                              "ai_config_json": {
-                                "personality": "[성격]",
-                                "relationship": "[관계]",
-                                "knowledge_scope": {
-                                  "knows_about": "[아는 정보 목록 문자열]",
-                                  "doesnt_know": "[모르는 정보 목록 문자열]"
-                                },
-                                "secret": {
-                                  "title": "[비밀 제목]",
-                                  "content": "[비밀 내용]",
-                                  "weakness_clue": {
-                                    "id": 0,
-                                    "name": "[단서명]",
-                                    "description": "[설명]"
-                                  },
-                                  "alibi_progression": {
-                                    "level1_lie": "[거짓말]",
-                                    "level2_partial": "[부분 인정]",
-                                    "level3_truth": "[진실]"
-                                  }
-                                },
-                                "deflection_strategy": {
-                                  "target_name": "[타겟 이름]",
-                                  "suspicion_point": "[의심 포인트]",
-                                  "dialogue_hint": "[대화 힌트]"
-                                },
-                                "timeline_alibi": [
-                                  { "time": "HH:MM", "location": "장소", "activity": "활동", "is_verified": false }
-                                ]
-                              }
-                            }
-                          ],
-                          "clues": [
-                            {
-                              "name": "[단서명]",
-                              "description": "[설명]",
-                              "importance": "[LOW/MEDIUM/HIGH/CRITICAL]",
-                              "assistant_comment": "[조수 코멘트]",
-                              "clue_detail_json": {
-                                "revealed_truth": "[밝혀지는 사실]",
-                                "related_suspect_ids": [0, 1],
-                                "discovery_script": "[발견 대사]",
-                                "is_weakness_clue_for": 0
-                              }
-                            }
-                          ],
-                          "rooms": [
-                            {
-                              "floor_number": 0,
-                              "room_type": "[유형]",
-                              "room_name": "[이름]",
-                              "description": "[설명]",
-                              "assistant_comment": "[조수 코멘트]"
-                            }
-                          ]
-                        }
-                    """;
+                    """, request.suspectCount(), step1Response);
 
-            StringBuilder scenarioSb = new StringBuilder();
+            StringBuilder step2Sb = new StringBuilder();
             chatClient.prompt()
-                    .system(scenarioSystemMessage)
-                    .user(timelineJson) // �?번째 ?�답(?�?�라??????번째 ?�롬?�트??주입
+                    .system(scenarioSystemMessage2)
+                    .user("Generate victim, suspects, and clues based on the scenario above.")
                     .stream()
                     .content()
-                    .doOnNext(scenarioSb::append)
+                    .doOnNext(step2Sb::append)
                     .blockLast();
 
-            String scenarioJson = scenarioSb.toString();
-
-            // Markdown 코드 블록 제거
-            scenarioJson = scenarioJson.replaceAll("```json\\s*", "")
+            String step2Response = step2Sb.toString();
+            step2Response = step2Response.replaceAll("```json\\s*", "")
                     .replaceAll("```\\s*$", "")
                     .trim();
 
-            // 5. JSON 파싱
+            log.info("3단계 용의자/증거 생성 완료: {}", step2Response);
+
+            // ========================================================================
+            // 4단계: 방 배열 정보 생성
+            // ========================================================================
+            String scenarioSystemMessage3 = String.format("""
+                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
+                    이전까지의 모든 AI호출 작업의 결과물(Timeline, title, synopsis, synopsisDetail, story_config_json, victim, suspects 배열, clues 배열, truth_config_json)를 포함한 이전 시나리오 설정)을 기반으로 6개의 층별 방(rooms) 정보를 생성하여 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+
+                    [작성 규칙]
+                    1. 층수: floor_number를 1부터 6까지 순차적으로 할당하고 층별 유형과 이름을 정하십시오.
+                    2. 단서 배치: 3단계에서 생성된 clues들을 각 방의 description에 자연스럽게 녹여내십시오. (예: 주방 묘사 시 '싱크대 위의 혈흔' 언급)
+                    3. 조수 코멘트: assistant_comment는 추리에 직접적인 정답을 주지 말고 기괴함이나 의문점만 친근하게 제시하십시오.
+                    4. 현장 묘사: "여기가 범행 장소다"라는 확정적 서술을 피하고 객관적인 상태만 묘사하십시오.
+
+                    [이전 단계 생성 정보]:
+                    %s
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
+                    시나리오 작성 형식:
+                    {
+                      "rooms": [
+                        {
+                          "floor_number": 1,
+                          "room_type": "[1층 유형]",
+                          "room_name": "[1층 이름]",
+                          "description": "[1층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 2,
+                          "room_type": "[2층 유형]",
+                          "room_name": "[2층 이름]",
+                          "description": "[2층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 3,
+                          "room_type": "[3층 유형]",
+                          "room_name": "[3층 이름]",
+                          "description": "[3층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 4,
+                          "room_type": "[4층 유형]",
+                          "room_name": "[4층 이름]",
+                          "description": "[4층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 5,
+                          "room_type": "[5층 유형]",
+                          "room_name": "[5층 이름]",
+                          "description": "[5층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 6,
+                          "room_type": "[6층 유형]",
+                          "room_name": "[6층 이름]",
+                          "description": "[6층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        }
+                      ]
+                    }
+                    """, step2Response);
+
+            StringBuilder step3Sb = new StringBuilder();
+            chatClient.prompt()
+                    .system(scenarioSystemMessage3)
+                    .user("Generate 6 rooms based on the scenario above.")
+                    .stream()
+                    .content()
+                    .doOnNext(step3Sb::append)
+                    .blockLast();
+
+            String step3Response = step3Sb.toString();
+            step3Response = step3Response.replaceAll("```json\\s*", "")
+                    .replaceAll("```\\s*$", "")
+                    .trim();
+
+            log.info("4단계 방 배열 생성 완료: {}", step3Response);
+
+            // ========================================================================
+            // 5단계: 모든 JSON 병합 및 파싱
+            // ========================================================================
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(scenarioJson);
 
+            // step1Response에서 scenario 기본 정보 추출
+            JsonNode step1Root = mapper.readTree(step1Response);
+            JsonNode scenarioNode = step1Root.path("scenario");
 
-            String title = root.path("scenario").path("title").asText();
-            String synopsis = root.path("scenario").path("synopsis").asText();
-            String synopsisDetail = root.path("scenario").path("synopsisDetail").asText();
+            String title = scenarioNode.path("title").asText();
+            String synopsis = scenarioNode.path("synopsis").asText();
+            String synopsisDetail = scenarioNode.path("synopsisDetail").asText();
+            JsonNode storyConfig = scenarioNode.path("story_config_json");
 
-            JsonNode storyConfig = root.path("scenario").path("story_config_json");
-            JsonNode truthConfig = root.path("scenario").path("truth_config_json");
+            // step2Response에서 victim, suspects, clues, truth_config 추출
+            JsonNode step2Root = mapper.readTree(step2Response);
+            JsonNode victimNode = step2Root.path("victim");
+            JsonNode suspectsNode = step2Root.path("suspects");
+            JsonNode cluesNode = step2Root.path("clues");
+            JsonNode truthConfig = step2Root.path("truth_config_json");
+
+            // step3Response에서 rooms 추출
+            JsonNode step3Root = mapper.readTree(step3Response);
+            JsonNode roomsNode = step3Root.path("rooms");
+
+            // scenarioNode에 truth_config_json 추가
+            ((com.fasterxml.jackson.databind.node.ObjectNode) scenarioNode).set("truth_config_json", truthConfig);
+
+            log.info("모든 단계 JSON 병합 완료");
 
             // Embedding 생성
             String motiveText = truthConfig.path("motive").asText();
@@ -417,30 +438,161 @@ public class ScenarioServiceImpl implements ScenarioService {
 
             // float[] → 문자열로 변환
             String motiveEmbeddingStr = arrayToVectorString(motiveEmbedding);
-            // float[] → 문자열로 변환 (causeEmbedding은 현재 미사용이지만, 임베딩 생성 자체는 유지)
-            arrayToVectorString(causeEmbedding);
+            String causeEmbeddingStr = arrayToVectorString(causeEmbedding);
 
-            TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
-            Scenario finalScenario = transactionTemplate.execute(status -> persistScenarioData(
-                    scenario,       //  이미 위에서 만든 scenario 객체 전달
-                    request,
-                    root,
-                    title,
-                    synopsis,
-                    synopsisDetail,
-                    storyConfig,
-                    truthConfig,
-                    motiveEmbeddingStr
-            ));
-            if (finalScenario == null) {
-                throw new IllegalStateException("persistScenarioData returned null");
+            // 6. Scenario 엔티티 저장
+            Scenario scenario = Scenario.builder()
+                    .creator(creator)
+                    .title(title)
+                    .userSynopsis(request.userSynopsis())
+                    .synopsis(synopsis)
+                    .synopsisDetail(synopsisDetail)
+                    .genre(request.genre())
+                    .suspectCount(request.suspectCount())
+                    .playCount(0)
+                    .generationStatus(Scenario.GenerationStatus.COMPLETED)
+                    .generationError(null)
+                    .storyConfigJson(storyConfig)
+                    .truthConfigJson(truthConfig)
+                    .correctMotiveEmbedding(motiveEmbeddingStr)
+                    .build();
+
+            scenarioRepository.saveScenario(scenario);
+
+
+            // 7. Victim 저장
+            Victim victim = Victim.builder()
+                    .scenario(scenario)
+                    .name(victimNode.path("name").asText())
+                    .age(victimNode.path("age").asInt())
+                    .gender(victimNode.path("gender").asText())
+                    .occupation(victimNode.path("occupation").asText())
+                    .background(victimNode.path("background").asText())
+                    .discoveryLocation(victimNode.path("discovery_location").asText())
+                    .estimatedDeathTime(victimNode.path("estimated_death_time").asText())
+                    .causeOfDeath(victimNode.path("cause_of_death").asText())
+                    .victimDetailJson(victimNode.path("victim_detail_json"))
+                    .portraitUrl("https://example.com/victim.jpg")
+                    .build();
+            victimRepository.saveVictim(victim);
+
+            // 8. Suspects 저장
+            List<Suspect> suspects = new ArrayList<>();
+            int displayOrder = 1;
+            for (JsonNode suspectNode : suspectsNode) {
+                Suspect suspect = Suspect.builder()
+                        .scenario(scenario)
+                        .name(suspectNode.path("name").asText())
+                        .age(suspectNode.path("age").asInt())
+                        .gender(suspectNode.path("gender").asText())
+                        .occupation(suspectNode.path("occupation").asText())
+                        .culprit(suspectNode.path("is_culprit").asBoolean())
+                        .motive(suspectNode.path("motive").asText())
+                        .oneLiner(suspectNode.path("one_liner").asText())
+                        .aiConfigJson(suspectNode.path("ai_config_json"))
+                        .displayOrder(displayOrder++)
+                        .portraitUrl("https://example.com/suspect.jpg")
+                        .build();
+                suspects.add(suspect);
             }
+            suspectRepository.saveSuspects(suspects);
+
+            // 9. Rooms 저장
+            // ★ RoomLayoutService를 호출하여 랜덤 가구 배치 적용
+            Map<Integer, Room> roomMap = new LinkedHashMap<>();
+            for (JsonNode roomNode : roomsNode) {
+                String roomType = roomNode.path("room_type").asText("living");
+                int rawFloor = roomNode.path("floor_number").asInt();
+                int floorNumber = normalizeFloorNumber(roomType, rawFloor, roomMap);
+
+                // 같은 floor_number가 없을 때만 추가
+                if (!roomMap.containsKey(floorNumber)) {
+                    // AI가 생성한 방 타입 (living, kitchen 등)
+
+                    // ★ 랜덤 배치 서비스 호출
+                    JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
+
+                    Room room = Room.builder()
+                            .scenario(scenario)
+                            .floorNumber(floorNumber)
+                            .roomType(roomType) // AI가 준 타입 사용
+                            .roomName(roomNode.path("room_name").asText())
+                            .description(roomNode.path("description").asText())
+                            .assistantComment(roomNode.path("assistant_comment").asText())
+                            .objectJson(objectLayout) // ★ 생성된 가구 배치 JSON 저장
+                            .build();
+                    roomMap.put(floorNumber, room);
+                }
+            }
+            if (roomMap.size() < 6) {
+                String[] defaultTypes = {"living", "kitchen", "bedroom", "bathroom", "living", "basement"};
+                for (int floor = 1; floor <= 6; floor++) {
+                    if (roomMap.containsKey(floor)) continue;
+                    String roomType = defaultTypes[floor - 1];
+                    JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
+                    Room room = Room.builder()
+                            .scenario(scenario)
+                            .floorNumber(floor)
+                            .roomType(roomType)
+                            .roomName("Floor " + floor)
+                            .description("")
+                            .assistantComment("")
+                            .objectJson(objectLayout)
+                            .build();
+                    roomMap.put(floor, room);
+                }
+            }
+            List<Room> savedRooms = roomRepository.saveRooms(new ArrayList<>(roomMap.values()));
+
+            // 10. Clues 저장
+            List<Clue> clues = new ArrayList<>();
+            List<Room> roomsByFloor = savedRooms.stream()
+                    .sorted(Comparator.comparingInt(Room::getFloorNumber))
+                    .toList();
+            Map<Long, List<Rect>> occupiedByRoomId = new HashMap<>();
+
+            int clueIndex = 0;
+            for (JsonNode clueNode : cluesNode) {
+                String importanceStr = clueNode.path("importance").asText("SUPPORTING");
+                Clue.Importance importance = "CRITICAL".equalsIgnoreCase(importanceStr)
+                        ? Clue.Importance.CRITICAL
+                        : "RED_HERRING".equalsIgnoreCase(importanceStr)
+                        ? Clue.Importance.RED_HERRING
+                        : Clue.Importance.SUPPORTING;
+
+                Room targetRoom = roomsByFloor.isEmpty()
+                        ? null
+                        : roomsByFloor.get(clueIndex % roomsByFloor.size());
+                JsonNode transform = mapper.createObjectNode();
+                if (targetRoom != null) {
+                    List<Rect> occupied = occupiedByRoomId.computeIfAbsent(
+                            targetRoom.getId(),
+                            key -> new ArrayList<>()
+                    );
+                    transform = generateRandomClueTransform(mapper, occupied);
+                }
+
+                Clue clue = Clue.builder()
+                        .scenario(scenario)
+                        .room(targetRoom)
+                        .name(clueNode.path("name").asText())
+                        .importance(importance)
+                        .description(clueNode.path("description").asText())
+                        .clueDetailJson(clueNode.path("clue_detail_json"))
+                        .detailImageUrl("https://example.com/clue.jpg")
+                        .assistantComment(null)
+                        .transformJson(transform)
+                        .build();
+                clues.add(clue);
+                clueIndex++;
+            }
+            clueRepository.saveClues(clues);
 
             ScenarioCreateResponse.OriginalRequest originalRequest1 = new ScenarioCreateResponse.OriginalRequest(request.title(), synopsis, request.genre(), request.suspectCount());
 
             // 11. 응답 반환
             return new ScenarioCreateResponse(
-                    finalScenario.getId(),
+                    scenario.getId(),
                     "COMPLETED",
                     estimatedSeconds,
                     null,
@@ -449,8 +601,17 @@ public class ScenarioServiceImpl implements ScenarioService {
 
         } catch (Exception e) {
             log.error("Scenario generation failed", e);
-
-            scenario.failGeneration(e.getMessage());
+            Scenario scenario = Scenario.builder()
+                    .creator(creator)
+                    .title(request.title())
+                    .userSynopsis(request.userSynopsis())
+                    .synopsis(request.userSynopsis())
+                    .genre(request.genre())
+                    .suspectCount(request.suspectCount())
+                    .generationStatus(Scenario.GenerationStatus.FAILED)
+                    .generationError(e.getMessage())
+                    .build();
+            scenarioRepository.saveScenario(scenario);
 
             return new ScenarioCreateResponse(
                     -1L,
@@ -463,170 +624,41 @@ public class ScenarioServiceImpl implements ScenarioService {
         }
     }
 
-    /**
-     * Persist scenario graph (scenario + victim + suspects + rooms + clues) atomically.
-     * <p>
-     * AI 호출/파싱/임베딩 생성은 트랜잭션 밖에서 수행하고, DB 저장 here-only로 묶어
-     * 일부만 저장되는 불완전 시나리오가 남지 않도록 한다.
-     * </p>
-     */
-    private Scenario persistScenarioData(
-            Scenario scenario,
-            ScenarioCreateRequest request,
-            JsonNode root,
-            String title,
-            String synopsis,
-            String synopsisDetail,
-            JsonNode storyConfig,
-            JsonNode truthConfig,
-            String motiveEmbeddingStr
-    ) {
-        ObjectMapper mapper = new ObjectMapper();
-
-        // 6. Scenario 엔티티 저장
-        scenario.completeGeneration(title, synopsis, synopsisDetail, storyConfig, truthConfig, motiveEmbeddingStr);
-
-        // 7. Victim 저장
-        JsonNode victimNode = root.path("victim");
-        Victim victim = Victim.builder()
-                .scenario(scenario)
-                .name(victimNode.path("name").asText())
-                .age(victimNode.path("age").asInt())
-                .gender(victimNode.path("gender").asText())
-                .occupation(victimNode.path("occupation").asText())
-                .background(victimNode.path("background").asText())
-                .discoveryLocation(victimNode.path("discovery_location").asText())
-                .estimatedDeathTime(victimNode.path("estimated_death_time").asText())
-                .causeOfDeath(victimNode.path("cause_of_death").asText())
-                .victimDetailJson(victimNode.path("victim_detail_json"))
-                .portraitUrl("https://example.com/victim.jpg")
-                .build();
-        victimRepository.saveVictim(victim);
-
-        // 8. Suspects 저장
-        List<Suspect> suspects = new ArrayList<>();
-        int displayOrder = 1;
-        for (JsonNode suspectNode : root.path("suspects")) {
-            Suspect suspect = Suspect.builder()
-                    .scenario(scenario)
-                    .name(suspectNode.path("name").asText())
-                    .age(suspectNode.path("age").asInt())
-                    .gender(suspectNode.path("gender").asText())
-                    .occupation(suspectNode.path("occupation").asText())
-                    .culprit(suspectNode.path("is_culprit").asBoolean())
-                    .motive(suspectNode.path("motive").asText())
-                    .oneLiner(suspectNode.path("one_liner").asText())
-                    .aiConfigJson(suspectNode.path("ai_config_json"))
-                    .displayOrder(displayOrder++)
-                    .portraitUrl("https://example.com/suspect.jpg")
-                    .build();
-            suspects.add(suspect);
-        }
-        suspectRepository.saveSuspects(suspects);
-
-        // 9. Rooms 저장 (RoomLayoutService로 랜덤 가구 배치 적용)
-        Map<Integer, Room> roomMap = new LinkedHashMap<>();
-        for (JsonNode roomNode : root.path("rooms")) {
-            String roomType = roomNode.path("room_type").asText("living");
-            int rawFloor = roomNode.path("floor_number").asInt();
-            int floorNumber = normalizeFloorNumber(roomType, rawFloor, roomMap);
-
-            // 같은 floor_number가 없을 때만 추가
-            if (!roomMap.containsKey(floorNumber)) {
-                JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
-
-                Room room = Room.builder()
-                        .scenario(scenario)
-                        .floorNumber(floorNumber)
-                        .roomType(roomType)
-                        .roomName(roomNode.path("room_name").asText())
-                        .description(roomNode.path("description").asText())
-                        .assistantComment(roomNode.path("assistant_comment").asText())
-                        .objectJson(objectLayout)
-                        .build();
-                roomMap.put(floorNumber, room);
-            }
-        }
-        if (roomMap.size() < 6) {
-            String[] defaultTypes = {"living", "kitchen", "bedroom", "bathroom", "living", "basement"};
-            for (int floor = 1; floor <= 6; floor++) {
-                if (roomMap.containsKey(floor)) continue;
-                String roomType = defaultTypes[floor - 1];
-                JsonNode objectLayout = roomLayoutService.generateRandomLayout(roomType);
-                Room room = Room.builder()
-                        .scenario(scenario)
-                        .floorNumber(floor)
-                        .roomType(roomType)
-                        .roomName("Floor " + floor)
-                        .description("")
-                        .assistantComment("")
-                        .objectJson(objectLayout)
-                        .build();
-                roomMap.put(floor, room);
-            }
-        }
-        List<Room> savedRooms = roomRepository.saveRooms(new ArrayList<>(roomMap.values()));
-
-        // 10. Clues 저장
-        List<Clue> clues = new ArrayList<>();
-        List<Room> roomsByFloor = savedRooms.stream()
-                .sorted(Comparator.comparingInt(Room::getFloorNumber))
-                .toList();
-        Map<Long, List<Rect>> occupiedByRoomId = new HashMap<>();
-
-        int clueIndex = 0;
-        List<JsonNode> clueNodes = new ArrayList<>();
-        JsonNode cluesNode = root.path("clues");
-        if (cluesNode.isArray()) {
-            cluesNode.forEach(clueNodes::add);
-        }
-        if (clueNodes.isEmpty()) {
-            log.warn("Scenario {} has no clues in AI response. Creating fallback clues.", scenario.getId());
-            clueNodes.addAll(buildFallbackClues(mapper, roomsByFloor));
-        }
-
-        for (JsonNode clueNode : clueNodes) {
-            String importanceStr = clueNode.path("importance").asText("SUPPORTING");
-            Clue.Importance importance = "CRITICAL".equalsIgnoreCase(importanceStr)
-                    ? Clue.Importance.CRITICAL
-                    : "RED_HERRING".equalsIgnoreCase(importanceStr)
-                    ? Clue.Importance.RED_HERRING
-                    : Clue.Importance.SUPPORTING;
-
-            Room targetRoom = roomsByFloor.isEmpty()
-                    ? null
-                    : roomsByFloor.get(clueIndex % roomsByFloor.size());
-            JsonNode transform = mapper.createObjectNode();
-            if (targetRoom != null) {
-                List<Rect> occupied = occupiedByRoomId.computeIfAbsent(
-                        targetRoom.getId(),
-                        key -> new ArrayList<>()
-                );
-                transform = generateRandomClueTransform(mapper, occupied);
-            }
-
-            Clue clue = Clue.builder()
-                    .scenario(scenario)
-                    .room(targetRoom)
-                    .name(clueNode.path("name").asText())
-                    .importance(importance)
-                    .description(clueNode.path("description").asText())
-                    .clueDetailJson(clueNode.path("clue_detail_json"))
-                    .detailImageUrl("https://example.com/clue.jpg")
-                    .assistantComment(null)
-                    .transformJson(transform)
-                    .build();
-            clues.add(clue);
-            clueIndex++;
-        }
-        clueRepository.saveClues(clues);
-
-        return scenario;
-    }
-
     @Override
-    public ScenarioDeleteResponse deleteScenario(long scenarioId) {
+    @Transactional
+    public ScenarioDeleteResponse deleteScenario(long scenarioId, OidcUser oidcUser) {
+        // 사용자 인증
+        if (oidcUser == null) {
+            throw new IllegalArgumentException("User not authenticated");
+        }
+        String googleId = oidcUser.getSubject();
+        User user = userRepository.findByGoogleId(googleId)
+                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+
+        // 시나리오 조회 및 소유권 확인
+        Scenario scenario = scenarioRepository.findById(scenarioId)
+                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
+
+        if (scenario.getCreator().getId() != user.getId()) {
+            throw new IllegalArgumentException("You don't have permission to delete this scenario");
+        }
+
+        // 연관 데이터 삭제 (순서 중요: 외래키 제약 조건 고려)
+        // 1. Clue 먼저 삭제 (Room과 Scenario 모두 참조)
+        clueRepository.deleteByScenarioId(scenarioId);
+
+        // 2. Suspect 삭제
+        suspectRepository.deleteByScenarioId(scenarioId);
+
+        // 3. Victim 삭제
+        victimRepository.deleteByScenarioId(scenarioId);
+
+        // 4. Room 삭제
+        roomRepository.deleteByScenarioId(scenarioId);
+
+        // 5. Scenario 삭제
         scenarioRepository.deleteById(scenarioId);
+
         return new ScenarioDeleteResponse(scenarioId, true);
     }
 
@@ -731,8 +763,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Override
     @Transactional(readOnly = true)
     public ScenarioListResponse listScenarios() {
-        List<ScenarioListProjection> scenarios = scenarioRepository
-                .findAllByGenerationStatus(Scenario.GenerationStatus.COMPLETED);
+        List<ScenarioListProjection> scenarios = scenarioRepository.findAllProjectedBy();
 
         List<ScenarioListResponse.Item> items = scenarios.stream()
                 .map(this::toScenarioListItem)
@@ -793,25 +824,6 @@ public class ScenarioServiceImpl implements ScenarioService {
                 null,
                 scenario.getGenerationError()
         );
-    }
-
-    private List<JsonNode> buildFallbackClues(ObjectMapper mapper, List<Room> roomsByFloor) {
-        List<JsonNode> fallback = new ArrayList<>();
-        int count = Math.max(3, Math.min(6, roomsByFloor.size()));
-        for (int i = 0; i < count; i++) {
-            String roomName = roomsByFloor.isEmpty() ? "현장" : roomsByFloor.get(i % roomsByFloor.size()).getRoomName();
-            var node = mapper.createObjectNode();
-            node.put("name", roomName + "에서 발견된 물건");
-            node.put("description", roomName + "에서 발견된 수상한 물건이다.");
-            node.put("importance", "SUPPORTING");
-            node.put("assistant_comment", "자세히 조사해보자.");
-            var detail = mapper.createObjectNode();
-            detail.put("revealed_truth", "추가 정보를 찾을 수 있다.");
-            detail.put("discovery_script", "단서를 발견했다.");
-            node.set("clue_detail_json", detail);
-            fallback.add(node);
-        }
-        return fallback;
     }
 
     @Override

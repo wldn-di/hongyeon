@@ -72,30 +72,8 @@ public class CustomChatMemoryRepository implements ChatMemoryRepository {
     @Override
     @Transactional
     public void saveAll(@NonNull String conversationId, @NonNull List<Message> messages) {
-        ConversationKey key = parseConversationId(conversationId);
-
-        GameSession session = gameSessionRepository.findById(key.sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Session not found: " + key.sessionId));
-
-        // suspect가 없으면 저장하지 않음 (AI 응답 후 별도 처리)
-        Suspect suspect = suspectRepository.findById(key.suspectId).orElse(null);
-        if (suspect == null) {
-            return; // suspect가 없으면 저장하지 않고 건너뜀
-        }
-
-        for (Message message : messages) {
-            ChatMessage chatMessage = ChatMessage.builder()
-                    .session(session)
-                    .suspect(suspect)
-                    .role(getRoleFromMessage(message))
-                    .content(message.getText())
-                    .usedClueId(null)
-                    .responseLevel(null)
-                    .keyTalk(false)
-                    .build();
-
-            chatMessageRepository.save(chatMessage);
-        }
+        // chatWithSuspect에서 직접 저장하므로 중복 방지를 위해 아무것도 하지 않음
+        return;
     }
 
     @Override
