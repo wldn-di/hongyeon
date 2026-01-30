@@ -26,5 +26,5 @@ public interface BoardConnectionRepository extends JpaRepository<BoardConnection
 
     void deleteBySessionAndIdIn(GameSession session, List<Long> ids);
 
-    void deleteBySessionId(long sessionId);
+    void deleteBySessionId(Long sessionId);
 }

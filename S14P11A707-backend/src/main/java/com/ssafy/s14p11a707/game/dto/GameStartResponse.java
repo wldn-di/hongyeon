@@ -17,6 +17,7 @@ public record GameStartResponse(
         long scenarioId,
         long userId,
         String status,
+        boolean alreadyPlaying,
         Instant startedAt,
         ScenarioItem scenario,
         VictimItem victim,
@@ -36,6 +37,7 @@ public record GameStartResponse(
                 scenarioEntity.getId(),
                 session.getUser().getId(),
                 session.getStatus().name(),
+                false,
                 session.getStartedAt(),
                 ScenarioItem.from(scenarioEntity),
                 victimEntity != null ? VictimItem.from(victimEntity) : null,
@@ -52,7 +54,20 @@ public record GameStartResponse(
             return new ScenarioItem(entity.getTitle(), entity.getSynopsis());
         }
     }
-
+    public static GameStartResponse alreadyPlaying(GameSession session) {
+        return new GameStartResponse(
+                session.getId(),
+                session.getScenario().getId(),
+                session.getUser().getId(),
+                session.getStatus().name(),
+                true,
+                session.getStartedAt(),
+                null,
+                null,
+                null,
+                null
+        );
+    }
     public record VictimItem(
             String name,
             int age,

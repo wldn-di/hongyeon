@@ -1,38 +1,12 @@
 package com.ssafy.s14p11a707.game.api;
 
-import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
-import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
-import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
-import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
-import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
-import com.ssafy.s14p11a707.game.dto.BoardResponse;
-import com.ssafy.s14p11a707.game.dto.ClueDetailResponse;
-import com.ssafy.s14p11a707.game.dto.ClueListResponse;
-import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
-import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
-import com.ssafy.s14p11a707.game.dto.FloorMoveRequest;
-import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
-import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
-import com.ssafy.s14p11a707.game.dto.GameStartResponse;
-import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
-import com.ssafy.s14p11a707.game.dto.SubmitRequest;
-import com.ssafy.s14p11a707.game.dto.SubmitResponse;
-import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
-import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
-import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
+import com.ssafy.s14p11a707.game.dto.*;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -143,55 +117,13 @@ public class SessionApi implements SessionApiDoc {
         return ResponseEntity.ok(gameSessionService.getBoard(sessionId, oidcUser));
     }
 
-    @PostMapping("/{sessionId}/board/nodes")
-    @Override
-    public ResponseEntity<BoardResponse> addBoardNode(
+    @PutMapping("/{sessionId}/board")
+    public ResponseEntity<BoardResponse> saveBoard(
             @PathVariable long sessionId,
-            @RequestBody BoardNodeAddRequest request,
+            @RequestBody BoardSaveRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.addBoardNode(sessionId, request, oidcUser));
-    }
-
-    @PatchMapping("/{sessionId}/board/nodes/position")
-    @Override
-    public ResponseEntity<BoardResponse> moveBoardNode(
-            @PathVariable long sessionId,
-            @RequestBody BoardItemMoveRequest request,
-            @AuthenticationPrincipal OidcUser oidcUser
-    ) {
-        return ResponseEntity.ok(gameSessionService.moveBoardNode(sessionId, request, oidcUser));
-    }
-
-    @PatchMapping("/{sessionId}/board/nodes/{nodeId}")
-    @Override
-    public ResponseEntity<BoardResponse> updateBoardMemo(
-            @PathVariable long sessionId,
-            @PathVariable long nodeId,
-            @RequestBody BoardMemoUpdateRequest request,
-            @AuthenticationPrincipal OidcUser oidcUser
-    ) {
-        return ResponseEntity.ok(gameSessionService.updateBoardMemo(sessionId, nodeId, request, oidcUser));
-    }
-
-    @PostMapping("/{sessionId}/board/connections")
-    @Override
-    public ResponseEntity<BoardResponse> addBoardConnection(
-            @PathVariable long sessionId,
-            @RequestBody BoardConnectionAddRequest request,
-            @AuthenticationPrincipal OidcUser oidcUser
-    ) {
-        return ResponseEntity.ok(gameSessionService.addBoardConnection(sessionId, request, oidcUser));
-    }
-
-    @DeleteMapping("/{sessionId}/board")
-    @Override
-    public ResponseEntity<BoardResponse> deleteBoard(
-            @PathVariable long sessionId,
-            @RequestBody BoardDeleteRequest request,
-            @AuthenticationPrincipal OidcUser oidcUser
-    ) {
-        return ResponseEntity.ok(gameSessionService.deleteBoard(sessionId, request, oidcUser));
+        return ResponseEntity.ok(gameSessionService.saveBoard(sessionId, request, oidcUser));
     }
 
     @PostMapping("/{sessionId}/submit")

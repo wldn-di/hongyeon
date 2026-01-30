@@ -112,7 +112,7 @@ public class GameSessionServiceImpl implements GameSessionService {
 
             if (session.getStatus() == Status.PLAYING) {
                 // TODO: 프론트에서 resumeGame API 호출
-                throw new BaseException(ErrorCode.SESSION_ALREADY_EXISTS);
+                return GameStartResponse.alreadyPlaying(session);
             } else {
                 // COMPLETED | FAILED -> 세션 초기화
                 resetSession(session);
@@ -173,6 +173,7 @@ public class GameSessionServiceImpl implements GameSessionService {
     }
 
     private void resetSession(GameSession session) {
+
         // 연관 데이터 삭제
         boardConnectionRepository.deleteBySessionId(session.getId());
         boardNodeRepository.deleteBySessionId(session.getId());
@@ -182,6 +183,9 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // 세션 초기화
         session.reset(objectMapper.valueToTree(List.of(1)));
+
+
+        gameSessionRepository.save(session);
     }
 
     private GameStartResponse buildStartResponse(GameSession session, Scenario scenario, EventLog startLog) {
@@ -192,9 +196,18 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     // TODO: 프론트 호출 흐름: 세션 기본정보(현) + 인벤토리, 보드, 로그, 채팅내역
     @Override
+    @Transactional
     public GameResumeResponse resumeGame(long sessionId, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+
+        // PLAYING이 아니면 리셋 후 재시작
+        if (session.getStatus() != Status.PLAYING) {
+            resetSession(session);
+            saveEventLog(session, GAME_START, null);
+            // 리셋 후 save 확인
+            gameSessionRepository.save(session);
+        }
 
         List<Integer> visitedFloors = parseVisitedFloors(session.getVisitedFloorsJson());
         List<DiscoveredClue> discoveredClues = discoveredClueRepository
@@ -309,6 +322,7 @@ public class GameSessionServiceImpl implements GameSessionService {
      */
     // TODO : session.updateProgress(), saveEventLog() 필요
     @Override
+    @Transactional
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
         // 용의자 정보 조회
         Suspect suspect = suspectRepository.findById(suspectId)
@@ -553,96 +567,52 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     @Override
     @Transactional
-    public BoardResponse addBoardNode(long sessionId, BoardNodeAddRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-        ItemType itemType = parseItemType(request.type());
-
-        // TODO: 타입과 targetId가 모두 일치하면 에러처리
-
-        BoardNode node = BoardNode.builder()
-                .session(session)
-                .itemType(itemType)
-                .targetId(request.targetId())
-                .memoContent(request.memoContent())
-                .positionX(request.x())
-                .positionY(request.y())
-                .build();
-        boardNodeRepository.save(node);
-
-        session.updateProgress();
-
-        return buildBoardResponse(sessionId);
-    }
-
-    @Override
-    @Transactional
-    public BoardResponse moveBoardNode(long sessionId, BoardItemMoveRequest request, OidcUser oidcUser) {
+    public BoardResponse saveBoard(long sessionId, BoardSaveRequest request, OidcUser oidcUser) {
         User user = getUser(oidcUser);
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
 
-        BoardNode node = getBoardNodeWithValidation(session, request.nodeId());
-        node.updatePosition(request.x(), request.y());
-        session.updateProgress();
+        // 1. 기존 연결선 전체 삭제
+        boardConnectionRepository.deleteBySessionId(sessionId);
 
+        // 2. 기존 노드 전체 삭제
+        boardNodeRepository.deleteBySessionId(sessionId);
 
-        return buildBoardResponse(sessionId);
-    }
+        // 3. 새 노드 저장
+        List<BoardNode> savedNodes = new ArrayList<>();
 
-    @Override
-    @Transactional
-    public BoardResponse updateBoardMemo(long sessionId, long nodeId, BoardMemoUpdateRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-
-        BoardNode node = getBoardNodeWithValidation(session, nodeId);
-
-        if(!MEMO.equals(node.getItemType())){
-            throw new BaseException(ErrorCode.BOARD_NOT_MEMO);
-        }
-        node.updateMemoContent(request.memoContent());
-
-        session.updateProgress();
-
-        return buildBoardResponse(sessionId);
-    }
-
-    @Override
-    @Transactional
-    public BoardResponse addBoardConnection(long sessionId, BoardConnectionAddRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-
-        BoardNode fromNode = getBoardNodeWithValidation(session, request.fromNodeId());
-        BoardNode toNode = getBoardNodeWithValidation(session, request.toNodeId());
-        validateConnectionNotExists(session, fromNode, toNode);
-        ConnectionType connectionType = parseConnectionType(request.type());
-
-        BoardConnection connection = BoardConnection.builder()
-                .session(session)
-                .fromNode(fromNode)
-                .toNode(toNode)
-                .connectionType(connectionType)
-                .build();
-        boardConnectionRepository.save(connection);
-
-        session.updateProgress();
-
-        return buildBoardResponse(sessionId);
-    }
-
-    @Override
-    @Transactional
-    public BoardResponse deleteBoard(long sessionId, BoardDeleteRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
-
-        if (request.connectionIds() != null && !request.connectionIds().isEmpty()) {
-            boardConnectionRepository.deleteBySessionIdAndIdIn(sessionId, request.connectionIds());
+        if (request.nodes() != null) {
+            for (var nodeReq : request.nodes()) {
+                BoardNode node = BoardNode.builder()
+                        .session(session)
+                        .itemType(parseItemType(nodeReq.type()))
+                        .targetId(nodeReq.targetId())
+                        .memoContent(nodeReq.memoContent())
+                        .positionX(nodeReq.x())
+                        .positionY(nodeReq.y())
+                        .build();
+                savedNodes.add(boardNodeRepository.save(node));
+            }
         }
 
-        if (request.nodeIds() != null && !request.nodeIds().isEmpty()) {
-            boardNodeRepository.deleteBySessionIdAndIdIn(sessionId, request.nodeIds());
+        // 4. 새 연결선 저장 (fromIndex/toIndex -> 실제 노드 매핑)
+        if (request.connections() != null) {
+            for (var connReq : request.connections()) {
+                if (connReq.fromIndex() < 0 || connReq.fromIndex() >= savedNodes.size() ||
+                        connReq.toIndex() < 0 || connReq.toIndex() >= savedNodes.size()) {
+                    continue; // 잘못된 인덱스 무시
+                }
+
+                BoardNode fromNode = savedNodes.get(connReq.fromIndex());
+                BoardNode toNode = savedNodes.get(connReq.toIndex());
+
+                BoardConnection connection = BoardConnection.builder()
+                        .session(session)
+                        .fromNode(fromNode)
+                        .toNode(toNode)
+                        .connectionType(parseConnectionType(connReq.type()))
+                        .build();
+                boardConnectionRepository.save(connection);
+            }
         }
 
         session.updateProgress();
@@ -660,23 +630,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .count();
 
         return BoardResponse.from(sessionId, nodes, connections, redCount);
-    }
-
-    private BoardNode getBoardNodeWithValidation(GameSession session, long nodeId) {
-        BoardNode node = boardNodeRepository.findById(nodeId)
-                .orElseThrow(() -> new BaseException(ErrorCode.BOARD_NODE_NOT_FOUND));
-
-        if (node.getSession().getId() != session.getId()) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-        return node;
-    }
-
-    private void validateConnectionNotExists(GameSession session, BoardNode fromNode, BoardNode toNode) {
-        if (boardConnectionRepository.existsBySessionIdAndFromNodeIdAndToNodeId(session.getId(), fromNode.getId(), toNode.getId()) ||
-                boardConnectionRepository.existsBySessionIdAndFromNodeIdAndToNodeId(session.getId(), toNode.getId(), fromNode.getId())) {
-            throw new BaseException(ErrorCode.BOARD_CONNECTION_ALREADY_EXISTS);
-        }
     }
 
     private ItemType parseItemType(String type) {
@@ -764,6 +717,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         // 2. 제출 횟수 확인 (>= 3이면 FAIL)
         if (attempts >= 3) {
             session.failGame();
+            gameSessionRepository.save(session);
             // 유저 플레이 시간 누적
             long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
             user.addPlayTime(playTime);
@@ -830,12 +784,13 @@ public class GameSessionServiceImpl implements GameSessionService {
         boolean locationCorrect = false;
 
         if (truthConfig != null) {
-            long correctCulpritId = truthConfig.has("culpritSuspectId")
-                    ? truthConfig.get("culpritSuspectId").asLong() : 0;
-            long correctWeaponClueId = truthConfig.has("weaponClueId")
-                    ? truthConfig.get("weaponClueId").asLong() : 0;
-            int correctLocationFloor = truthConfig.has("locationFloor")
-                    ? truthConfig.get("locationFloor").asInt() : 0;
+            // 수정 (DB 스키마에 맞춤)
+            long correctCulpritId = truthConfig.has("culprit_id")
+                    ? truthConfig.get("culprit_id").asLong() : 0;
+            long correctWeaponClueId = truthConfig.has("weapon_clue_id")
+                    ? truthConfig.get("weapon_clue_id").asLong() : 0;
+            int correctLocationFloor = truthConfig.has("location_floor")
+                    ? truthConfig.get("location_floor").asInt() : 0;
 
             culpritCorrect = (request.culpritId() == correctCulpritId);
             weaponCorrect = (request.weaponClueId() == correctWeaponClueId);
@@ -852,6 +807,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             // 3회 다 썼으면 FAILED
             if (newAttempts >= 3) {
                 session.failGame();
+                gameSessionRepository.save(session);
                 // 유저 플레이 시간 누적
                 long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
                 user.addPlayTime(playTime);

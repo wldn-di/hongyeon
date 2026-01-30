@@ -1,26 +1,7 @@
 package com.ssafy.s14p11a707.game.api;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
-import com.ssafy.s14p11a707.game.dto.BoardConnectionAddRequest;
-import com.ssafy.s14p11a707.game.dto.BoardDeleteRequest;
-import com.ssafy.s14p11a707.game.dto.BoardItemMoveRequest;
-import com.ssafy.s14p11a707.game.dto.BoardMemoUpdateRequest;
-import com.ssafy.s14p11a707.game.dto.BoardNodeAddRequest;
-import com.ssafy.s14p11a707.game.dto.BoardResponse;
-import com.ssafy.s14p11a707.game.dto.ClueDetailResponse;
-import com.ssafy.s14p11a707.game.dto.ClueListResponse;
-import com.ssafy.s14p11a707.game.dto.DiscoveredClueResponse;
-import com.ssafy.s14p11a707.game.dto.EventLogListResponse;
-import com.ssafy.s14p11a707.game.dto.FloorMoveRequest;
-import com.ssafy.s14p11a707.game.dto.FloorMoveResponse;
-import com.ssafy.s14p11a707.game.dto.GameResumeResponse;
-import com.ssafy.s14p11a707.game.dto.GameStartResponse;
-import com.ssafy.s14p11a707.game.dto.InvestigationReportResponse;
-import com.ssafy.s14p11a707.game.dto.SubmitRequest;
-import com.ssafy.s14p11a707.game.dto.SubmitResponse;
-import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
-import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
-import com.ssafy.s14p11a707.game.dto.ChatHistoryResponse;
+import com.ssafy.s14p11a707.game.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
@@ -308,12 +289,17 @@ public interface SessionApiDoc {
     })
     ResponseEntity<BoardResponse> getBoard(long sessionId, OidcUser oidcUser);
 
-    @Operation(summary = "보드 노드 추가", description = "추리 보드에 노드를 추가합니다.")
+    @Operation(summary = "보드 전체 저장", description = "추리 보드의 모든 노드와 연결선을 저장합니다. 기존 데이터를 모두 삭제하고 새로운 데이터로 교체합니다.")
     @ApiResponses({
             @ApiResponse(
                     responseCode = "200",
-                    description = "추가 성공",
+                    description = "저장 성공",
                     content = @Content(schema = @Schema(implementation = BoardResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청 (유효하지 않은 인덱스 등)",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             ),
             @ApiResponse(
                     responseCode = "401",
@@ -331,112 +317,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<BoardResponse> addBoardNode(long sessionId, BoardNodeAddRequest request, OidcUser oidcUser);
-
-    @Operation(summary = "보드 노드 이동", description = "추리 보드의 노드 위치를 이동합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "이동 성공",
-                    content = @Content(schema = @Schema(implementation = BoardResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "인증 필요",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "403",
-                    description = "접근 권한 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "세션/노드를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<BoardResponse> moveBoardNode(long sessionId, BoardItemMoveRequest request, OidcUser oidcUser);
-
-    @Operation(summary = "보드 메모 수정", description = "추리 보드의 메모 노드 내용을 수정합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "수정 성공",
-                    content = @Content(schema = @Schema(implementation = BoardResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "인증 필요",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "403",
-                    description = "접근 권한 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "세션/노드를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<BoardResponse> updateBoardMemo(long sessionId, long nodeId, BoardMemoUpdateRequest request, OidcUser oidcUser);
-
-    @Operation(summary = "보드 연결선 추가", description = "추리 보드에 연결선을 추가합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "추가 성공",
-                    content = @Content(schema = @Schema(implementation = BoardResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "인증 필요",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "403",
-                    description = "접근 권한 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "세션/노드를 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "409",
-                    description = "이미 연결된 노드",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<BoardResponse> addBoardConnection(long sessionId, BoardConnectionAddRequest request, OidcUser oidcUser);
-
-    @Operation(summary = "보드 삭제", description = "추리 보드의 노드/연결선을 삭제합니다.")
-    @ApiResponses({
-            @ApiResponse(
-                    responseCode = "200",
-                    description = "삭제 성공",
-                    content = @Content(schema = @Schema(implementation = BoardResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "401",
-                    description = "인증 필요",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "403",
-                    description = "접근 권한 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            ),
-            @ApiResponse(
-                    responseCode = "404",
-                    description = "세션을 찾을 수 없음",
-                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
-            )
-    })
-    ResponseEntity<BoardResponse> deleteBoard(long sessionId, BoardDeleteRequest request, OidcUser oidcUser);
+    ResponseEntity<BoardResponse> saveBoard(long sessionId, BoardSaveRequest request, OidcUser oidcUser);
 
     @Operation(summary = "최종 정답 제출", description = "보드 검증 + 범인/흉기/장소/동기 채점 + 결과 처리를 수행합니다.")
     @ApiResponses({
