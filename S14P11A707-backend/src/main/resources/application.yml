@@ -21,11 +21,11 @@ spring:
       # pgvector 등 확장/기본 DDL은 schema.sql에서 관리
       mode: ${SQL_INIT_MODE:always}
 
-  neo4j:
-    uri: ${NEO4J_URI:bolt://localhost:7687}
-    authentication:
-      username: ${NEO4J_USERNAME:neo4j}
-      password: ${NEO4J_PASSWORD:}
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
 
   jpa:
     hibernate:
@@ -92,6 +92,11 @@ app:
     # 절대 URL 리다이렉트를 허용할 origin allowlist (comma-separated)
     # - 예) https://hongyeon.cloud-ip.cc,http://localhost:5173
     allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:}
+  minio:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    access-key: ${MINIO_ACCESS_KEY:minioadmin}
+    secret-key: ${MINIO_SECRET_KEY:ssafy1031}
+    bucket: ${MINIO_BUCKET:hongyeon}
 
 server:
   # CloudFront/ALB/Nginx 뒤에서 {baseUrl}의 scheme/host가 꼬일 때 사용

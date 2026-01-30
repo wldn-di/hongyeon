@@ -1,5 +1,5 @@
-# 간단한 CI/CD - 도커 없이
-# main/master 푸시 시 → 프론트 빌드 → 백엔드 jar 빌드 → EC2 배포
+# 간단한 CI/CD - Docker Compose(서버) 기반
+# main/master 푸시 시 → 프론트 빌드 → 백엔드 bootBuildImage → GitLab Registry push → 서버에서 compose pull/up
 
 stages:
   - build
@@ -8,18 +8,36 @@ stages:
 variables:
   FRONTEND_DIR: "S14P11A707-frontend"
   BACKEND_DIR: "S14P11A707-backend"
-  DEPLOY_PATH: "/home/ubuntu/app"
+  REMOTE_COMPOSE_DIR: "/home/ubuntu/infra"
+  IMAGE_REPO: "$CI_REGISTRY_IMAGE/backend"
+  IMAGE_TAG: "$CI_COMMIT_REF_SLUG"
+
+  # dind (Docker-in-Docker) 사용
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_TLS_CERTDIR: ""
 
 # -----------------------------
-# 1) 빌드: 프론트 → 백엔드 static 복사 → jar 생성
+# 1) 빌드: 프론트 → 백엔드 static 복사 → bootBuildImage + push
 # -----------------------------
 build:
   stage: build
   image: gradle:8.10.0-jdk21-jammy
+  services:
+    - name: docker:27.0.3-dind
+      command: ["--tls=false"]
   rules:
     - if: '$CI_COMMIT_REF_NAME =~ /^(main|master)$/'
+      variables:
+        IMAGE_TAG: "prod"
+    - if: '$CI_COMMIT_REF_NAME == "test-build"'
   script:
     - set -euo pipefail
+    - export IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
+    - echo "CI_REGISTRY=$CI_REGISTRY"
+    - echo "CI_REGISTRY_IMAGE=$CI_REGISTRY_IMAGE"
+    - echo "IMAGE_REPO=$IMAGE_REPO"
+    - echo "IMAGE_TAG=$IMAGE_TAG"
+    - echo "IMAGE_NAME=$IMAGE_NAME"
 
     # Node.js 설치 (프론트 빌드용)
     - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
@@ -33,24 +51,22 @@ build:
     # 스프링부트 resources/static 폴더 생성 및 dist 복사
     - cd "$CI_PROJECT_DIR"
     - mkdir -p "$BACKEND_DIR/src/main/resources/static"
+    - rm -rf "$BACKEND_DIR/src/main/resources/static/"*
     - cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/main/resources/static/"
 
-    # 스프링부트 jar 빌드
+    # GitLab Container Registry 인증 설정 (~/.docker/config.json)
+    - mkdir -p ~/.docker
+    - |
+      auth="$(printf "%s:%s" "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 -w0)"
+      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$CI_REGISTRY" "$auth" > ~/.docker/config.json
+
+    # 스프링부트 이미지 빌드 + push
     - cd "$BACKEND_DIR"
     - chmod +x gradlew
-    - ./gradlew --no-daemon bootJar
-
-    # jar 파일을 artifact로 저장 (deploy 단계에서 사용)
-    - cd "$CI_PROJECT_DIR"
-    - mkdir -p artifacts
-    - cp "$BACKEND_DIR"/build/libs/*.jar artifacts/app.jar
-  artifacts:
-    paths:
-      - artifacts/app.jar
-    expire_in: 1 hour
+    - ./gradlew --no-daemon bootBuildImage --publishImage --imageName="$IMAGE_NAME"
 
 # -----------------------------
-# 2) 배포: EC2에 jar 전송 + 재시작
+# 2) 배포: 서버에서 compose pull/up
 # -----------------------------
 deploy:
   stage: deploy
@@ -67,34 +83,8 @@ deploy:
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan i14a707.p.ssafy.io >> ~/.ssh/known_hosts
   script:
-    # 배포 경로 생성
-    - ssh ubuntu@i14a707.p.ssafy.io "mkdir -p $DEPLOY_PATH"
-
-    # jar 파일 전송
-    - scp artifacts/app.jar ubuntu@i14a707.p.ssafy.io:$DEPLOY_PATH/app.jar
-
-    # 프로세스 종료 후 재시작
     - |
-      ssh ubuntu@i14a707.p.ssafy.io "
-        cd $DEPLOY_PATH
-
-        # Java 설치 (없으면 자동 설치)
-        if ! command -v java &> /dev/null; then
-          sudo apt-get update && sudo apt-get install -y openjdk-21-jdk
-        fi
-
-        # 기존 프로세스 종료
-        if [ -f pid.txt ]; then
-          kill \$(cat pid.txt) 2>/dev/null || true
-        fi
-        pkill -f 'app.jar' 2>/dev/null || true
-        sleep 2
-
-        # 새 jar 실행 (백그라운드)
-        nohup java -jar app.jar > app.log 2>&1 &
-        echo \$! > pid.txt
-        echo '애플리케이션 시작됨'
-      "
+      printf '%s' "$CI_REGISTRY_PASSWORD" | ssh ubuntu@i14a707.p.ssafy.io "docker login \"$CI_REGISTRY\" -u \"$CI_REGISTRY_USER\" --password-stdin && cd \"$REMOTE_COMPOSE_DIR\" && docker compose pull backend && docker compose up -d --remove-orphans && docker compose ps"
 
   environment:
     name: production
