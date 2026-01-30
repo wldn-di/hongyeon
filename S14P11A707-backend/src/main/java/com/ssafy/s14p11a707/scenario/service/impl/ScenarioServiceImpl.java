@@ -497,7 +497,28 @@ public class ScenarioServiceImpl implements ScenarioService {
             }
             suspectRepository.saveSuspects(suspects);
 
-            // 9. Rooms 저장
+            // 9. culprit_id를 실제 DB ID로 업데이트
+            // AI가 생성한 culprit_id는 suspects 배열의 인덱스이므로, is_culprit=true인 용의자의 실제 DB ID를 찾아야 함
+            Long actualCulpritId = null;
+            for (Suspect s : suspects) {
+                if (s.isCulprit()) {
+                    actualCulpritId = s.getId();
+                    break;
+                }
+            }
+
+            if (actualCulpritId != null) {
+                // truthConfig의 culprit_id를 실제 DB ID로 업데이트
+                ((com.fasterxml.jackson.databind.node.ObjectNode) truthConfig).put("culprit_id", actualCulpritId);
+                // Scenario의 truthConfigJson 업데이트
+                scenario.setTruthConfigJson(truthConfig);
+                scenarioRepository.saveScenario(scenario);
+                log.info("culprit_id 업데이트 완료: 실제 ID {}", actualCulpritId);
+            } else {
+                log.warn("culprit_id를 찾을 수 없음. suspects size={}", suspects.size());
+            }
+
+            // 10. Rooms 저장
             // ★ RoomLayoutService를 호출하여 랜덤 가구 배치 적용
             Map<Integer, Room> roomMap = new LinkedHashMap<>();
             for (JsonNode roomNode : roomsNode) {
