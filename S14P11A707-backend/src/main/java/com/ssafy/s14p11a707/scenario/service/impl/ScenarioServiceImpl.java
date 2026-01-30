@@ -82,37 +82,34 @@ public class ScenarioServiceImpl implements ScenarioService {
                     }
                     """, request.title(), request.genre(), request.suspectCount(), request.userSynopsis());
 
-            // 2. 첫 번째 AI 호출: 사건 타임라인 생성
+            // ========================================================================
+            // 1단계: 타임라인 생성
+            // ========================================================================
             String timelineSystemMessage = """
-                    전체 시스템 명령:
-                    추리 게임의 시나리오를 생성하기 위한 작업 진행. 아래에 명시해주는 내용과 형식 기반으로 응답을 하고 그 외에 사담을 섞지 말고 응답을 제공, Json 형식으로 출력:
-                    
-                    첫번째 AI 호출 작업 = Timeline 생성
-                    
                     Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
-                    당신은 사용자가 제공한 '장르', '인원수', '간단한 시놉시스'를 바탕으로 사건의 타임라인을 우선 작성해야 합니다 작업의 순서는 다음과 같습니다:
-                    
-                    사건이 일어난 하루의 타임라인을 30분 간격으로 JSON 배열 형식으로 작성하십시오.
-                    
-                    1) 사건과 사건이 일어난 하루의 TImeline 생성 단계 수행
-                    
-                    사건과 사건이 일어난 하루의 TImeline 생성 단계 수행 시 주의사항:
-                    
-                    - 범인 은닉: 타임라인상에서 범인의 이름을 직접적으로 살해 행위("사건 발생 — 최도윤이 안준호를 살해")와 연결하지 마십시오. 대신 "사건 발생 시각", "비명 소리 발생", 또는 "정전 발생"과 같이 객관적인 현상 위주로 서술하십시오.
-                    - 중립적 서술: 모든 용의자의 행동은 범행 여부와 관계없이 의심스럽거나 알리바이를 증명하는 활동 위주로 구성하십시오. (예: "서재 근처에서 목격됨", "자리를 비움" 등)
-                    - 결말 포함 금지: 1단계 타임라인에서는 '범인 체포', '범행 자백', '사인 확인'과 같은 수사 결과나 엔딩 내용을 포함하지 마십시오. 타임라인은 사건 발생 및 발견 시점까지만 구성하거나, 발견 이후의 혼란 상황까지만 묘사하십시오.
-                    - 증거 위주 구성: 타임라인 생성 단계에서는 유저가 직접 수사를 통해서 얻고 추리를 해야하는 증거 등에 대한 직접적인 언급을 피하십시오
-                    
-                    출력 예시:
-                                       {
-                                          "timeline": [
-                                            {"time": "22:00", "event": "피해자가 연구실에 도착"},
-                                            {"time": "23:00", "event": "용의자 A와 피해자가 언쟁"},
-                                            {"time": "23:30", "event": "사건 발생"}
-                                          ]
-                                        }
-                    """;
+                    당신은 사용자가 제공한 '장르', '인원수', '간단한 시놉시스'를 바탕으로 사건의 타임라인을 우선 작성해야 합니다. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오, 작업의 순서는 다음과 같습니다:
 
+                    사건이 일어난 하루의 타임라인을 30분 간격으로 JSON 배열 형식으로 작성하십시오.
+
+                    당신은 전문 추리 게임 시나리오 작가입니다. 사용자의 입력을 바탕으로 사건의 트릭과 개연성이 확보된 타임라인을 작성하십시오. 사담 없이 JSON 형식으로만 응답하십시오.
+
+                    [작성 규칙]
+                    1. 사건 당일의 타임라인을 30분 간격으로 구성하십시오.
+                    2. 범인 은닉: 살해 행위를 특정 인물과 연결하지 말고 "비명 소리", "사건 발생" 등 객관적 현상으로 서술하십시오.
+                    3. 중립적 서술: 모든 인물의 행동은 알리바이 증명이나 의심스러운 정황 위주로 구성하십시오.
+                    4. 결말 포함 금지: 사인 확인이나 엔딩 내용은 배제하고 사건 발견 직후의 혼란 상황까지만 묘사하십시오.
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
+                    출력 예시:
+                    {
+                      "timeline": [
+                        {"time": "22:00", "event": "피해자가 연구실에 도착"},
+                        {"time": "23:00", "event": "용의자 A와 피해자가 언쟁"},
+                        {"time": "23:30", "event": "사건 발생"}
+                      ]
+                    }
+                    """;
 
             StringBuilder timelineSb = new StringBuilder();
             chatClient.prompt()
@@ -124,253 +121,313 @@ public class ScenarioServiceImpl implements ScenarioService {
                     .blockLast();
 
             String timelineJson = timelineSb.toString();
-
-            // 3. 두 번째 AI 호출: 타임라인을 바탕으로 시나리오 전체 생성
-            // ★ 중요: rooms 부분 프롬프트 수정 (room_type을 명확하게 지정)
-            String scenarioSystemMessage = """
-                                        전체 시스템 명령:
-                                        추리 게임의 시나리오를 생성하기 위한 작업 진행. 아래에 명시해주는 내용과 형식 기반으로 응답을 하고 그 외에 사담을 섞지 말고 응답을 제공, Json 형식으로 출력:
-                    
-                                        Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 논리적 트릭과 반전이 포함된 시나리오를 작성하는 데 특화되어 있습니다. 유저가 단서를 통해 동기, 범인, 수법을 추리할 수 있도록 구성하십시오.
-                    
-                    아래의 사건 타임라인을 참고하여 시나리오를 JSON 형식으로 작성하십시오.
-                    
-                    ### 생성 및 작성 규칙 (절대 준수):
-                    1. **고유 ID 사용 (중요)**:
-                       - 모든 용의자와 단서에는 고유 ID를 부여하고, 상호 참조 시 이 ID를 엄격히 사용하십시오.
-                       - suspect_count는 유저가 입력한 값을 반드시 따르며, 범인은 그중 1명으로 한정합니다.
-                    
-                    2. **데이터 정합성 및 누락 방지 (절대 준수)**:
-                       - 중복 검증: 모든 용의자의 weakness_clue에 정의된 id, name, description은 반드시 하단의 clues 배열에 동일하게 포함되어야 합니다.
-                       - 흉기 연결: truth_config_json.weapon_clue_id는 clues 배열에 존재하는 단서 ID여야 합니다.
-                    
-                    3. **공간 및 단서 제한 (절대 준수)**:
-                       - 'rooms' 배열의 길이는 반드시 정확히 6개여야 합니다. (5개 이하 혹은 7개 이상 금지)
-                       - 각 room의 'floor_number'는 반드시 1, 2, 3, 4, 5, 6 중 하나를 순차적으로 할당하십시오. 
-                       - 층이 겹치거나 누락되어서는 안 됩니다.
-                       - clues 배열의 길이는 반드시 최소 8개 이상, 최대 12개 이하로 구성하십시오.
-                       - 모든 단서는 시나리오 내에서 논리적 근거가 있어야 하며, 단순히 개수를 채우기 위한 무의미한 아이템은 배제하십시오.
-                    
-                    4. **타임라인 확장 (절대 준수)**:
-                       - 1단계의 모든 항목을 `story_config_json.timeline`에 포함하십시오.
-                       - 각 타임라인 객체는 반드시 `{"time": "HH:MM", "event": "내용", "witness": "목격자ID 또는 관련자ID"}` 형식을 유지해야 합니다.
-                    
-                    5. **"assistant_comment": "[조수 코멘트]", "discovery_script": "[조수 코멘트(밝혀지는 사실)]"영역 작성 지침**:
-                       - 해당 comment는 조수가 탐정(유저)에게 말을 거는 느낌으로 친근함과 몰입감을 제공하는걸 목적으로 함
-                       - 직접적인 정답(예: "범인은 A네요")을 언급하는 것을 절대 금지합니다. 
-                       - 조수는 오직 현상의 기괴함이나 의문점만을 제시해야 합니다. (예: "이 메모, 글씨가 너무 급해 보여요. 무슨 긴박한 사정이라도 있었을까요?")
-                       - 해당 영역 작성 시 추리에 직접적인 힌트가 될 수 있는지 여부를 마지막에 다시 확인 후 만약 그렇다면 내용을 다시 작성해야 함
-                       - 예시: 피 묻은 장갑 획득 시:
-                         "assistant_comment": "장갑에 뭐가 잔뜩 묻어있는 것 같아요 탐정님, 이거 혹시 피 아닌가요?" }
-                       - discovery_script는 밝혀지는 사실에 대한 정보를 제공하지만, 어투는 assistant_comment의 조수의 어투를 공유합니다
-                       - 예시: 범인의 독백이 적힌 일기 획득 시:
-                          "discovery_script": "범인은 이런 생각을 하고 있었군요..."
-                    
-                    6. **"suspect_count 반드시 반영"**:
-                       - 용의자의 수는 처음 user로부터 입력받은 수를 반드시 따라야 합니다
-                       - 범인은 반드시 그 중 한 명이 될 수 있도록 합니다
-                       - 여러 사건이 겹치더라도 범인은 직접적인 피해자를 사망으로 이끈 한 사람으로 제한합니다. 피해자 정보의 사인과 진실 설정의 사인은 반드시 논리적으로 일치해야 합니다.
-                    
-                    7. **입력 데이터 유효성 처리 (Fallback Strategy)**:
-                       - 유저의 입력(`title`, `synopsis`)이 한글/영어 문장으로서의 의미가 없거나, 단순 자음/모음 나열, 혹은 문장 부호 하나로만 구성된 경우, 작가의 상상력을 발휘하여 정통 본격 추리물 혹은 스릴러 장르 중 하나를 랜덤으로 선택해 시나리오를 완성하십시오. 
-                       - 사용자가 '.' 하나만 입력했더라도, 그것을 '점(Dot)'이나 '마침표'라는 키워드로 해석해 사건을 만들거나, 혹은 완전히 무시하고 독자적인 시나리오를 생성해도 무방합니다.
-                    
-                    8. **레드 헤링(Red Herring) 및 더미 증거 전략***:
-                    
-                       - 필드 구조를 변경하지 말고, clue_detail_json.revealed_truth의 서술 방식을 통해 혼란을 주십시오.
-                       - 더미 단서 포함: 전체 단서 중 최소 2~3개는 범행과 무관한 용의자의 개인적 비밀(도박 빚, 불륜, 단순 절도 등)을 담아 유저가 동기를 오판하게 만드십시오.
-                       - 내용 구성: 레드 헤링 단서의 revealed_truth에는 "이 단서는 ~한 사실을 보여주지만, 결과적으로 살인 사건과는 무관하다"는 논리적 해설을 포함하십시오.
-                       - 증거 구성 비율:
-                          - 핵심 단서 (Critical/High): 범행 수법 및 범인과 직접 연결된 단서 최소 3개.
-                          - 용의자 비밀 단서 (Weakness): 모든 용의자(suspect_count 만큼)에 대해 각 1개씩의 약점 단서 필수 포함.
-                          - 레드 헤링 (Dummy): 범행과 무관한 개인적 비밀을 담은 가짜 단서 최소 2개 포함.
-                          - 위 항목들을 합쳐 총 clues는 반드시 8개 이상이어야 합니다.
-                    
-                    9. **증거의 불확실성 및 익명화 (핵심)**:
-                       - **익명화**: `revealed_truth`에서 "피해자의 혈흔", "A의 지문"처럼 주인을 확정하지 마십시오. "누군가의 흔적", "이질적인 혈액형" 등으로 서술하십시오.
-                       - **대조 유도**: 유저가 용의자의 신체 특징(상처, 흉터, 습관)이나 소지품과 대조해야만 주인을 알 수 있게 설계하십시오.
-                    
-                    10. **텍스트 증거의 파편화 및 실명 기재 금지 (신설)**:
-                       - **실명 사용 금지**: 메모, 편지, 일기 등에서 용의자의 이름을 직접 쓰지 마십시오. "그 사람", "나의 파트너", "이니셜 K" 등 모호한 지칭어를 사용하십시오.
-                       - **정보 분리**: 하나의 텍스트 단서가 '시간, 장소, 범인, 동기'를 모두 담지 않게 하십시오. (예: 메모에는 약속 장소만 적고, 동기는 다른 일기장에서 발견되도록 분리)
-                       - **결론 도출 금지**: `discovery_script`에서 "죽이러 간 거였네요"와 같은 확정적 해석을 금지하고, 현상에 대한 의문만 제기하십시오.
-                    
-                    11. **사건 현장의 이원성 및 가변성 (핵심)**:
-                       - **현장 일치 여부의 자율성**: 실제 사건 발생 장소(location_floor)와 시신 발견 장소(discovery_location)는 시나리오의 트릭 설계에 따라 '일치할 수도, 다를 수도' 있습니다. 무조건 다르게 설정할 필요는 없으나, 다를 경우 논리적 개연성을 확보하십시오.
-                       - **트릭 설계 시 의무 사항**: 두 장소가 다를 경우(이동 트릭), clues 배열에 '바닥의 끌린 자국', '부자연스러운 시신 자세', '현장과 맞지 않는 옷의 오염' 등 이동을 암시하는 단서를 반드시 1개 이상 포함하십시오.
-                       - **현장 증명 서술**: 모든 방의 description과 조수의 코멘트에서 "여기가 범행 장소다"라는 확정적 표현을 금지하십시오. 대신 "주변이 지나치게 깨끗함", "이질적인 냄새가 남" 등 객관적 상태만 묘사하여 유저가 직접 판단하게 하십시오.
-                    
-                    시나리오 작성 형식:
-                    {
-                      "scenario": {
-                            "title": "[시나리오 제목] = User에게 입력 받은 값을 그대로 사용",
-                            "synopsis": "[한 줄 요약] = User의 입력에 구체적인 사건명이 있다면 이를 반영하고, 없다면 핵심 테마를 추출하여 작성",
-                            "synopsisDetail": "[상세 줄거리] = User가 트릭이나 범인을 명시했다면 이를 누락 없이 포함하여 재구성하고, 부족한 경우에만 개연성을 위한 설정을 추가하여 200자 내외로 작성",
-                            "thumbnailUrl": "[썸네일 이미지 URL]",
-                            "story_config_json": {
-                              "incident_time": "[YYYY-MM-DD HH:MM 형식의 발생 시각]",
-                              "twist": "[반전 요소]",
-                              "timeline": [
-                                { "time": "HH:MM", "event": "내용", "witness": 0 }
-                              ],
-                              "narration": {
-                                "opening": "[시작 나레이션]",
-                                "epilogue": "[엔딩 나레이션]",
-                                "culprit_monologue": "[범인 검거 시 독백]",
-                                "unsolved_monologue": "[미해결 시 독백]"
-                              }
-                            },
-                            "truth_config_json": {
-                              "culprit_id": "0 (유저 시놉시스에 범인이 명시되었다면 해당 인물의 ID를, 없다면 논리적으로 가장 적합한 인물을 선택)",
-                              "motive": "[상세 동기] = 유저가 설정한 동기가 있다면 핵심 내용을 포함하여 확장하고, 없다면 개연성 있는 동기를 창작",
-                              "weapon_clue_id": "0 (유저가 명시한 흉기가 있다면 해당 단서의 ID를 연결)",
-                              "method": "[상세 수법] = 유저가 설계한 트릭과 수법을 100% 반영하되, 묘사가 부족한 부분만 논리적으로 보완",
-                              "location_floor": "0 (사건 발생 장소의 층수)",
-                              "cause_of_death": "[사인 상세] = 유저 설정 기반 (예: 독살, 자상 등)
-                            }
-                          },
-                          "victim": {
-                            "name": "[이름]",
-                            "age": 0,
-                            "gender": "[남성/여성]",
-                            "occupation": "[직업]",
-                            "background": "[배경 설명]",
-                            "discovery_location": "[장소]",
-                            "estimated_death_time": "[시각]",
-                            "cause_of_death": "[사인]",
-                            "victim_detail_json": {
-                              "secret": "[비밀]",
-                              "hidden_info": "[정보]"
-                            }
-                          },
-                          "suspects": [
-                            {
-                              "name": "[이름]",
-                              "age": 0,
-                              "gender": "[성별]",
-                              "occupation": "[직업]",
-                              "one_liner": "[성격 요약]",
-                              "is_culprit": false,
-                              "motive": "[동기]",
-                              "ai_config_json": {
-                                "personality": "[성격]",
-                                "relationship": "[관계]",
-                                "knowledge_scope": {
-                                  "knows_about": "[아는 정보 목록 문자열]",
-                                  "doesnt_know": "[모르는 정보 목록 문자열]"
-                                },
-                                "secret": {
-                                  "title": "[비밀 제목]",
-                                  "content": "[비밀 내용]",
-                                  "weakness_clue": {
-                                    "id": 0,
-                                    "name": "[단서명]",
-                                    "description": "[설명]"
-                                  },
-                                  "alibi_progression": {
-                                    "level1_lie": "[거짓말 확고 태도]",
-                                    "level2_weak": "[거짓말 붕괴 태도]",
-                                  }
-                                },
-                                "deflection_strategy": {
-                                  "target_name": "[타겟 이름]",
-                                  "suspicion_point": "[의심 포인트]",
-                                  "dialogue_hint": "[대화 힌트]"
-                                },
-                                "timeline_alibi": [
-                                  { "time": "HH:MM", "location": "장소", "activity": "활동", "is_verified": false }
-                                ]
-                              }
-                            }
-                          ],
-                          "clues": [
-                            {
-                              "name": "[단서명]",
-                              "description": "[설명]",
-                              "importance": "[LOW/MEDIUM/HIGH/CRITICAL]",
-                              "assistant_comment": "[조수 코멘트]",
-                              "clue_detail_json": {
-                                "revealed_truth": "[밝혀지는 사실]",
-                                "related_suspect_ids": [0, 1],
-                                "discovery_script": "[발견 대사]",
-                                "is_weakness_clue_for": 0
-                              }
-                            }
-                          ],
-                          "rooms": [
-                            {
-                              "floor_number": 1,
-                              "room_type": "[1층 유형]",
-                              "room_name": "[1층 이름]",
-                              "description": "[1층 설명]",
-                              "assistant_comment": "[조수 코멘트]"
-                            },
-                            {
-                              "floor_number": 2,
-                              "room_type": "[2층 유형]",
-                              "room_name": "[2층 이름]",
-                              "description": "[2층 설명]",
-                              "assistant_comment": "[조수 코멘트]"
-                            },
-                            {
-                              "floor_number": 3,
-                              "room_type": "[3층 유형]",
-                              "room_name": "[3층 이름]",
-                              "description": "[3층 설명]",
-                              "assistant_comment": "[조수 코멘트]"
-                            },
-                            {
-                              "floor_number": 4,
-                              "room_type": "[4층 유형]",
-                              "room_name": "[4층 이름]",
-                              "description": "[4층 설명]",
-                              "assistant_comment": "[조수 코멘트]"
-                            },
-                            {
-                              "floor_number": 5,
-                              "room_type": "[5층 유형]",
-                              "room_name": "[5층 이름]",
-                              "description": "[5층 설명]",
-                              "assistant_comment": "[조수 코멘트]"
-                            },
-                            {
-                              "floor_number": 6,
-                              "room_type": "[6층 유형]",
-                              "room_name": "[6층 이름]",
-                              "description": "[6층 설명]",
-                              "assistant_comment": "[조수 코멘트]"
-                            }
-                          ]
-                        }
-                    """;
-
-            StringBuilder scenarioSb = new StringBuilder();
-            chatClient.prompt()
-                    .system(scenarioSystemMessage)
-                    .user(timelineJson)
-                    .stream()
-                    .content()
-                    .doOnNext(scenarioSb::append)
-                    .blockLast();
-
-            String scenarioJson = scenarioSb.toString();
-
-            // Markdown 코드 블록 제거
-            scenarioJson = scenarioJson.replaceAll("```json\\s*", "")
+            timelineJson = timelineJson.replaceAll("```json\\s*", "")
                     .replaceAll("```\\s*$", "")
                     .trim();
 
-            // 5. JSON 파싱
+            log.info("1단계 타임라인 생성 완료: {}", timelineJson);
+
+            // ========================================================================
+            // 2단계: 시나리오 기본 정보 생성 (타임라인 기반)
+            // ========================================================================
+            String scenarioSystemMessage1 = String.format("""
+                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
+                    당신은 [1단계 타임라인]을 참고하여 시나리오의 전체 설정을 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+
+                    [작성 규칙]
+                    1. 유저가 입력한 제목과 시놉시스를 확장하여 200자 내외의 synopsisDetail을 작성하십시오.
+                    2. story_config_json 내의 timeline에는 1단계의 내용을 포함하되, 각 항목에 witness(목격자 ID, 없을 시 0) 필드를 추가하십시오.
+                    3. narration 섹션(오프닝, 에필로그 등)을 극적인 톤으로 작성하십시오.
+                    4. 아직 인물 이름이 미정이므로 '용의자 A', 'B' 등으로 임시 지칭하십시오.
+
+                    [1단계 타임라인 데이터]:
+                    %s
+
+                    [1단계 타임라인 데이터] 기반으로 scenario 객체(title, synopsis, synopsisDetail, story_config_json)를 생성하십시오.
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
+                    시나리오 작성 형식:
+                    {
+                      "scenario": {
+                        "title": "[시나리오 제목]",
+                        "synopsis": "[한 줄 요약]",
+                        "synopsisDetail": "[상세 줄거리]",
+                        "thumbnailUrl": "[썸네일 이미지 URL]",
+                        "story_config_json": {
+                          "incident_time": "[YYYY-MM-DD HH:MM 형식의 발생 시각]",
+                          "twist": "[반전 요소]",
+                          "timeline": [
+                            {
+                              "time": "HH:MM",
+                              "event": "내용",
+                              "witness": 0
+                            }
+                          ],
+                          "narration": {
+                            "opening": "[시작 나레이션]",
+                            "epilogue": "[엔딩 나레이션]",
+                            "culprit_monologue": "[범인 검거 시 독백]",
+                            "unsolved_monologue": "[미해결 시 독백]"
+                          }
+                        }
+                      }
+                    }
+                    """, timelineJson);
+
+            StringBuilder step1Sb = new StringBuilder();
+            chatClient.prompt()
+                    .system(scenarioSystemMessage1)
+                    .user("Generate scenario based on the timeline above.")
+                    .stream()
+                    .content()
+                    .doOnNext(step1Sb::append)
+                    .blockLast();
+
+            String step1Response = step1Sb.toString();
+            step1Response = step1Response.replaceAll("```json\\s*", "")
+                    .replaceAll("```\\s*$", "")
+                    .trim();
+
+            log.info("2단계 기본 정보 생성 완료: {}", step1Response);
+
+            // ========================================================================
+            // 3단계: 용의자, 피해자, 증거 정보 생성
+            // ========================================================================
+            String scenarioSystemMessage2 = String.format("""
+                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
+                    당신은 이전 호출에서 생성한 [scenario 객체(Timeline, title, synopsis, synopsisDetail, story_config_json) 를 포함한 이전 시나리오 설정]을 바탕으로 용의자, 피해자, 증거를 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+
+                    [작성 규칙]
+                    1. 고유 ID: 모든 인물과 단서에 고유 ID를 부여하고 truth_config_json에서 이를 참조하십시오.
+                    2. 정합성: 모든 용의자의 weakness_clue는 반드시 하단의 clues 배열에 동일한 정보로 존재해야 합니다.
+                    3. 레드 헤링: 단서 중 최소 2개는 사건과 무관한 용의자의 개인적 비밀(도박, 불륜 등)을 담으십시오.
+                    4. 익명화: revealed_truth에서 "A의 지문" 대신 "누군가의 지문"과 같이 서술하여 유저의 대조 추리를 유도하십시오.
+                    5. 실명 금지: 메모나 일기 단서에서 용의자 이름을 직접 쓰지 말고 이니셜이나 지칭어를 사용하십시오.
+                    6. 증거 개수: clues 배열은 반드시 8개 이상 12개 이하로 구성하십시오.
+                    7. 용의자 수는 %d명으로 반드시 일치해야 합니다.
+
+                    [이전 단계 생성 정보]:
+                    %s
+
+                    위 설정을 바탕으로 victim, suspects 배열, clues 배열, truth_config_json을 생성하십시오.
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
+                    시나리오 작성 형식:
+                    {
+                      "truth_config_json": {
+                        "culprit_id": 0,
+                        "motive": "[상세 동기]",
+                        "weapon_clue_id": 0,
+                        "method": "[상세 수법]",
+                        "location_floor": 0,
+                        "cause_of_death": "[사인 상세]"
+                      },
+                      "victim": {
+                        "name": "[이름]",
+                        "age": 0,
+                        "gender": "[남성/여성]",
+                        "occupation": "[직업]",
+                        "background": "[배경 설명]",
+                        "discovery_location": "[장소]",
+                        "estimated_death_time": "[시각]",
+                        "cause_of_death": "[사인]",
+                        "victim_detail_json": {
+                          "secret": "[비밀]",
+                          "hidden_info": "[정보]"
+                        }
+                      },
+                      "suspects": [
+                        {
+                          "name": "[이름]",
+                          "age": 0,
+                          "gender": "[성별]",
+                          "occupation": "[직업]",
+                          "one_liner": "[성격 요약]",
+                          "is_culprit": false,
+                          "motive": "[동기]",
+                          "ai_config_json": {
+                            "personality": "[성격]",
+                            "relationship": "[관계]",
+                            "knowledge_scope": {
+                              "knows_about": "[아는 정보 목록 문자열]",
+                              "doesnt_know": "[모르는 정보 목록 문자열]"
+                            },
+                            "secret": {
+                              "title": "[비밀 제목]",
+                              "content": "[비밀 내용]",
+                              "weakness_clue": {
+                                "id": 0,
+                                "name": "[단서명]",
+                                "description": "[설명]"
+                              },
+                              "alibi_progression": {
+                                "level1_lie": "[거짓말 확고 태도]",
+                                "level2_weak": "[거짓말 붕괴 태도]"
+                              }
+                            },
+                            "deflection_strategy": {
+                              "target_name": "[타겟 이름]",
+                              "suspicion_point": "[의심 포인트]",
+                              "dialogue_hint": "[대화 힌트]"
+                            },
+                            "timeline_alibi": [
+                              {
+                                "time": "HH:MM",
+                                "location": "장소",
+                                "activity": "활동",
+                                "is_verified": false
+                              }
+                            ]
+                          }
+                        }
+                      ],
+                      "clues": [
+                        {
+                          "name": "[단서명]",
+                          "description": "[설명]",
+                          "importance": "[LOW/MEDIUM/HIGH/CRITICAL]",
+                          "assistant_comment": "[조수 코멘트]",
+                          "clue_detail_json": {
+                            "revealed_truth": "[밝혀지는 사실]",
+                            "related_suspect_ids": [0, 1],
+                            "discovery_script": "[발견 대사]",
+                            "is_weakness_clue_for": 0
+                          }
+                        }
+                      ]
+                    }
+                    """, request.suspectCount(), step1Response);
+
+            StringBuilder step2Sb = new StringBuilder();
+            chatClient.prompt()
+                    .system(scenarioSystemMessage2)
+                    .user("Generate victim, suspects, and clues based on the scenario above.")
+                    .stream()
+                    .content()
+                    .doOnNext(step2Sb::append)
+                    .blockLast();
+
+            String step2Response = step2Sb.toString();
+            step2Response = step2Response.replaceAll("```json\\s*", "")
+                    .replaceAll("```\\s*$", "")
+                    .trim();
+
+            log.info("3단계 용의자/증거 생성 완료: {}", step2Response);
+
+            // ========================================================================
+            // 4단계: 방 배열 정보 생성
+            // ========================================================================
+            String scenarioSystemMessage3 = String.format("""
+                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
+                    이전까지의 모든 AI호출 작업의 결과물(Timeline, title, synopsis, synopsisDetail, story_config_json, victim, suspects 배열, clues 배열, truth_config_json)를 포함한 이전 시나리오 설정)을 기반으로 6개의 층별 방(rooms) 정보를 생성하여 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+
+                    [작성 규칙]
+                    1. 층수: floor_number를 1부터 6까지 순차적으로 할당하고 층별 유형과 이름을 정하십시오.
+                    2. 단서 배치: 3단계에서 생성된 clues들을 각 방의 description에 자연스럽게 녹여내십시오. (예: 주방 묘사 시 '싱크대 위의 혈흔' 언급)
+                    3. 조수 코멘트: assistant_comment는 추리에 직접적인 정답을 주지 말고 기괴함이나 의문점만 친근하게 제시하십시오.
+                    4. 현장 묘사: "여기가 범행 장소다"라는 확정적 서술을 피하고 객관적인 상태만 묘사하십시오.
+
+                    [이전 단계 생성 정보]:
+                    %s
+
+                    Response strictly in JSON format without any markdown code blocks or prose.
+
+                    시나리오 작성 형식:
+                    {
+                      "rooms": [
+                        {
+                          "floor_number": 1,
+                          "room_type": "[1층 유형]",
+                          "room_name": "[1층 이름]",
+                          "description": "[1층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 2,
+                          "room_type": "[2층 유형]",
+                          "room_name": "[2층 이름]",
+                          "description": "[2층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 3,
+                          "room_type": "[3층 유형]",
+                          "room_name": "[3층 이름]",
+                          "description": "[3층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 4,
+                          "room_type": "[4층 유형]",
+                          "room_name": "[4층 이름]",
+                          "description": "[4층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 5,
+                          "room_type": "[5층 유형]",
+                          "room_name": "[5층 이름]",
+                          "description": "[5층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        },
+                        {
+                          "floor_number": 6,
+                          "room_type": "[6층 유형]",
+                          "room_name": "[6층 이름]",
+                          "description": "[6층 설명]",
+                          "assistant_comment": "[조수 코멘트]"
+                        }
+                      ]
+                    }
+                    """, step2Response);
+
+            StringBuilder step3Sb = new StringBuilder();
+            chatClient.prompt()
+                    .system(scenarioSystemMessage3)
+                    .user("Generate 6 rooms based on the scenario above.")
+                    .stream()
+                    .content()
+                    .doOnNext(step3Sb::append)
+                    .blockLast();
+
+            String step3Response = step3Sb.toString();
+            step3Response = step3Response.replaceAll("```json\\s*", "")
+                    .replaceAll("```\\s*$", "")
+                    .trim();
+
+            log.info("4단계 방 배열 생성 완료: {}", step3Response);
+
+            // ========================================================================
+            // 5단계: 모든 JSON 병합 및 파싱
+            // ========================================================================
             ObjectMapper mapper = new ObjectMapper();
-            JsonNode root = mapper.readTree(scenarioJson);
 
+            // step1Response에서 scenario 기본 정보 추출
+            JsonNode step1Root = mapper.readTree(step1Response);
+            JsonNode scenarioNode = step1Root.path("scenario");
 
-            String title = root.path("scenario").path("title").asText();
-            String synopsis = root.path("scenario").path("synopsis").asText();
-            String synopsisDetail = root.path("scenario").path("synopsisDetail").asText();
+            String title = scenarioNode.path("title").asText();
+            String synopsis = scenarioNode.path("synopsis").asText();
+            String synopsisDetail = scenarioNode.path("synopsisDetail").asText();
+            JsonNode storyConfig = scenarioNode.path("story_config_json");
 
-            JsonNode storyConfig = root.path("scenario").path("story_config_json");
-            JsonNode truthConfig = root.path("scenario").path("truth_config_json");
+            // step2Response에서 victim, suspects, clues, truth_config 추출
+            JsonNode step2Root = mapper.readTree(step2Response);
+            JsonNode victimNode = step2Root.path("victim");
+            JsonNode suspectsNode = step2Root.path("suspects");
+            JsonNode cluesNode = step2Root.path("clues");
+            JsonNode truthConfig = step2Root.path("truth_config_json");
+
+            // step3Response에서 rooms 추출
+            JsonNode step3Root = mapper.readTree(step3Response);
+            JsonNode roomsNode = step3Root.path("rooms");
+
+            // scenarioNode에 truth_config_json 추가
+            ((com.fasterxml.jackson.databind.node.ObjectNode) scenarioNode).set("truth_config_json", truthConfig);
+
+            log.info("모든 단계 JSON 병합 완료");
 
             // Embedding 생성
             String motiveText = truthConfig.path("motive").asText();
@@ -404,7 +461,6 @@ public class ScenarioServiceImpl implements ScenarioService {
 
 
             // 7. Victim 저장
-            JsonNode victimNode = root.path("victim");
             Victim victim = Victim.builder()
                     .scenario(scenario)
                     .name(victimNode.path("name").asText())
@@ -423,7 +479,7 @@ public class ScenarioServiceImpl implements ScenarioService {
             // 8. Suspects 저장
             List<Suspect> suspects = new ArrayList<>();
             int displayOrder = 1;
-            for (JsonNode suspectNode : root.path("suspects")) {
+            for (JsonNode suspectNode : suspectsNode) {
                 Suspect suspect = Suspect.builder()
                         .scenario(scenario)
                         .name(suspectNode.path("name").asText())
@@ -444,7 +500,7 @@ public class ScenarioServiceImpl implements ScenarioService {
             // 9. Rooms 저장
             // ★ RoomLayoutService를 호출하여 랜덤 가구 배치 적용
             Map<Integer, Room> roomMap = new LinkedHashMap<>();
-            for (JsonNode roomNode : root.path("rooms")) {
+            for (JsonNode roomNode : roomsNode) {
                 String roomType = roomNode.path("room_type").asText("living");
                 int rawFloor = roomNode.path("floor_number").asInt();
                 int floorNumber = normalizeFloorNumber(roomType, rawFloor, roomMap);
@@ -496,7 +552,7 @@ public class ScenarioServiceImpl implements ScenarioService {
             Map<Long, List<Rect>> occupiedByRoomId = new HashMap<>();
 
             int clueIndex = 0;
-            for (JsonNode clueNode : root.path("clues")) {
+            for (JsonNode clueNode : cluesNode) {
                 String importanceStr = clueNode.path("importance").asText("SUPPORTING");
                 Clue.Importance importance = "CRITICAL".equalsIgnoreCase(importanceStr)
                         ? Clue.Importance.CRITICAL
