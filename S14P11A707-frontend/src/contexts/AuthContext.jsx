@@ -136,12 +136,62 @@ export function AuthProvider({ children }) {
         // dispatch({ type: "CLEAR_USER" })
       },
 
-      // 5) 프로필 수정 (프론트 로컬 상태만 변경)
+      // 5) 프로필 수정 (닉네임은 서버에 저장)
       updateProfile(patch) {
-        dispatch({
-          type: "UPDATE_USER",
-          patch: { ...patch, updated_at: new Date().toISOString().slice(0, 10) },
-        })
+        if (!patch || typeof patch !== "object") return
+
+        const updated_at = new Date().toISOString().slice(0, 10)
+        const { nickname, ...rest } = patch
+
+        // picture 같은 로컬-only 필드는 기존처럼 즉시 반영
+        if (Object.keys(rest).length > 0) {
+          dispatch({
+            type: "UPDATE_USER",
+            patch: { ...rest, updated_at },
+          })
+        }
+
+        // 닉네임 변경은 서버 반영(개발/Mock 모드에서는 로컬만)
+        if (nickname == null) return
+        if (useMock || !base) {
+          dispatch({
+            type: "UPDATE_USER",
+            patch: { nickname, updated_at },
+          })
+          return
+        }
+
+        ;(async () => {
+          try {
+            const res = await fetch(`${base}/api/users/me/nickname`, {
+              method: "PATCH",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ nickname }),
+            })
+
+            if (!res.ok) {
+              let message = "닉네임 변경에 실패했습니다."
+              try {
+                const err = await res.json()
+                if (err?.message) message = err.message
+              } catch {
+                // ignore
+              }
+              alert(message)
+              return
+            }
+
+            const data = await res.json()
+            dispatch({
+              type: "UPDATE_USER",
+              patch: { ...data, updated_at },
+            })
+          } catch (e) {
+            console.error("[AUTH] update nickname failed:", e)
+            alert("닉네임 변경에 실패했습니다.")
+          }
+        })()
       },
     }),
     [base, useMock]
