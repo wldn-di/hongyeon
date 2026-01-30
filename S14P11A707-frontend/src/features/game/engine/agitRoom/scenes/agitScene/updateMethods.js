@@ -12,6 +12,14 @@ const isDomTextInputFocused = () => {
     return active.isContentEditable === true;
 };
 
+const clamp01 = (value) => {
+    const v = Number(value);
+    if (!Number.isFinite(v)) return 0;
+    if (v < 0) return 0;
+    if (v > 1) return 1;
+    return v;
+};
+
 export const updateMethods = {
     update(time, delta) {
         if (!this.player) return;
@@ -64,21 +72,76 @@ export const updateMethods = {
             this.closeElevatorMenu?.();
             return;
         }
-    
+
+        // 손전등 배터리 게이지 업데이트 (약 10초 사용 + 천천히 회복, 회복 중에도 재사용 가능)
+        const dtSecRaw = (Number(delta) || 0) / 1000;
+        const dtSec = Phaser.Math.Clamp(dtSecRaw, 0, 0.25);
+        if (dtSec > 0) {
+            const drain = Number(this.FLASHLIGHT_BATTERY_DRAIN_PER_SEC) || 0.1;
+            const recharge = Number(this.FLASHLIGHT_BATTERY_RECHARGE_PER_SEC) || 0.0625;
+
+            const isUiBlockingInput = Boolean(this.isDialogActiveRef?.current || shouldReleaseKeyboardCapture);
+            if (isUiBlockingInput && this.isFlashlightOn) {
+                this.isFlashlightOn = false;
+                this.flashAlphaIntent = 0;
+                this.flashPower = 0;
+                if (this.flashlight) {
+                    this.flashAlpha = 0;
+                    this.flashlight.setAlpha(0);
+                    this.flashlight.setVisible(false);
+                }
+            }
+
+            let battery = clamp01(this.flashBattery);
+
+            const canConsume = Boolean(this.isFlashlightOn && !isUiBlockingInput);
+
+            if (canConsume) {
+                battery = clamp01(battery - drain * dtSec);
+            } else {
+                battery = clamp01(battery + recharge * dtSec);
+            }
+
+            if (this.isFlashlightOn && battery <= 0.001) {
+                battery = 0;
+                this.isFlashlightOn = false;
+                this.flashAlphaIntent = 0;
+                this.flashPower = 0;
+                this.playUiBeep?.(320, 0.06, 0.07);
+            }
+
+            this.flashBattery = battery;
+            const power = this.isFlashlightOn && !isUiBlockingInput ? 1 : 0;
+            this.flashPower = power;
+            this.flashAlphaIntent = power;
+        }
+
         // ✅ 추가: 튜토리얼 대화 중이거나 입력창 포커스 시 이동 차단
         if (this.isDialogActiveRef?.current || shouldReleaseKeyboardCapture) {
             this.player.body.setVelocity(0);
             this.closeElevatorMenu?.();
             return;
         }
-    
+
         // 손전등 토글
         if (Phaser.Input.Keyboard.JustDown(this.keyShift)) {
-            this.isFlashlightOn = !this.isFlashlightOn;
-            if (this.sfxFlashlight) this.sfxFlashlight.play();
-    
-            this.flashAlphaIntent = this.isFlashlightOn ? 1 : 0;
-            if (this.flashlight) this.flashlight.setVisible(true);
+            if (this.isFlashlightOn) {
+                this.isFlashlightOn = false;
+                if (this.sfxFlashlight) this.sfxFlashlight.play();
+                this.flashPower = 0;
+                this.flashAlphaIntent = 0;
+            } else {
+                const battery = clamp01(this.flashBattery);
+                if (battery <= 0.02) {
+                    this.playUiBeep?.(260, 0.08, 0.08);
+                } else {
+                    this.isFlashlightOn = true;
+                    if (this.sfxFlashlight) this.sfxFlashlight.play();
+                    this.flashPower = 1;
+                    this.flashAlphaIntent = 1;
+                    if (this.flashlight) this.flashlight.setVisible(true);
+                }
+            }
         }
     
         // 노이즈
@@ -91,8 +154,8 @@ export const updateMethods = {
                 this.noiseStopAt = 0;
             }
     
-            if (Math.random() < 0.002) {
-                this.staticNoise.setAlpha(Phaser.Math.FloatBetween(0.16, 0.28));
+            if (Math.random() < 0.0016) {
+                this.staticNoise.setAlpha(Phaser.Math.FloatBetween(0.28, 0.46));
     
                 if (this.sfxNoise && time > this.noiseCooldownUntil && !this.sfxNoise.isPlaying) {
                     this.sfxNoise.play({ volume: 0.12, rate: Phaser.Math.FloatBetween(0.95, 1.05) });
@@ -115,7 +178,10 @@ export const updateMethods = {
             } else {
                 this.flashlight.setVisible(true);
     
-                const flicker = 0.92 + 0.08 * (0.5 + 0.5 * Math.sin(time * 0.06 + this.flashJitterSeed));
+                const battery = Phaser.Math.Clamp(Number(this.flashBattery) || 0, 0, 1);
+
+                const flickerAmp = 0.06 + 0.12 * (1 - battery);
+                const flicker = 1 - flickerAmp * (0.5 + 0.5 * Math.sin(time * 0.06 + this.flashJitterSeed));
                 this.flashlight.setAlpha(Phaser.Math.Clamp(this.flashAlpha * flicker, 0, 1));
     
                 if (this.isFlashlightOn) {
@@ -194,8 +260,8 @@ export const updateMethods = {
                     this.elevatorMenuHint.setAlpha(0.5 + 0.2 * pulse);
                 }
     
-                const upPressed = Phaser.Input.Keyboard.JustDown(this.wasd.up);
-                const downPressed = Phaser.Input.Keyboard.JustDown(this.wasd.down);
+                const upPressed = Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.wasd.up);
+                const downPressed = Phaser.Input.Keyboard.JustDown(this.cursors.down) || Phaser.Input.Keyboard.JustDown(this.wasd.down);
     
                 if (upPressed && this.currentRoomIndex < this.ROOM_COUNT - 1) {
                     this.closeElevatorMenu();

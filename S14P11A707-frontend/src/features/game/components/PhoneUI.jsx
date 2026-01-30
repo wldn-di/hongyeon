@@ -81,8 +81,18 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                     ? "bg-primary text-primary-foreground rounded-br-sm"
                     : "bg-gray-800 rounded-bl-sm"
                 )}>
-                  <p>{msg.text}</p>
-                  <p className="text-xs opacity-60 mt-1">{msg.time}</p>
+                  {msg.isTyping ? (
+                    <div className="flex items-center gap-1 h-4">
+                      <span className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                      <span className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce" style={{ animationDelay: '120ms' }} />
+                      <span className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce" style={{ animationDelay: '240ms' }} />
+                    </div>
+                  ) : (
+                    <>
+                      <p>{msg.text}</p>
+                      <p className="text-xs opacity-60 mt-1">{msg.time}</p>
+                    </>
+                  )}
                 </div>
               </div>
             ))}

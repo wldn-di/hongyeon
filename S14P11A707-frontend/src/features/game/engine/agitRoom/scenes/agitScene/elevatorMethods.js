@@ -1,5 +1,7 @@
 import Phaser from "phaser";
 
+const formatFloorLabel = (roomIndex) => `FLOOR ${String((Number(roomIndex) || 0) + 1).padStart(2, "0")}`;
+
 export const elevatorMethods = {
     createElevatorGlowTextures() {
         if (!this.textures.exists("elevator_glow")) {
@@ -267,7 +269,86 @@ export const elevatorMethods = {
         this.isTransitioning = true;
         this.interactionContainer?.setVisible(false);
         this.closeElevatorMenu?.();
-    
+
+        const fromFloor = this.currentRoomIndex;
+        const toFloor = nextIndex;
+
+        // 이동 연출(리소스 없이): 오버레이 텍스트 + 글리치 라인 + 노이즈 버스트
+        const screenW = this.sys.game.config.width;
+        const screenH = this.sys.game.config.height;
+
+        const travelFx = this.add.container(screenW / 2, screenH / 2).setScrollFactor(0).setDepth(20010).setAlpha(0);
+        const dim = this.add.rectangle(0, 0, screenW, screenH, 0x000000, 0.28);
+        const title = this.add
+            .text(0, -10, `${formatFloorLabel(fromFloor)}  →  ${formatFloorLabel(toFloor)}`, {
+                fontSize: "14px",
+                color: "#e7f2ff",
+                fontStyle: "bold",
+            })
+            .setOrigin(0.5);
+        title.setShadow(0, 2, "#000", 4, true, true);
+
+        const sub = this.add
+            .text(0, 14, "ELEVATOR MOVING", { fontSize: "9px", color: "#9cc2ff", fontStyle: "bold" })
+            .setOrigin(0.5);
+        sub.setShadow(0, 1, "#000", 2, false, true);
+
+        const glitchLines = [];
+        for (let i = 0; i < 8; i++) {
+            const y = Phaser.Math.Between(-60, 60);
+            const line = this.add.rectangle(0, y, Phaser.Math.Between(120, 320), 2, 0x9cc2ff, 0.0);
+            glitchLines.push(line);
+        }
+
+        travelFx.add([dim, ...glitchLines, title, sub]);
+
+        this.tweens.add({
+            targets: travelFx,
+            alpha: 1,
+            duration: 160,
+            ease: "Sine.easeOut",
+        });
+
+        const flickerTween = this.tweens.add({
+            targets: [title, sub],
+            alpha: { from: 1, to: 0.6 },
+            duration: 90,
+            yoyo: true,
+            repeat: -1,
+            ease: "Sine.easeInOut",
+        });
+
+        const glitchEvent = this.time.addEvent({
+            delay: 70,
+            loop: true,
+            callback: () => {
+                glitchLines.forEach((line) => {
+                    line.y = Phaser.Math.Between(-64, 64);
+                    line.setSize(Phaser.Math.Between(120, 340), 2);
+                    line.setAlpha(Phaser.Math.FloatBetween(0.08, 0.26));
+                });
+                title.x = Phaser.Math.Between(-2, 2);
+                title.y = -10 + Phaser.Math.Between(-2, 2);
+            },
+        });
+
+        let noiseBurstEvent = null;
+        if (this.staticNoise) {
+            const baseAlpha = Number(this.grainBaseAlpha) || 0.045;
+            this.staticNoise.setVisible(true);
+            this.staticNoise.setAlpha(Math.max(baseAlpha, 0.22));
+            noiseBurstEvent = this.time.addEvent({
+                delay: 34,
+                loop: true,
+                callback: () => {
+                    if (!this.staticNoise) return;
+                    this.staticNoise.tilePositionX += Phaser.Math.Between(8, 22);
+                    this.staticNoise.tilePositionY += Phaser.Math.Between(8, 22);
+                    this.staticNoise.setAlpha(Phaser.Math.FloatBetween(0.26, 0.5));
+                },
+            });
+        }
+
         const cam = this.cameras.main;
         if (cam) {
             cam.shake(140, 0.002);
@@ -307,6 +388,32 @@ export const elevatorMethods = {
             this.time.delayedCall(PAUSE_MS, () => {
                 this.openElevatorDoors(() => {
                     if (cam) cam.zoomTo(this.baseZoom, 220, "Sine.easeInOut");
+
+                    if (noiseBurstEvent) {
+                        noiseBurstEvent.remove(false);
+                        noiseBurstEvent = null;
+                    }
+                    if (this.staticNoise) {
+                        const baseAlpha = Number(this.grainBaseAlpha) || 0.045;
+                        this.tweens.add({
+                            targets: this.staticNoise,
+                            alpha: baseAlpha,
+                            duration: 260,
+                            ease: "Sine.easeOut",
+                        });
+                    }
+
+                    if (glitchEvent) glitchEvent.remove(false);
+                    if (flickerTween) flickerTween.stop();
+                    this.tweens.add({
+                        targets: travelFx,
+                        alpha: 0,
+                        duration: 180,
+                        ease: "Sine.easeInOut",
+                        onComplete: () => {
+                            travelFx.destroy(true);
+                        },
+                    });
                     this.isTransitioning = false;
                 });
             });

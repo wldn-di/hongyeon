@@ -22,16 +22,21 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.isFlashlightOn = false;
     scene.flashAlpha = 0;
     scene.flashAlphaIntent = 0;
+    scene.flashPower = 0;
     scene.flashJitterSeed = Math.random() * 1000;
     scene.flashJitterSeed2 = Math.random() * 1000;
     scene.flashJitterSeed3 = Math.random() * 1000;
     scene.FLASHLIGHT_CLUE_REVEAL_MIN_ALPHA = 0.15;
     scene.FLASHLIGHT_CLUE_REVEAL_RADIUS = 210;
     scene.FLASHLIGHT_CLUE_REVEAL_HALF_ANGLE = Math.PI / 10;
+    scene.flashBattery = 1;
+    // 게이지 기반(약 10초 사용 가능) + 천천히 회복, 회복 중에도 재사용 가능
+    scene.FLASHLIGHT_BATTERY_DRAIN_PER_SEC = 0.1;
+    scene.FLASHLIGHT_BATTERY_RECHARGE_PER_SEC = 0.0625;
 
     // 노이즈/그레인
     scene.staticNoise = null;
-    scene.grainBaseAlpha = 0.035;
+    scene.grainBaseAlpha = 0.045;
 
     scene.dustEmitter = null;
     scene.footstepEmitter = null;
@@ -77,6 +82,10 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.floorHudText = null;
     scene.floorHudAccent = null;
     scene.floorHudTopLine = null;
+    scene.flashHudContainer = null;
+    scene.flashHudBg = null;
+    scene.flashHudBatteryFill = null;
+    scene.flashHudStatusText = null;
 
     // ✅ 프롬프트 BG 레퍼런스(빛나는 연출용)
     scene.promptBg = null;
@@ -118,6 +127,7 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.CLUE_SCALE = 0.8;
     scene.CLUE_HIGHLIGHT_RADIUS = 55;
     scene.CLUE_INTERACT_RADIUS = 40;
+    scene.CLUE_NEAR_REVEAL_RADIUS = 18;
 
     scene.isInspecting = false;
     scene.inspectTarget = null;

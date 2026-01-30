@@ -36,7 +36,7 @@ export const effectsMethods = {
                 imgData.data[i] = val;
                 imgData.data[i + 1] = val;
                 imgData.data[i + 2] = val;
-                imgData.data[i + 3] = 50;
+                imgData.data[i + 3] = 80;
             }
             nCtx.putImageData(imgData, 0, 0);
             noiseTex.refresh();

@@ -269,8 +269,6 @@ export const lifecycleMethods = {
             });
     
             this.createElevatorMenu();
-            this.createFloorHud();
-            this.updateFloorHud(startIndex);
     
             this.player.anims.play("bob-idle-down", true);
             this.cameras.main.fadeIn(600, 0, 0, 0);
