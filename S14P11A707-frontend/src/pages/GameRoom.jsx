@@ -1024,7 +1024,7 @@ export default function GameRoom() {
       // 리뷰 작성
       await submitReview(activeScenarioId, {
         rating,
-        difficulty: difficulty.toUpperCase(),
+        difficulty,
         content: review,
         isSpoiler: false,
       })

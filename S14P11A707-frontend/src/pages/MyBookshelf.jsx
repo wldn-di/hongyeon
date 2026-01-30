@@ -1,12 +1,16 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link, useLocation } from 'wouter'
 
 import { Button } from '@/components/ui/Button'
+import { ReportModal } from '@/features/game/modals'
+import { fetchMyReport } from '@/features/session/api/sessionApi'
+import { normalizeInvestigationReportResponse } from '@/features/session/api/sessionMappers'
 import { useBookshelf } from '@/features/user/hooks/useBookshelf'
 import {
-  Trophy, XCircle, ChevronLeft, ChevronRight, Clock, Award,
-  X, Share2, FileText, BookOpen
+  ChevronLeft, ChevronRight, Clock, Award,
+  FileText, BookOpen
 } from 'lucide-react'
+import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
 // 등급별 스타일
@@ -17,171 +21,6 @@ const gradeStyles = {
   C: 'bg-green-500/20 text-green-400 border border-green-500/50',
   D: 'bg-gray-500/20 text-gray-400 border border-gray-500/50',
   F: 'bg-red-500/20 text-red-400 border border-red-500/50',
-}
-
-// =========================
-// 수사보고서 모달
-// =========================
-function ReportModal({ isOpen, onClose, book }) {
-  const [shareUuid, setShareUuid] = useState(null)
-  const [copied, setCopied] = useState(false)
-
-  const generateUuid = () => {
-    return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
-      const r = Math.random() * 16 | 0
-      const v = c === 'x' ? r : (r & 0x3 | 0x8)
-      return v.toString(16)
-    })
-  }
-
-  const handleShare = () => {
-    if (!shareUuid) setShareUuid(generateUuid())
-  }
-
-  const handleCopyUuid = async () => {
-    if (!shareUuid) return
-    try {
-      await navigator.clipboard.writeText(shareUuid)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    } catch {
-      const textArea = document.createElement('textarea')
-      textArea.value = shareUuid
-      document.body.appendChild(textArea)
-      textArea.select()
-      document.execCommand('copy')
-      document.body.removeChild(textArea)
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    }
-  }
-
-  const handleClose = () => {
-    setShareUuid(null)
-    setCopied(false)
-    onClose()
-  }
-
-  if (!isOpen || !book) return null
-
-  // API 데이터 기반 보고서
-  const report = {
-    playerName: "탐정",
-    scenarioTitle: book.title,
-    playTime: book.playTime ? `${Math.floor(book.playTime / 60)}:${String(book.playTime % 60).padStart(2, '0')}` : '--:--',
-    grade: book.rankGrade || 'F',
-    accuracy: book.rankGrade === 'S' ? 95 : book.rankGrade === 'A' ? 85 : 75,
-    hintsUsed: 0,
-    interrogations: 5,
-    summary: book.rankGrade === 'S'
-      ? "완벽한 추리력을 보여주셨습니다! 모든 증거를 정확하게 분석하고 범인을 정확히 특정했습니다."
-      : book.rankGrade === 'A'
-        ? "훌륭한 추리력을 보여주셨습니다. 대부분의 증거를 정확하게 분석했으며, 범인의 동기를 정확히 파악했습니다."
-        : "나쁘지 않은 추리력을 보여주셨습니다. 사건을 해결했습니다.",
-    timeline: [
-      { time: "00:05", event: "첫 번째 증거 발견" },
-      { time: "00:15", event: "용의자 심문 시작" },
-      { time: "00:25", event: "핵심 단서 발견" },
-      { time: "00:35", event: "범인 특정" },
-      { time: book.playTime ? `${Math.floor(book.playTime / 60)}:${String(book.playTime % 60).padStart(2, '0')}` : "00:00", event: "사건 해결" },
-    ]
-  }
-
-  return (
-    <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
-      <div className="bg-card border border-border rounded-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-4 border-b border-border">
-          <h2 className="text-xl font-bold gold-glow">수사 보고서</h2>
-          <button onClick={handleClose} className="p-1 hover:bg-muted rounded">
-            <X className="w-6 h-6" />
-          </button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-6">
-          <div className="text-center mb-6">
-            <p className="text-sm text-muted-foreground">시나리오</p>
-            <p className="text-2xl font-bold">{report.scenarioTitle}</p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 mb-6">
-            <div className="bg-muted/30 rounded-lg p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">등급</p>
-              <p className="text-3xl font-bold text-primary">{report.grade}</p>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-4 text-center">
-              <p className="text-xs text-muted-foreground mb-1">클리어 시간</p>
-              <p className="text-2xl font-bold">{report.playTime}</p>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-3 mb-6">
-            <div className="bg-muted/30 rounded-lg p-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">정확도</p>
-              <p className="text-lg font-bold">{report.accuracy}%</p>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">힌트 사용</p>
-              <p className="text-lg font-bold">{report.hintsUsed}회</p>
-            </div>
-            <div className="bg-muted/30 rounded-lg p-3 text-center">
-              <p className="text-xs text-muted-foreground mb-1">심문 횟수</p>
-              <p className="text-lg font-bold">{report.interrogations}회</p>
-            </div>
-          </div>
-
-          <div className="mb-6">
-            <h3 className="font-bold mb-2 bracket-left">종합 평가</h3>
-            <p className="text-sm text-muted-foreground leading-relaxed bg-muted/30 rounded-lg p-4">
-              {report.summary}
-            </p>
-          </div>
-
-          <div>
-            <h3 className="font-bold mb-2 bracket-left">수사 타임라인</h3>
-            <div className="space-y-2">
-              {report.timeline.map((item, idx) => (
-                <div key={idx} className="flex items-center gap-3 text-sm">
-                  <span className="font-mono text-muted-foreground">{item.time}</span>
-                  <div className="w-2 h-2 rounded-full bg-primary" />
-                  <span>{item.event}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="p-4 border-t border-border space-y-3">
-          {shareUuid && (
-            <div className="flex items-center gap-2 bg-muted/50 rounded-lg p-3">
-              <span className="text-xs text-muted-foreground">공유 코드:</span>
-              <button
-                onClick={handleCopyUuid}
-                className="flex-1 font-mono text-sm text-primary hover:text-primary/80 truncate text-left"
-              >
-                {shareUuid}
-              </button>
-              <span className={cn(
-                "text-xs px-2 py-1 rounded transition-all",
-                copied ? "bg-green-500/20 text-green-400" : "bg-muted text-muted-foreground"
-              )}>
-                {copied ? "복사됨!" : "클릭하여 복사"}
-              </span>
-            </div>
-          )}
-
-          <div className="flex gap-3">
-            <Button variant="outline" className="flex-1" onClick={handleClose}>
-              닫기
-            </Button>
-            <Button variant="neon" className="flex-1" onClick={handleShare}>
-              <Share2 className="w-4 h-4 mr-2" />
-              공유하기
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
 }
 
 // =========================
@@ -457,7 +296,8 @@ function BookShelf({ books, mode, title, onViewReport }) {
 // =========================
 export default function MyBookshelf() {
   const [reportModalOpen, setReportModalOpen] = useState(false)
-  const [selectedBook, setSelectedBook] = useState(null)
+  const [selectedReport, setSelectedReport] = useState(null)
+  const [reportLoading, setReportLoading] = useState(false)
 
   // API 기반 데이터 조회
   const {
@@ -472,10 +312,23 @@ export default function MyBookshelf() {
     error,
   } = useBookshelf()
 
-  const handleViewReport = (book) => {
-    setSelectedBook(book)
-    setReportModalOpen(true)
-  }
+  const handleViewReport = useCallback(async (book) => {
+    if (!book?.sessionId) return
+    if (reportLoading) return
+
+    try {
+      setReportLoading(true)
+      const response = await fetchMyReport(book.sessionId)
+      const normalized = normalizeInvestigationReportResponse(response)
+      setSelectedReport(normalized)
+      setReportModalOpen(true)
+    } catch (err) {
+      console.error('handleViewReport error:', err)
+      toast.error('수사보고서를 불러오는데 실패했습니다.')
+    } finally {
+      setReportLoading(false)
+    }
+  }, [reportLoading])
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -541,8 +394,11 @@ export default function MyBookshelf() {
 
       <ReportModal
         isOpen={reportModalOpen}
-        onClose={() => setReportModalOpen(false)}
-        book={selectedBook}
+        onClose={() => {
+          setReportModalOpen(false)
+          setSelectedReport(null)
+        }}
+        report={selectedReport}
       />
 
       <footer className="border-t border-border py-8 bg-card/30">

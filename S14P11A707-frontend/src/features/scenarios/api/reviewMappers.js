@@ -57,9 +57,22 @@ export const mapReviewResponse = (response) => {
  * @returns {ReviewCreateRequest} backend request shape
  */
 export const mapReviewCreateRequest = (data) => {
+  const normalizeDifficulty = (difficulty) => {
+    if (typeof difficulty === 'string') {
+      const normalized = difficulty.trim().toLowerCase()
+      if (normalized === 'easy') return 1
+      if (normalized === 'medium') return 3
+      if (normalized === 'hard') return 5
+    }
+
+    const num = Number(difficulty)
+    if (Number.isFinite(num)) return num
+    return 3
+  }
+
   return {
     rating: data.rating,
-    difficulty: data.difficulty,
+    difficulty: normalizeDifficulty(data.difficulty),
     content: data.content || '',
     isSpoiler: data.isSpoiler || false,
   }

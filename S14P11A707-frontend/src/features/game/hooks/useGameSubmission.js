@@ -1,6 +1,5 @@
 import { useState, useCallback } from 'react'
 import { endGame } from '@/features/session/api/sessionApi'
-import { createReview } from '@/features/scenarios/api/reviewsApi'
 import { toast } from 'sonner'
 
 /**
