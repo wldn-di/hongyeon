@@ -1,8 +1,31 @@
 import Phaser from "phaser";
 
+const isDomTextInputFocused = () => {
+    if (typeof document === "undefined") return false;
+
+    const active = document.activeElement;
+    if (!active) return false;
+
+    const tagName = active.tagName;
+    if (tagName === "INPUT" || tagName === "TEXTAREA" || tagName === "SELECT") return true;
+
+    return active.isContentEditable === true;
+};
+
 export const updateMethods = {
     update(time, delta) {
         if (!this.player) return;
+
+        const domInputFocused = isDomTextInputFocused();
+        const shouldReleaseKeyboardCapture = domInputFocused || this.inputFocusedRef?.current;
+
+        const keyboard = this.input?.keyboard;
+        if (keyboard?.manager) {
+            const nextPreventDefault = !shouldReleaseKeyboardCapture;
+            if (keyboard.manager.preventDefault !== nextPreventDefault) {
+                keyboard.manager.preventDefault = nextPreventDefault;
+            }
+        }
     
         if (this.isPuzzleActive) {
             this.player.body.setVelocity(0);
@@ -43,7 +66,7 @@ export const updateMethods = {
         }
     
         // ✅ 추가: 튜토리얼 대화 중이거나 입력창 포커스 시 이동 차단
-        if (this.isDialogActiveRef?.current || this.inputFocusedRef?.current) {
+        if (this.isDialogActiveRef?.current || shouldReleaseKeyboardCapture) {
             this.player.body.setVelocity(0);
             this.closeElevatorMenu?.();
             return;
