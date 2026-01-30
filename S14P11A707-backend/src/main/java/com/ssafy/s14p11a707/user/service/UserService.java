@@ -83,9 +83,14 @@ public class UserService {
             throw new BaseException(ErrorCode.INVALID_INPUT_VALUE);
         }
 
-        User user = upsertByOidc(rawGoogleId, rawEmail);
-        user.changeNickname(nickname);
-        return user;
+        try {
+            User user = upsertByOidc(rawGoogleId, rawEmail);
+            user.changeNickname(nickname);
+            userRepository.flush();
+            return user;
+        } catch (DataIntegrityViolationException e) {
+            throw new BaseException(ErrorCode.NICKNAME_ALREADY_EXISTS, e);
+        }
     }
 
     @Transactional

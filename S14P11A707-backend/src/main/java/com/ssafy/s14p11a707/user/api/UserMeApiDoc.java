@@ -1,9 +1,11 @@
 package com.ssafy.s14p11a707.user.api;
 
+import com.ssafy.s14p11a707.auth.dto.AuthMeResponse;
 import com.ssafy.s14p11a707.exception.ErrorResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfSessionResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
+import com.ssafy.s14p11a707.user.dto.UserNicknameUpdateRequest;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -76,4 +78,29 @@ public interface UserMeApiDoc {
             OidcUser oidcUser,
             @Parameter(hidden = true) Pageable pageable
     );
+
+    @Operation(summary = "내 닉네임 변경", description = "현재 로그인한 사용자의 닉네임을 변경합니다.")
+    @ApiResponses({
+            @ApiResponse(
+                    responseCode = "200",
+                    description = "변경 성공",
+                    content = @Content(schema = @Schema(implementation = AuthMeResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "400",
+                    description = "잘못된 요청 값",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "401",
+                    description = "인증되지 않은 사용자",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            ),
+            @ApiResponse(
+                    responseCode = "409",
+                    description = "닉네임 중복",
+                    content = @Content(schema = @Schema(implementation = ErrorResponse.class))
+            )
+    })
+    ResponseEntity<AuthMeResponse> updateMyNickname(OidcUser oidcUser, UserNicknameUpdateRequest request);
 }

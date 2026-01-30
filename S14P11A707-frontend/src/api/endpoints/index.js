@@ -95,6 +95,7 @@ export const ENDPOINTS = {
       scenarios: '/api/users/me/scenarios',
       bookshelfStats: '/api/users/me/bookshelf/stats',
       bookshelfSessions: '/api/users/me/bookshelf/sessions',
+      nickname: '/api/users/me/nickname',
     },
   },
 }

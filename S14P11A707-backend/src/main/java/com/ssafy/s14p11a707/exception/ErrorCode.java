@@ -31,6 +31,8 @@ public enum ErrorCode {
     VICTIM_NOT_FOUND(HttpStatus.NOT_FOUND, "VICTIM-001", "피해자를 찾을 수 없습니다."),
     SUSPECT_NOT_FOUND(HttpStatus.NOT_FOUND,"SUSPECT-001", "용의자를 찾을 수 없습니다."),
 
+    NICKNAME_ALREADY_EXISTS(HttpStatus.CONFLICT, "USER-001", "이미 사용 중인 닉네임입니다."),
+
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR, "COMMON-001", "서버 내부 오류가 발생했습니다."),
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "COMMON-002", "잘못된 요청 값입니다."),
     NOTNULL_INPUT_VALUE(HttpStatus.BAD_REQUEST, "COMMON-003", "필수 입력 값이 누락되었습니다."),
