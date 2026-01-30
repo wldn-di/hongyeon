@@ -2,6 +2,8 @@ package com.ssafy.s14p11a707.game.api;
 
 import com.ssafy.s14p11a707.game.dto.*;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
+import com.ssafy.s14p11a707.security.authorization.GameSessionAccessPolicy;
+import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -14,6 +16,8 @@ import org.springframework.web.bind.annotation.*;
 public class SessionApi implements SessionApiDoc {
 
     private final GameSessionService gameSessionService;
+    private final GameSessionAccessPolicy gameSessionAccessPolicy;
+    private final CurrentUserIdResolver currentUserIdResolver;
 
     @PostMapping("/{scenarioId}")
     @Override
@@ -21,7 +25,8 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long scenarioId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.startGame(scenarioId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(gameSessionService.startGame(scenarioId, userId));
     }
 
     @PostMapping("/{scenarioId}/restart")
@@ -30,7 +35,8 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long scenarioId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.restartGame(scenarioId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(gameSessionService.restartGame(scenarioId, userId));
     }
 
     @GetMapping("/{sessionId}/report")
@@ -39,7 +45,9 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getInvestigationReport(sessionId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.getInvestigationReport(sessionId));
     }
 
     @GetMapping("/{sessionId}/report/public")
@@ -48,7 +56,9 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getOtherInvestigationReport(sessionId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertCanReadOtherReport(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.getOtherInvestigationReport(sessionId));
     }
 
     @PostMapping("/{sessionId}/clues/{clueId}")
@@ -58,7 +68,9 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long clueId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.discoverClue(sessionId, clueId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.discoverClue(sessionId, clueId));
     }
 
     @GetMapping("/{sessionId}/clues")
@@ -67,7 +79,9 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getDiscoveredClues(sessionId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.getDiscoveredClues(sessionId));
     }
 
     @GetMapping("/{sessionId}/clues/{clueId}")
@@ -77,7 +91,9 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long clueId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getDiscoveredClue(sessionId, clueId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.getDiscoveredClue(sessionId, clueId));
     }
 
     @GetMapping("/{sessionId}/logs")
@@ -86,7 +102,9 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getLogs(sessionId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.getLogs(sessionId));
     }
 
     @GetMapping("/{sessionId}/resume")
@@ -95,7 +113,9 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.resumeGame(sessionId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.resumeGame(sessionId));
     }
 
     @PostMapping("/{sessionId}/move-floor")
@@ -105,7 +125,9 @@ public class SessionApi implements SessionApiDoc {
             @RequestBody FloorMoveRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.moveFloor(sessionId, request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.moveFloor(sessionId, request));
     }
 
     @GetMapping("/{sessionId}/board")
@@ -114,16 +136,21 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getBoard(sessionId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.getBoard(sessionId));
     }
 
     @PutMapping("/{sessionId}/board")
+    @Override
     public ResponseEntity<BoardResponse> saveBoard(
             @PathVariable long sessionId,
             @RequestBody BoardSaveRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.saveBoard(sessionId, request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.saveBoard(sessionId, request));
     }
 
     @PostMapping("/{sessionId}/submit")
@@ -133,7 +160,9 @@ public class SessionApi implements SessionApiDoc {
             @RequestBody SubmitRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.submit(sessionId, request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.submit(sessionId, request));
     }
 
     @PostMapping("/{sessionId}/suspects/{suspectId}/chat")
@@ -144,7 +173,9 @@ public class SessionApi implements SessionApiDoc {
             @RequestBody SuspectChatRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.chatWithSuspect(sessionId, suspectId, request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.chatWithSuspect(sessionId, suspectId, request));
     }
 
     @GetMapping("/{sessionId}/suspects/{suspectId}/chats")
@@ -154,6 +185,8 @@ public class SessionApi implements SessionApiDoc {
             @PathVariable long suspectId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(gameSessionService.getChatHistory(sessionId, suspectId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
+        return ResponseEntity.ok(gameSessionService.getChatHistory(sessionId, suspectId));
     }
 }

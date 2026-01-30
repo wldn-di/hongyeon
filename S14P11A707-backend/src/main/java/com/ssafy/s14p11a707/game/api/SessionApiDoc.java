@@ -3,6 +3,7 @@ package com.ssafy.s14p11a707.game.api;
 import com.ssafy.s14p11a707.exception.ErrorResponse;
 import com.ssafy.s14p11a707.game.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -37,7 +38,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<GameStartResponse> startGame(long scenarioId, OidcUser oidcUser);
+    ResponseEntity<GameStartResponse> startGame(long scenarioId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "게임 재시작", description = "기존 세션을 초기화하고 게임을 다시 시작합니다.")
     @ApiResponses({
@@ -57,7 +58,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<GameStartResponse> restartGame(long scenarioId, OidcUser oidcUser);
+    ResponseEntity<GameStartResponse> restartGame(long scenarioId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "내 수사보고서 조회", description = "내 세션의 수사보고서를 조회합니다.")
     @ApiResponses({
@@ -82,7 +83,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<InvestigationReportResponse> getInvestigationReport(long sessionId, OidcUser oidcUser);
+    ResponseEntity<InvestigationReportResponse> getInvestigationReport(long sessionId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "타인 수사보고서 조회", description = "타인의 완료된 세션 수사보고서를 조회합니다. 동일 시나리오를 완료한 유저만 열람 가능합니다.")
     @ApiResponses({
@@ -107,7 +108,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<InvestigationReportResponse> getOtherInvestigationReport(long sessionId, OidcUser oidcUser);
+    ResponseEntity<InvestigationReportResponse> getOtherInvestigationReport(long sessionId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "단서 획득", description = "단서를 획득합니다.")
     @ApiResponses({
@@ -137,7 +138,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<DiscoveredClueResponse> discoverClue(long sessionId, long clueId, OidcUser oidcUser);
+    ResponseEntity<DiscoveredClueResponse> discoverClue(long sessionId, long clueId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "단서 목록 조회", description = "세션의 단서 목록을 조회합니다.")
     @ApiResponses({
@@ -162,7 +163,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ClueListResponse> getClues(long sessionId, OidcUser oidcUser);
+    ResponseEntity<ClueListResponse> getClues(long sessionId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "단서 상세 조회", description = "단서의 상세 정보를 조회합니다.")
     @ApiResponses({
@@ -187,7 +188,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ClueDetailResponse> getClue(long sessionId, long clueId, OidcUser oidcUser);
+    ResponseEntity<ClueDetailResponse> getClue(long sessionId, long clueId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "수사 로그 조회", description = "세션의 수사 로그 목록을 조회합니다.")
     @ApiResponses({
@@ -212,7 +213,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<EventLogListResponse> getLogs(long sessionId, OidcUser oidcUser);
+    ResponseEntity<EventLogListResponse> getLogs(long sessionId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "이어하기", description = "세션을 이어하기 위한 정보를 조회합니다.")
     @ApiResponses({
@@ -237,7 +238,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<GameResumeResponse> resumeGame(long sessionId, OidcUser oidcUser);
+    ResponseEntity<GameResumeResponse> resumeGame(long sessionId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "층 이동", description = "현재 세션의 층을 이동합니다.")
     @ApiResponses({
@@ -262,7 +263,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<FloorMoveResponse> moveFloor(long sessionId, FloorMoveRequest request, OidcUser oidcUser);
+    ResponseEntity<FloorMoveResponse> moveFloor(long sessionId, FloorMoveRequest request, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "보드 조회", description = "세션의 추리 보드를 조회합니다.")
     @ApiResponses({
@@ -287,7 +288,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<BoardResponse> getBoard(long sessionId, OidcUser oidcUser);
+    ResponseEntity<BoardResponse> getBoard(long sessionId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "보드 전체 저장", description = "추리 보드의 모든 노드와 연결선을 저장합니다. 기존 데이터를 모두 삭제하고 새로운 데이터로 교체합니다.")
     @ApiResponses({
@@ -317,7 +318,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<BoardResponse> saveBoard(long sessionId, BoardSaveRequest request, OidcUser oidcUser);
+    ResponseEntity<BoardResponse> saveBoard(long sessionId, BoardSaveRequest request, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "최종 정답 제출", description = "보드 검증 + 범인/흉기/장소/동기 채점 + 결과 처리를 수행합니다.")
     @ApiResponses({
@@ -342,7 +343,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<SubmitResponse> submit(long sessionId, SubmitRequest request, OidcUser oidcUser);
+    ResponseEntity<SubmitResponse> submit(long sessionId, SubmitRequest request, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "용의자 심문", description = "용의자와 대화를 진행합니다.")
     @ApiResponses({
@@ -367,7 +368,7 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<SuspectChatResponse> chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request, OidcUser oidcUser);
+    ResponseEntity<SuspectChatResponse> chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "심문 기록 조회", description = "특정 용의자와의 대화 기록을 조회합니다.")
     @ApiResponses({
@@ -382,5 +383,5 @@ public interface SessionApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ChatHistoryResponse> getChatHistory(long sessionId, long suspectId, OidcUser oidcUser);
+    ResponseEntity<ChatHistoryResponse> getChatHistory(long sessionId, long suspectId, @Parameter(hidden = true) OidcUser oidcUser);
 }

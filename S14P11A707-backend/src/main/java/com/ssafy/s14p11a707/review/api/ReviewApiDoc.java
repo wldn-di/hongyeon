@@ -6,6 +6,7 @@ import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -55,7 +56,7 @@ public interface ReviewApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ReviewResponse> createReview(long scenarioId, ReviewCreateRequest request, OidcUser oidcUser);
+    ResponseEntity<ReviewResponse> createReview(long scenarioId, ReviewCreateRequest request, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "리뷰 수정", description = "리뷰를 수정합니다.")
     @ApiResponses({
@@ -80,7 +81,7 @@ public interface ReviewApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ReviewResponse> updateReview(long reviewId, ReviewUpdateRequest request, OidcUser oidcUser);
+    ResponseEntity<ReviewResponse> updateReview(long reviewId, ReviewUpdateRequest request, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "리뷰 삭제", description = "리뷰를 삭제합니다.")
     @ApiResponses({
@@ -105,5 +106,5 @@ public interface ReviewApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ReviewResponse> deleteReview(long reviewId, OidcUser oidcUser);
+    ResponseEntity<ReviewResponse> deleteReview(long reviewId, @Parameter(hidden = true) OidcUser oidcUser);
 }

@@ -9,6 +9,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface ScenarioRepository extends JpaRepository<Scenario, Long> {
 
@@ -48,5 +49,8 @@ public interface ScenarioRepository extends JpaRepository<Scenario, Long> {
     boolean existsByCreatorIdAndGenerationStatus(Long creatorId, Scenario.GenerationStatus status);
 
     List<ScenarioListProjection> findAllByGenerationStatus(Scenario.GenerationStatus status);
+
+    @Query("select s from Scenario s join fetch s.creator where s.id = :scenarioId")
+    Optional<Scenario> findByIdWithCreator(@Param("scenarioId") long scenarioId);
 }
 

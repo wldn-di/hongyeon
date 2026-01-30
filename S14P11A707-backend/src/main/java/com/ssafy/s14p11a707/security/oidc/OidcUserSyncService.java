@@ -16,12 +16,10 @@ import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 
 /**
- * Cognito OIDC 사용자 로드 후 사용자 동기화 서비스
+ * OIDC 사용자 로드 후 사용자 동기화 서비스
  * <p>
- * {@link OidcUserService}를 확장하여 Cognito 로그인 과정에서 OIDC 사용자 정보를 로드한 뒤,
+ * {@link OidcUserService}를 확장하여 OIDC 로그인 과정에서 사용자 정보를 로드한 뒤,
  * 핵심 클레임(특히 {@code email})을 이용해 애플리케이션 사용자 레코드를 동기화(upsert)한다.
- * </p>
- * <p>
  * </p>
  * <p><b>예외</b></p>
  * <ul>
@@ -33,7 +31,7 @@ import org.springframework.stereotype.Service;
  */
 @Service
 @RequiredArgsConstructor
-public class CognitoOidcUserService extends OidcUserService {
+public class OidcUserSyncService extends OidcUserService {
 
     private final UserService userService;
 

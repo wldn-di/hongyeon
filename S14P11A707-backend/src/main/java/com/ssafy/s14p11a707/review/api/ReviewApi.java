@@ -5,6 +5,8 @@ import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewResponse;
 import com.ssafy.s14p11a707.review.dto.ReviewUpdateRequest;
 import com.ssafy.s14p11a707.review.service.ReviewService;
+import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
+import com.ssafy.s14p11a707.security.authorization.ReviewAccessPolicy;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -21,6 +23,8 @@ import org.springframework.web.bind.annotation.*;
 public class ReviewApi implements ReviewApiDoc {
 
     private final ReviewService reviewService;
+    private final ReviewAccessPolicy reviewAccessPolicy;
+    private final CurrentUserIdResolver currentUserIdResolver;
 
     @GetMapping("/{scenarioId}/reviews")
     @Override
@@ -40,7 +44,8 @@ public class ReviewApi implements ReviewApiDoc {
             @Valid @RequestBody ReviewCreateRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(reviewService.createReview(scenarioId, request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(reviewService.createReview(scenarioId, request, userId));
     }
 
     @PatchMapping("/{reviewId}")
@@ -50,7 +55,9 @@ public class ReviewApi implements ReviewApiDoc {
             @RequestBody ReviewUpdateRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(reviewService.updateReview(reviewId, request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        reviewAccessPolicy.assertReviewOwner(userId, reviewId);
+        return ResponseEntity.ok(reviewService.updateReview(reviewId, request));
     }
 
     @DeleteMapping("/{reviewId}")
@@ -59,6 +66,8 @@ public class ReviewApi implements ReviewApiDoc {
             @PathVariable long reviewId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(reviewService.deleteReview(reviewId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        reviewAccessPolicy.assertReviewOwner(userId, reviewId);
+        return ResponseEntity.ok(reviewService.deleteReview(reviewId));
     }
 }

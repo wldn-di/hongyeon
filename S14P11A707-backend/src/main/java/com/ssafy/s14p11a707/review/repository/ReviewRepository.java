@@ -19,6 +19,9 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     boolean existsByScenarioIdAndUserId(long scenarioId, long userId);
 
+    @Query("select r from Review r join fetch r.user where r.id = :reviewId")
+    Optional<Review> findByIdWithUser(@Param("reviewId") long reviewId);
+
     // 평균 계산 (삭제된 리뷰 포함)
     @Query("SELECT AVG(r.rating) FROM Review r WHERE r.scenario.id = :scenarioId")
     Double calculateAvgRating(@Param("scenarioId") long scenarioId);

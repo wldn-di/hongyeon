@@ -10,7 +10,6 @@ import com.ssafy.s14p11a707.user.repository.UserRepository;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.RequiredArgsConstructor;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -39,8 +38,9 @@ public class RankingServiceImpl implements RankingService {
     }
 
     @Override
-    public MyRankingResponse getMyRanking(String type, OidcUser oidcUser) {
-        User currentUser = getUser(oidcUser);
+    public MyRankingResponse getMyRanking(String type, long userId) {
+        User currentUser = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
         int myRank = calculateMyRank(currentUser, type);
 
         return new MyRankingResponse(
@@ -78,14 +78,5 @@ public class RankingServiceImpl implements RankingService {
             default -> userRepository.countByTotalScoreGreaterThan(user.getTotalScore());
         };
         return (int) countAbove + 1;
-    }
-
-    private User getUser(OidcUser oidcUser) {
-        if (oidcUser == null) {
-            throw new BaseException(ErrorCode.UNAUTHORIZED);
-        }
-        String googleId = oidcUser.getSubject();
-        return userRepository.findByGoogleId(googleId)
-                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
     }
 }

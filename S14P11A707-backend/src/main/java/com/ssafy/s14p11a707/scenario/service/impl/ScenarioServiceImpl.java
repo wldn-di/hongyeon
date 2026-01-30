@@ -2,6 +2,8 @@ package com.ssafy.s14p11a707.scenario.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ssafy.s14p11a707.exception.BaseException;
+import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.scenario.dto.*;
@@ -15,7 +17,6 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -60,14 +61,9 @@ public class ScenarioServiceImpl implements ScenarioService {
 
     @Override
     @Transactional
-    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request, OidcUser oidcUser) {
-        // 사용자 인증
-        if (oidcUser == null) {
-            throw new IllegalArgumentException("User not authenticated");
-        }
-        String googleId = oidcUser.getSubject();
-        User creator = userRepository.findByGoogleId(googleId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
+    public ScenarioCreateResponse createScenario(ScenarioCreateRequest request, long userId) {
+        User creator = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
         int estimatedSeconds = Math.max(20, Math.min(120, 25 + request.suspectCount() * 10));
 
         ScenarioCreateResponse.OriginalRequest originalRequest = new ScenarioCreateResponse.OriginalRequest(request.title(), request.userSynopsis(), request.genre(), request.suspectCount());
@@ -661,21 +657,9 @@ public class ScenarioServiceImpl implements ScenarioService {
 
     @Override
     @Transactional
-    public ScenarioDeleteResponse deleteScenario(long scenarioId, OidcUser oidcUser) {
-        // 사용자 인증
-        if (oidcUser == null) {
-            throw new IllegalArgumentException("User not authenticated");
-        }
-        String googleId = oidcUser.getSubject();
-        User user = userRepository.findByGoogleId(googleId)
-                .orElseThrow(() -> new IllegalArgumentException("User not found"));
-
-        // 시나리오 조회 및 소유권 확인
-        Scenario scenario = scenarioRepository.findById(scenarioId)
-                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
-
-        if (scenario.getCreator().getId() != user.getId()) {
-            throw new IllegalArgumentException("You don't have permission to delete this scenario");
+    public ScenarioDeleteResponse deleteScenario(long scenarioId) {
+        if (!scenarioRepository.existsById(scenarioId)) {
+            throw new BaseException(ErrorCode.SCENARIO_NOT_FOUND);
         }
 
         // 연관 데이터 삭제 (순서 중요: 외래키 제약 조건 고려)
@@ -698,7 +682,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     }
 
     @Override
-    public ScenarioRankingResponse getScenarioRankings(long scenarioId, OidcUser oidcUser) {
+    public ScenarioRankingResponse getScenarioRankings(long scenarioId, Long userId) {
         List<ScenarioRanking> rankings = scenarioRankingRepository
                 .findByScenarioIdOrderByScoreDescClearTimeAsc(scenarioId);
 
@@ -715,14 +699,9 @@ public class ScenarioServiceImpl implements ScenarioService {
 
         // 현재 사용자의 클리어 여부 확인
         boolean hasUserCleared = false;
-        if (oidcUser != null) {
-            String googleId = oidcUser.getSubject();
-            User currentUser = userRepository.findByGoogleId(googleId).orElse(null);
-
-            if (currentUser != null) {
-                hasUserCleared = rankings.stream()
-                        .anyMatch(ranking -> ranking.getUser().getId() == currentUser.getId());
-            }
+        if (userId != null) {
+            hasUserCleared = rankings.stream()
+                    .anyMatch(ranking -> ranking.getUser().getId() == userId);
         }
 
         return new ScenarioRankingResponse(scenarioId, hasUserCleared, rankingResponses);
@@ -732,7 +711,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Transactional(readOnly = true)
     public RoomListResponse getRooms(long scenarioId) {
         Scenario scenario = scenarioRepository.findById(scenarioId)
-                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
+                .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
 
         List<Room> rooms = roomRepository.findByScenarioIdOrderByFloorNumberAsc(scenarioId);
 
@@ -755,7 +734,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Transactional(readOnly = true)
     public VictimResponse getVictim(long scenarioId) {
         Victim victim = victimRepository.findByScenarioId(scenarioId)
-                .orElseThrow(() -> new IllegalArgumentException("Victim not found for scenario: " + scenarioId));
+                .orElseThrow(() -> new BaseException(ErrorCode.VICTIM_NOT_FOUND));
 
         VictimResponse.Victim response = new VictimResponse.Victim(
                 victim.getId(),
@@ -865,7 +844,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Transactional(readOnly = true)
     public ScenarioDetailResponse getScenario(long scenarioId) {
         Scenario scenario = scenarioRepository.findById(scenarioId)
-                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
+                .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
 
         // Victim 정보
         ScenarioDetailResponse.Victim victim = null;
@@ -935,7 +914,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Override
     public ScenarioStatusResponse getScenarioStatus(long scenarioId) {
         Scenario scenario = scenarioRepository.findById(scenarioId)
-                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
+                .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
 
         String status = scenario.getGenerationStatus() != null
                 ? scenario.getGenerationStatus().name()

@@ -33,7 +33,7 @@ public interface UserMeApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<BookshelfStatsResponse> getMyBookshelfStats(OidcUser oidcUser);
+    ResponseEntity<BookshelfStatsResponse> getMyBookshelfStats(@Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(
             summary = "내 책장 기록 통합 조회",
@@ -57,7 +57,7 @@ public interface UserMeApiDoc {
             )
     })
     ResponseEntity<BookshelfSessionResponse> getMyBookshelfSessions(
-            OidcUser oidcUser,
+            @Parameter(hidden = true) OidcUser oidcUser,
             @Parameter(hidden = true) Pageable pageable
     );
 
@@ -75,7 +75,7 @@ public interface UserMeApiDoc {
             )
     })
     ResponseEntity<ScenarioListResponse> getMyScenarios(
-            OidcUser oidcUser,
+            @Parameter(hidden = true) OidcUser oidcUser,
             @Parameter(hidden = true) Pageable pageable
     );
 
@@ -102,5 +102,5 @@ public interface UserMeApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<AuthMeResponse> updateMyNickname(OidcUser oidcUser, UserNicknameUpdateRequest request);
+    ResponseEntity<AuthMeResponse> updateMyNickname(@Parameter(hidden = true) OidcUser oidcUser, UserNicknameUpdateRequest request);
 }

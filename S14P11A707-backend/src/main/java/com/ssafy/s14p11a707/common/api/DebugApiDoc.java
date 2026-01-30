@@ -29,7 +29,7 @@ public interface DebugApiDoc {
     @Operation(summary = "세션의 인벤토리 목록 조회", description = "세션 ID로 해당 세션의 획득 단서 목록을 조회합니다.")
     ResponseEntity<ClueListResponse> getDiscoveredCluesBySession(
             @Parameter(description = "세션 ID") long sessionId,
-            @AuthenticationPrincipal OidcUser oidcUser);
+            @Parameter(hidden = true) @AuthenticationPrincipal OidcUser oidcUser);
 
     @Operation(summary = "시나리오 조회", description = "시나리오 ID로 시나리오 정보를 조회합니다.")
     ResponseEntity<DebugResponse.ScenarioDto> getScenario(

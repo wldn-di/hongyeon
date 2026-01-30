@@ -1,21 +1,9 @@
 package com.ssafy.s14p11a707.scenario.api;
 
 import com.ssafy.s14p11a707.exception.ErrorResponse;
-import com.ssafy.s14p11a707.game.dto.GameStartResponse;
-import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
-import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
-import com.ssafy.s14p11a707.review.dto.ReviewResponse;
-import com.ssafy.s14p11a707.scenario.dto.RoomListResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateRequest;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioDeleteResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioDetailResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioRankingResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioStatusResponse;
-import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
-import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
+import com.ssafy.s14p11a707.scenario.dto.*;
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -132,7 +120,7 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioCreateResponse> createScenario(ScenarioCreateRequest request, OidcUser oidcUser);
+    ResponseEntity<ScenarioCreateResponse> createScenario(ScenarioCreateRequest request, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "시나리오 삭제", description = "시나리오를 삭제합니다.")
     @ApiResponses({
@@ -167,7 +155,7 @@ public interface ScenarioApiDoc {
                     content = @Content(schema = @Schema(implementation = ErrorResponse.class))
             )
     })
-    ResponseEntity<ScenarioDeleteResponse> deleteScenario(long scenarioId, OidcUser oidcUser);
+    ResponseEntity<ScenarioDeleteResponse> deleteScenario(long scenarioId, @Parameter(hidden = true) OidcUser oidcUser);
 
     @Operation(summary = "시나리오 랭킹 조회", description = "시나리오 랭킹을 조회합니다.")
     @ApiResponses({
@@ -189,7 +177,7 @@ public interface ScenarioApiDoc {
     })
     ResponseEntity<ScenarioRankingResponse> getScenarioRankings(
             long scenarioId,
-            @AuthenticationPrincipal OidcUser oidcUser
+            @Parameter(hidden = true) @AuthenticationPrincipal OidcUser oidcUser
     );
 
     @Operation(summary = "방 정보 조회", description = "시나리오 방 정보를 조회합니다.")
@@ -252,4 +240,3 @@ public interface ScenarioApiDoc {
     })
     ResponseEntity<SuspectListResponse> getSuspects(long scenarioId);
 }
-

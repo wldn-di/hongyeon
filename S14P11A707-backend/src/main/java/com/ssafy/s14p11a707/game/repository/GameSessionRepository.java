@@ -9,6 +9,8 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface GameSessionRepository extends JpaRepository<GameSession, Long> {
 
@@ -29,5 +31,8 @@ public interface GameSessionRepository extends JpaRepository<GameSession, Long> 
 
     // GameSessionRepository
     Optional<GameSession> findByUserIdAndScenarioId(long userId, long scenarioId);
+
+    @Query("select s from GameSession s join fetch s.user join fetch s.scenario where s.id = :sessionId")
+    Optional<GameSession> findByIdWithUserAndScenario(@Param("sessionId") long sessionId);
 
 }

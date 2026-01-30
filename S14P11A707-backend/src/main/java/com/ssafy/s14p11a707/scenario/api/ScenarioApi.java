@@ -1,35 +1,14 @@
 package com.ssafy.s14p11a707.scenario.api;
 
-import com.ssafy.s14p11a707.game.dto.GameStartResponse;
-import com.ssafy.s14p11a707.game.service.GameSessionService;
-import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
-import com.ssafy.s14p11a707.review.dto.ReviewListResponse;
-import com.ssafy.s14p11a707.review.dto.ReviewResponse;
-import com.ssafy.s14p11a707.review.service.ReviewService;
-import com.ssafy.s14p11a707.scenario.dto.RoomListResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateRequest;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioCreateResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioDeleteResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioDetailResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioRankingResponse;
-import com.ssafy.s14p11a707.scenario.dto.ScenarioStatusResponse;
-import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
-import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
+import com.ssafy.s14p11a707.scenario.dto.*;
 import com.ssafy.s14p11a707.scenario.service.ScenarioService;
+import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
+import com.ssafy.s14p11a707.security.authorization.ScenarioAccessPolicy;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
-import org.springframework.web.bind.annotation.DeleteMapping;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequiredArgsConstructor
@@ -37,8 +16,8 @@ import org.springframework.web.bind.annotation.RestController;
 public class ScenarioApi implements ScenarioApiDoc {
 
     private final ScenarioService scenarioService;
-    private final ReviewService reviewService;
-    private final GameSessionService gameSessionService;
+    private final ScenarioAccessPolicy scenarioAccessPolicy;
+    private final CurrentUserIdResolver currentUserIdResolver;
 
 
     @GetMapping
@@ -71,7 +50,8 @@ public class ScenarioApi implements ScenarioApiDoc {
             @RequestBody ScenarioCreateRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(scenarioService.createScenario(request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(scenarioService.createScenario(request, userId));
     }
 
     @DeleteMapping("/{scenarioId}")
@@ -80,7 +60,9 @@ public class ScenarioApi implements ScenarioApiDoc {
             @PathVariable long scenarioId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(scenarioService.deleteScenario(scenarioId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        scenarioAccessPolicy.assertScenarioOwner(userId, scenarioId);
+        return ResponseEntity.ok(scenarioService.deleteScenario(scenarioId));
     }
 
     @GetMapping("/{scenarioId}/rankings")
@@ -89,7 +71,8 @@ public class ScenarioApi implements ScenarioApiDoc {
             @PathVariable long scenarioId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(scenarioService.getScenarioRankings(scenarioId, oidcUser));
+        Long userId = oidcUser == null ? null : currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(scenarioService.getScenarioRankings(scenarioId, userId));
     }
 
     @GetMapping("/{scenarioId}/rooms")
