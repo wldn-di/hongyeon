@@ -145,6 +145,10 @@ public class Scenario extends BaseEntity {
         this.playCount = 0;
     }
 
+    public void setTruthConfigJson(JsonNode truthConfigJson) {
+        this.truthConfigJson = truthConfigJson;
+    }
+
     public enum GenerationStatus {
         GENERATING,
         COMPLETED,

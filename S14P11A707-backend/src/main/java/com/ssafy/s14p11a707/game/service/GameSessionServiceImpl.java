@@ -328,6 +328,12 @@ public class GameSessionServiceImpl implements GameSessionService {
         GameSession session = getSessionWithOwnershipValidation(sessionId, user);
         validatePlaying(session);
 
+        // 체력이 0 이하면 더 이상 채팅 불가
+        int currentHealth = session.getHealth() != null ? session.getHealth() : 100;
+        if (currentHealth <= 0) {
+            throw new BaseException(ErrorCode.HEALTH_DEPLETED);
+        }
+
         // 시나리오 정보를 문자열로 빌드
         String scenarioContext = buildScenarioContext(session.getScenario());
 
@@ -537,17 +543,14 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // 진행도 업데이트 (health 반영)
         int health = session.getHealth() != null ? session.getHealth() : 100;
-        health = health - 5;  // 채팅 시 무조건 5 감소
+        health = Math.max(0, health - 5);
+
+        session.setHealth(health);
         session.updateProgress();
 
-        // 이벤트 로그 저장
         saveEventLog(session, CHAT_STARTED, suspect.getName());
 
         Long revealedClueId = null;
-//
-//        GameSession session = gameSessionRepository.findById(sessionId)
-//                .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
-//        saveEventLog(session, CHAT_STARTED, suspect.getName());
 
         return new SuspectChatResponse(
                 sessionId,
