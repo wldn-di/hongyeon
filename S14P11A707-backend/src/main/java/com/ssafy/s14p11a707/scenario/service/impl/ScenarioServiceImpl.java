@@ -2,6 +2,8 @@ package com.ssafy.s14p11a707.scenario.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ssafy.s14p11a707.exception.BaseException;
+import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.scenario.dto.*;
@@ -763,6 +765,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Override
     @Transactional(readOnly = true)
     public ScenarioListResponse listScenarios() {
+        // TODO: COMPLETED 목록만 내려주기
         List<ScenarioListProjection> scenarios = scenarioRepository.findAllProjectedBy();
 
         List<ScenarioListResponse.Item> items = scenarios.stream()
@@ -830,7 +833,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Transactional(readOnly = true)
     public ScenarioDetailResponse getScenario(long scenarioId) {
         Scenario scenario = scenarioRepository.findById(scenarioId)
-                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
+                .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
 
         // Victim 정보
         ScenarioDetailResponse.Victim victim = null;
@@ -900,7 +903,7 @@ public class ScenarioServiceImpl implements ScenarioService {
     @Override
     public ScenarioStatusResponse getScenarioStatus(long scenarioId) {
         Scenario scenario = scenarioRepository.findById(scenarioId)
-                .orElseThrow(() -> new IllegalArgumentException("Scenario not found: " + scenarioId));
+                .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
 
         String status = scenario.getGenerationStatus() != null
                 ? scenario.getGenerationStatus().name()
