@@ -1,8 +1,7 @@
 # 간단한 CI/CD - Docker Compose(서버) 기반
-# main/master 푸시 시 → 프론트 빌드 → 백엔드 bootBuildImage → 서버에 이미지 로드 → compose up
+# main/master/test-build 푸시 시 → 프론트 빌드 → 백엔드 bootBuildImage → 서버에 이미지 로드 → compose up
 
 stages:
-  - build
   - deploy
 
 variables:
@@ -10,53 +9,11 @@ variables:
   BACKEND_DIR: "S14P11A707-backend"
   REMOTE_COMPOSE_DIR: "/home/ubuntu/infra"
   IMAGE_REPO: "detective-backend"
-  IMAGE_TAG: "$CI_COMMIT_REF_SLUG"
 
   # dind (Docker-in-Docker) 사용
   DOCKER_HOST: "tcp://docker:2375"
   DOCKER_TLS_CERTDIR: ""
 
-# -----------------------------
-# 1) 빌드(테스트): 프론트 → 백엔드 static 복사 → bootBuildImage
-# -----------------------------
-build:
-  stage: build
-  image: gradle:8.10.0-jdk21-jammy
-  services:
-    - name: docker:27.0.3-dind
-      command: ["--tls=false"]
-  rules:
-    - if: '$CI_COMMIT_REF_NAME == "test-build"'
-  script:
-    - set -euo pipefail
-    - export IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
-    - echo "IMAGE_REPO=$IMAGE_REPO"
-    - echo "IMAGE_TAG=$IMAGE_TAG"
-    - echo "IMAGE_NAME=$IMAGE_NAME"
-
-    # Node.js 설치 (프론트 빌드용)
-    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    - apt-get install -y nodejs
-
-    # 프론트엔드 빌드
-    - cd "$FRONTEND_DIR"
-    - npm ci
-    - npm run build
-
-    # 스프링부트 resources/static 폴더 생성 및 dist 복사
-    - cd "$CI_PROJECT_DIR"
-    - mkdir -p "$BACKEND_DIR/src/main/resources/static"
-    - rm -rf "$BACKEND_DIR/src/main/resources/static/"*
-    - cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/main/resources/static/"
-
-    # 스프링부트 이미지 빌드
-    - cd "$BACKEND_DIR"
-    - chmod +x gradlew
-    - ./gradlew --no-daemon bootBuildImage --imageName="$IMAGE_NAME"
-
-# -----------------------------
-# 2) 배포: 서버에 이미지 로드 + compose up
-# -----------------------------
 deploy:
   stage: deploy
   image: gradle:8.10.0-jdk21-jammy
@@ -64,7 +21,7 @@ deploy:
     - name: docker:27.0.3-dind
       command: ["--tls=false"]
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master)$/'
+    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master|test-build)$/'
   before_script:
     - apt-get update && apt-get install -y openssh-client docker.io
     # SSH 키 설정 (GitLab CI Variables에 EC2_SSH_KEY 등록 필요 - File 타입)
