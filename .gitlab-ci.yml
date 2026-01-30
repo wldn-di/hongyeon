@@ -49,13 +49,7 @@ build:
     - rm -rf "$BACKEND_DIR/src/main/resources/static/"*
     - cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/main/resources/static/"
 
-    # GitLab Container Registry 인증 설정 (~/.docker/config.json)
-    - mkdir -p ~/.docker
-    - |
-      auth="$(printf "%s:%s" "gitlab-ci-token" "$CI_JOB_TOKEN" | base64 -w0)"
-      printf '{"auths":{"%s":{"auth":"%s"}}}\n' "$REGISTRY_HOST" "$auth" > ~/.docker/config.json
-
-    # 스프링부트 이미지 빌드 + push
+    # 스프링부트 이미지 빌드
     - cd "$BACKEND_DIR"
     - chmod +x gradlew
     - ./gradlew --no-daemon bootBuildImage --imageName="$IMAGE_NAME"
