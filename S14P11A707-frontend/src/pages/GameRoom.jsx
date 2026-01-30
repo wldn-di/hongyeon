@@ -26,6 +26,35 @@ import { chatWithSuspect, fetchChatHistory } from '@/features/session/api/sessio
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
 
+const START_GAME_DEDUP_MS = 5000
+const startGameDedupStore = {
+  inFlight: new Map(),
+  resolved: new Map(),
+}
+
+const startGameDedup = async (scenarioId) => {
+  const key = String(scenarioId ?? '')
+  const cached = startGameDedupStore.resolved.get(key)
+  if (cached && Date.now() - cached.at < START_GAME_DEDUP_MS) {
+    return cached.value
+  }
+
+  const inFlight = startGameDedupStore.inFlight.get(key)
+  if (inFlight) return inFlight
+
+  const promise = startGame(scenarioId)
+    .then((value) => {
+      startGameDedupStore.resolved.set(key, { value, at: Date.now() })
+      return value
+    })
+    .finally(() => {
+      startGameDedupStore.inFlight.delete(key)
+    })
+
+  startGameDedupStore.inFlight.set(key, promise)
+  return promise
+}
+
 // ========================================
 // 오프닝 페이즈 (시나리오 도입 나레이션)
 // ========================================
@@ -285,6 +314,7 @@ export default function GameRoom() {
   const [currentRoomIndex, setCurrentRoomIndex] = useState(0)
   const [gameInitializing, setGameInitializing] = useState(false)
   const [gameInitError, setGameInitError] = useState(null)
+  const gameInitInFlightRef = useRef(false)
 
   const { discoveredEvidence, collectEvidence, resetSession } = useGameSession()
 
@@ -404,13 +434,28 @@ export default function GameRoom() {
       return
     }
 
+    if (gameInitInFlightRef.current) {
+      console.log('[GameRoom] initializeNewGame: already initializing')
+      return
+    }
+    gameInitInFlightRef.current = true
+
     console.log('[GameRoom] initializeNewGame 시작:', activeScenarioId)
 
     try {
       setGameInitializing(true)
       setGameInitError(null)
-      const response = await startGame(activeScenarioId)
+      const response = await startGameDedup(activeScenarioId)
       console.log('[GameRoom] startGame 응답:', response)
+
+      if (response?.alreadyPlaying) {
+        const existingSessionId = response.sessionId
+        if (existingSessionId) {
+          setLocation(`/room/${existingSessionId}/resume`)
+          return
+        }
+        throw new Error('진행중인 세션 정보를 찾을 수 없습니다.')
+      }
 
       const normalized = normalizeGameStartResponse(response)
       console.log('[GameRoom] normalized:', normalized)
@@ -444,11 +489,20 @@ export default function GameRoom() {
       setGameInitError(err.message || '게임 시작에 실패했습니다.')
       toast.error(err.message || '게임 시작에 실패했습니다.')
     } finally {
+      gameInitInFlightRef.current = false
       setGameInitializing(false)
     }
-  }, [activeScenarioId, addLog, getRoomIndexFromFloor, loadCluesForSession])
+  }, [activeScenarioId, addLog, getRoomIndexFromFloor, loadCluesForSession, setLocation])
 
   const resumeGame = useCallback(async (resumeId) => {
+    if (!resumeId) return
+
+    if (gameInitInFlightRef.current) {
+      console.log('[GameRoom] resumeGame: already initializing')
+      return
+    }
+    gameInitInFlightRef.current = true
+
     try {
       setGameInitializing(true)
       setGameInitError(null)
@@ -545,6 +599,7 @@ export default function GameRoom() {
       setGameInitError(err.message || '이어하기에 실패했습니다.')
       toast.error(err.message || '이어하기에 실패했습니다.')
     } finally {
+      gameInitInFlightRef.current = false
       setGameInitializing(false)
     }
   }, [addLog, collectEvidence, getRoomIndexFromFloor, loadCluesForSession])
