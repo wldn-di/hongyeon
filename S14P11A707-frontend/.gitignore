@@ -9,3 +9,7 @@ build/
 # Local tooling
 CLAUDE.md
 claude_code_zai_env.sh
+# Windows/WSL Mark-of-the-Web (Zone.Identifier)
+*:Zone.Identifier
+*#Uf03aZone.Identifier
+*Zone.Identifier

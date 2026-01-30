@@ -57,6 +57,7 @@ export function InvestigationBoard({
   const boardRef = useRef(null)
   const autosaveTimerRef = useRef(null)
   const pendingConnectFromRef = useRef(null)
+  const isLoadedRef = useRef(false)  // 로드 중복 방지
   const modalDragRef = useRef({
     isDragging: false,
     startX: 0,
@@ -200,9 +201,18 @@ export function InvestigationBoard({
   // ========================================
   // API: 보드 불러오기 (GET /api/sessions/{sessionId}/board)
   // ========================================
+  console.log("[loadBoardFromApi]", sessionId, typeof sessionId, Date.now());
+
   const loadBoardFromApi = useCallback(async () => {
     if (!sessionId) return false
-
+    
+    // 이미 로드 중이면 스킵
+    if (isLoadedRef.current) {
+      console.log('[InvestigationBoard] 이미 로드됨 - 스킵')
+      return false
+    }
+    
+    isLoadedRef.current = true
     setIsLoading(true)
     try {
       const response = await fetchBoard(sessionId)
@@ -307,7 +317,13 @@ export function InvestigationBoard({
       setBoardItems(local.items)
       setConnections(local.connections)
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, initialBoardItems, initialConnections])
+
+  // sessionId 변경 시 플래그 리셋
+  useEffect(() => {
+    isLoadedRef.current = false
+  }, [sessionId])
 
   // ========================================
   // 보드 상태 변경 콜백

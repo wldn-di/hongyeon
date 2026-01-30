@@ -290,6 +290,14 @@ export default function GameRoom() {
 
   const currentRoomIndexRef = useRef(currentRoomIndex)
   currentRoomIndexRef.current = currentRoomIndex
+  
+  // 초기화 중복 방지용 ref
+  const isInitializedRef = useRef(false)
+  
+  // 함수 ref (useEffect에서 최신 함수 참조용)
+  const resumeGameRef = useRef(null)
+  const initializeNewGameRef = useRef(null)
+  
   const [phoneOpen, setPhoneOpen] = useState(false)
   const [chatHistories, setChatHistories] = useState({})
   const [currentChat, setCurrentChat] = useState(null)
@@ -399,11 +407,19 @@ export default function GameRoom() {
 
   // 게임 초기화 (새로 시작)
   const initializeNewGame = useCallback(async () => {
+    // 이미 초기화 중이면 스킵 (ref로 동기 체크)
+    if (isInitializedRef.current) {
+      console.log('[GameRoom] initializeNewGame: 이미 초기화 중 - 스킵')
+      return
+    }
+    
     if (!activeScenarioId) {
       console.log('[GameRoom] initializeNewGame: activeScenarioId 없음')
       return
     }
 
+    // 초기화 시작 표시
+    isInitializedRef.current = true
     console.log('[GameRoom] initializeNewGame 시작:', activeScenarioId)
 
     try {
@@ -449,6 +465,15 @@ export default function GameRoom() {
   }, [activeScenarioId, addLog, getRoomIndexFromFloor, loadCluesForSession])
 
   const resumeGame = useCallback(async (resumeId) => {
+    // 이미 초기화 중이면 스킵 (ref로 동기 체크)
+    if (isInitializedRef.current) {
+      console.log('[GameRoom] resumeGame: 이미 초기화 중 - 스킵')
+      return
+    }
+    
+    // 초기화 시작 표시
+    isInitializedRef.current = true
+    
     try {
       setGameInitializing(true)
       setGameInitError(null)
@@ -547,20 +572,28 @@ export default function GameRoom() {
     } finally {
       setGameInitializing(false)
     }
-  }, [addLog, collectEvidence, getRoomIndexFromFloor, loadCluesForSession])
+  }, [addLog, collectEvidence, getRoomIndexFromFloor, loadCluesForSession, scenario?.suspects])
+
+  // 함수 ref 업데이트 (useEffect에서 최신 함수 사용)
+  resumeGameRef.current = resumeGame
+  initializeNewGameRef.current = initializeNewGame
 
   // 컴포넌트 마운트 시 게임 초기화
   useEffect(() => {
-
     // 이미 세션이 있거나 초기화 중이거나 에러 상태면 스킵
-    if (sessionId || gameInitializing || gameInitError) return
+    if (sessionId || gameInitializing || gameInitError) {
+      return
+    }
 
     if (resumeSessionId) {
-      resumeGame(resumeSessionId)
+      console.log('[GameRoom] useEffect - resume 호출')
+      resumeGameRef.current?.(resumeSessionId)
     } else if (activeScenarioId && scenario && !scenarioLoading) {
-      initializeNewGame()
+      console.log('[GameRoom] useEffect - 새 게임 호출')
+      initializeNewGameRef.current?.()
     }
-  }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError, initializeNewGame, resumeGame])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError])
 
   useLayoutEffect(() => {
     if (activeScenarioId) {
