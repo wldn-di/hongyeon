@@ -33,12 +33,21 @@ export const clueMethods = {
         }
 
         const revealing = this.isFlashlightRevealingClues();
+        const nearRadius = Number.isFinite(this.CLUE_NEAR_REVEAL_RADIUS) ? this.CLUE_NEAR_REVEAL_RADIUS : 18;
+        const nearRadiusSq = nearRadius * nearRadius;
 
         for (const clue of this.clues) {
             if (!clue || !clue.active) continue;
 
             const baseY = clue.getData("baseY") ?? clue.y;
-            const shouldReveal = revealing && this.isPointInFlashlightCone(clue.x, baseY);
+            let isNearPlayer = false;
+            if (this.player) {
+                const dx = clue.x - this.player.x;
+                const dy = baseY - this.player.y;
+                isNearPlayer = dx * dx + dy * dy <= nearRadiusSq;
+            }
+
+            const shouldReveal = revealing && (isNearPlayer || this.isPointInFlashlightCone(clue.x, baseY));
             if (shouldReveal) {
                 if (!clue.visible) {
                     clue.setVisible(true);

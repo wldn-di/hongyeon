@@ -546,7 +546,7 @@ export default function GameRoom() {
             if (history?.messages && history.messages.length > 0) {
               chatHistoriesFromApi[suspect.id] = history.messages.map(msg => ({
                 id: msg.messageId || Date.now(),
-                sender: msg.role === 'USER' ? 'user' : suspect.id,
+                sender: String(msg.role).toLowerCase() === 'user' ? 'user' : suspect.id,
                 text: msg.content,
                 time: new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
               }))
@@ -758,7 +758,11 @@ export default function GameRoom() {
 
     const handleSendMessage = async (contactId, text) => {
       const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-    // 유저 메시지 즉시 추가
+
+      const randomInt = (min, max) => Math.floor(min + Math.random() * (max - min + 1))
+      const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+      // 유저 메시지 즉시 추가
       const newMessage = {
         id: Date.now(),
         sender: 'user',
@@ -771,11 +775,37 @@ export default function GameRoom() {
         [contactId]: [...(prev[contactId] || []), newMessage]
       }))
 
+      const showTyping = () => {
+        const typingMessage = {
+          id: `typing-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+          sender: contactId,
+          text: '',
+          time: '',
+          isTyping: true
+        }
+
+        setChatHistories(prev => ({
+          ...prev,
+          [contactId]: [...(prev[contactId] || []).filter(m => !m?.isTyping), typingMessage]
+        }))
+      }
+
+      const clearTyping = () => {
+        setChatHistories(prev => ({
+          ...prev,
+          [contactId]: (prev[contactId] || []).filter(m => !m?.isTyping)
+        }))
+      }
+
       const isHelper = contactId === 'helper'
 
       if (isHelper) {
-        // 조력자는 더미 응답 (추후 API 연결 가능)
+        showTyping()
+        const delayMs = randomInt(800, 1400)
+
         setTimeout(() => {
+          clearTyping()
+
           const responseMessage = {
             id: Date.now(),
             sender: contactId,
@@ -786,65 +816,73 @@ export default function GameRoom() {
             ...prev,
             [contactId]: [...(prev[contactId] || []), responseMessage]
           }))
-        }, 500)
-      } else {
-        // ✅ 용의자 심문 - 실제 API 연동
-        if (!sessionId) {
-          toast.error('세션 정보가 없습니다.')
-          return
+        }, delayMs)
+        return
+      }
+
+      // ✅ 용의자 심문 - 실제 API 연동
+      if (!sessionId) {
+        toast.error('세션 정보가 없습니다.')
+        return
+      }
+
+      const suspectId = contactId
+      const typingStartedAt = Date.now()
+      const minTypingMs = randomInt(900, 1700)
+
+      showTyping()
+
+      try {
+        const response = await chatWithSuspect(sessionId, suspectId, {
+          message: text,
+          usedClueId: null  // 단서 사용 시 해당 clueId 전달
+        })
+
+        const elapsed = Date.now() - typingStartedAt
+        const waitMs = Math.max(0, minTypingMs - elapsed)
+        if (waitMs > 0) await sleep(waitMs)
+
+        clearTyping()
+
+        const responseMessage = {
+          id: response.messageId || Date.now(),
+          sender: contactId,
+          text: response.response || response.content || response.message || "...",
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
+          isKeyTalk: response.isKeyTalk || false,
+          responseLevel: response.responseLevel || 0
         }
 
-        // contactId에서 suspectId 추출 (contact.id가 suspectId와 동일하다고 가정)
-        const suspectId = contactId
+        setChatHistories(prev => ({
+          ...prev,
+          [contactId]: [...(prev[contactId] || []), responseMessage]
+        }))
 
-        try {
-          // API 호출
-          const response = await chatWithSuspect(sessionId, suspectId, {
-            message: text,
-            usedClueId: null  // 단서 사용 시 해당 clueId 전달
-          })
-
-          // 응답 메시지 추가
-          const responseMessage = {
-            id: response.messageId || Date.now(),
-            sender: contactId,
-            text: response.content || response.message || "...",
-            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' }),
-            isKeyTalk: response.isKeyTalk || false,
-            responseLevel: response.responseLevel || 0
-          }
-
-          setChatHistories(prev => ({
-            ...prev,
-            [contactId]: [...(prev[contactId] || []), responseMessage]
-          }))
-
-          // 핵심 대화인 경우 로그 추가
-          if (response.isKeyTalk) {
-            addLog('interrogation', `[핵심 정보] 용의자로부터 중요한 정보를 얻었습니다!`)
-          } else {
-            addLog('interrogation', `용의자 심문을 진행했습니다.`)
-          }
-
-          // 로그 새로고침
-          refetchLogs?.()
-
-        } catch (err) {
-          console.error('심문 실패:', err)
-          toast.error(err.message || '심문에 실패했습니다.')
-
-          // 에러 시 에러 메시지 표시
-          const errorMessage = {
-            id: Date.now(),
-            sender: 'system',
-            text: "⚠️ 응답을 받지 못했습니다. 다시 시도해주세요.",
-            time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
-          }
-          setChatHistories(prev => ({
-            ...prev,
-            [contactId]: [...(prev[contactId] || []), errorMessage]
-          }))
+        // 핵심 대화인 경우 로그 추가
+        if (response.isKeyTalk) {
+          addLog('interrogation', `[핵심 정보] 용의자로부터 중요한 정보를 얻었습니다!`)
+        } else {
+          addLog('interrogation', `용의자 심문을 진행했습니다.`)
         }
+
+        refetchLogs?.()
+
+      } catch (err) {
+        console.error('심문 실패:', err)
+        toast.error(err.message || '심문에 실패했습니다.')
+
+        clearTyping()
+
+        const errorMessage = {
+          id: Date.now(),
+          sender: 'system',
+          text: "⚠️ 응답을 받지 못했습니다. 다시 시도해주세요.",
+          time: new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
+        }
+        setChatHistories(prev => ({
+          ...prev,
+          [contactId]: [...(prev[contactId] || []), errorMessage]
+        }))
       }
     }
     const handleContactSelect = useCallback(async (contact) => {
@@ -865,7 +903,7 @@ export default function GameRoom() {
           // API 응답을 채팅 히스토리 형식으로 변환
           const formattedMessages = response.messages.map(msg => ({
             id: msg.messageId,
-            sender: msg.role === 'USER' ? 'user' : suspectId,
+            sender: String(msg.role).toLowerCase() === 'user' ? 'user' : suspectId,
             text: msg.content,
             time: msg.createdAt
               ? new Date(msg.createdAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
