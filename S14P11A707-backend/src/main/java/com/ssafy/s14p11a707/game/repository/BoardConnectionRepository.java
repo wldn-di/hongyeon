@@ -5,6 +5,7 @@ import com.ssafy.s14p11a707.game.entity.BoardConnection.ConnectionType;
 import com.ssafy.s14p11a707.game.entity.GameSession;
 import java.util.List;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -26,5 +27,7 @@ public interface BoardConnectionRepository extends JpaRepository<BoardConnection
 
     void deleteBySessionAndIdIn(GameSession session, List<Long> ids);
 
-    void deleteBySessionId(Long sessionId);
+    @Modifying
+    @Query("DELETE FROM BoardConnection bc WHERE bc.session.id = :sessionId")
+    int deleteBySessionId(@Param("sessionId") Long sessionId);
 }
