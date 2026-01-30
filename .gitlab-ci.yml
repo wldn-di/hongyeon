@@ -8,7 +8,8 @@ variables:
   FRONTEND_DIR: "S14P11A707-frontend"
   BACKEND_DIR: "S14P11A707-backend"
   REMOTE_COMPOSE_DIR: "/home/ubuntu/infra"
-  IMAGE_REPO: "detective-backend"
+  # 서버 docker-compose.yml 의 backend.image 와 동일한 태그로 맞춰야 pull 없이 동작함
+  REGISTRY_HOST: "lab.ssafy.com:5050"
 
   # dind (Docker-in-Docker) 사용
   DOCKER_HOST: "tcp://docker:2375"
@@ -35,6 +36,8 @@ deploy:
     - |
       set -euo pipefail
       export IMAGE_TAG="prod"
+      export PROJECT_PATH_LOWER="$(printf '%s' "$CI_PROJECT_PATH" | tr '[:upper:]' '[:lower:]')"
+      export IMAGE_REPO="$REGISTRY_HOST/$PROJECT_PATH_LOWER/backend"
       export IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
       echo "IMAGE_NAME=$IMAGE_NAME"
 
@@ -60,7 +63,7 @@ deploy:
 
       # 서버로 이미지 전송/로드 후 compose 재기동
       docker save "$IMAGE_NAME" | gzip -1 | ssh ubuntu@i14a707.p.ssafy.io "gunzip | docker load"
-      ssh ubuntu@i14a707.p.ssafy.io "cd \"$REMOTE_COMPOSE_DIR\" && docker compose up -d --remove-orphans backend && docker compose ps"
+      ssh ubuntu@i14a707.p.ssafy.io "cd \"$REMOTE_COMPOSE_DIR\" && (docker compose up -d --pull never --remove-orphans backend || docker compose up -d --remove-orphans backend) && docker compose ps"
 
   environment:
     name: production
