@@ -1,5 +1,7 @@
 package com.ssafy.s14p11a707.scenario.api;
 
+import com.ssafy.s14p11a707.exception.BaseException;
+import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.game.dto.GameStartResponse;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
 import com.ssafy.s14p11a707.review.dto.ReviewCreateRequest;
@@ -16,7 +18,9 @@ import com.ssafy.s14p11a707.scenario.dto.ScenarioRankingResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioStatusResponse;
 import com.ssafy.s14p11a707.scenario.dto.SuspectListResponse;
 import com.ssafy.s14p11a707.scenario.dto.VictimResponse;
+import com.ssafy.s14p11a707.scenario.repository.ScenarioRepository;
 import com.ssafy.s14p11a707.scenario.service.ScenarioService;
+import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.http.ResponseEntity;
@@ -39,6 +43,8 @@ public class ScenarioApi implements ScenarioApiDoc {
     private final ScenarioService scenarioService;
     private final ReviewService reviewService;
     private final GameSessionService gameSessionService;
+    private final ScenarioRepository scenarioRepository;
+    private final CurrentUserIdResolver currentUserIdResolver;
 
 
     @GetMapping
@@ -71,7 +77,8 @@ public class ScenarioApi implements ScenarioApiDoc {
             @RequestBody ScenarioCreateRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(scenarioService.createScenario(request, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(scenarioService.createScenario(request, userId));
     }
 
     @DeleteMapping("/{scenarioId}")
@@ -80,7 +87,9 @@ public class ScenarioApi implements ScenarioApiDoc {
             @PathVariable long scenarioId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(scenarioService.deleteScenario(scenarioId, oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        ensureScenarioOwnership(scenarioId, userId);
+        return ResponseEntity.ok(scenarioService.deleteScenario(scenarioId));
     }
 
     @GetMapping("/{scenarioId}/rankings")
@@ -89,7 +98,8 @@ public class ScenarioApi implements ScenarioApiDoc {
             @PathVariable long scenarioId,
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(scenarioService.getScenarioRankings(scenarioId, oidcUser));
+        Long userId = oidcUser == null ? null : currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(scenarioService.getScenarioRankings(scenarioId, userId));
     }
 
     @GetMapping("/{scenarioId}/rooms")
@@ -108,5 +118,13 @@ public class ScenarioApi implements ScenarioApiDoc {
     @Override
     public ResponseEntity<SuspectListResponse> getSuspects(@PathVariable long scenarioId) {
         return ResponseEntity.ok(scenarioService.getSuspects(scenarioId));
+    }
+
+    private void ensureScenarioOwnership(long scenarioId, long userId) {
+        var scenario = scenarioRepository.findByIdWithCreator(scenarioId)
+                .orElseThrow(() -> new BaseException(ErrorCode.SCENARIO_NOT_FOUND));
+        if (scenario.getCreator().getId() != userId) {
+            throw new BaseException(ErrorCode.ACCESS_DENIED);
+        }
     }
 }

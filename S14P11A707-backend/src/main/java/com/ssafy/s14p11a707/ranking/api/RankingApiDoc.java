@@ -45,6 +45,6 @@ public interface RankingApiDoc {
     ResponseEntity<MyRankingResponse> getMyRanking(
             @Parameter(description = "랭킹 타입 (score: 점수, clears: 클리어 수, time: 플레이 시간)", example = "score")
             String type,
-            OidcUser oidcUser
+            @Parameter(hidden = true) OidcUser oidcUser
     );
 }

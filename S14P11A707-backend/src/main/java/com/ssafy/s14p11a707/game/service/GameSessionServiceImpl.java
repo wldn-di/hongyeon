@@ -40,7 +40,6 @@ import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.embedding.EmbeddingModel;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -101,8 +100,9 @@ public class GameSessionServiceImpl implements GameSessionService {
      */
     @Override
     @Transactional
-    public GameStartResponse startGame(long scenarioId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
+    public GameStartResponse startGame(long scenarioId, long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
         Scenario scenario = getValidScenario(scenarioId);
 
         Optional<GameSession> existingSession = gameSessionRepository
@@ -133,8 +133,9 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     @Override
     @Transactional
-    public GameStartResponse restartGame(long scenarioId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
+    public GameStartResponse restartGame(long scenarioId, long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
         Scenario scenario = getValidScenario(scenarioId);
 
         Optional<GameSession> existingSession = gameSessionRepository
@@ -197,9 +198,8 @@ public class GameSessionServiceImpl implements GameSessionService {
     // TODO: 프론트 호출 흐름: 세션 기본정보(현) + 인벤토리, 보드, 로그, 채팅내역
     @Override
     @Transactional
-    public GameResumeResponse resumeGame(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public GameResumeResponse resumeGame(long sessionId) {
+        GameSession session = getSession(sessionId);
 
         // PLAYING이 아니면 리셋 후 재시작
         if (session.getStatus() != Status.PLAYING) {
@@ -221,9 +221,8 @@ public class GameSessionServiceImpl implements GameSessionService {
      */
     @Override
     @Transactional
-    public DiscoveredClueResponse discoverClue(long sessionId, long clueId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public DiscoveredClueResponse discoverClue(long sessionId, long clueId) {
+        GameSession session = getSession(sessionId);
         validatePlaying(session);
 
         Clue clue = clueRepository.findById(clueId)
@@ -274,9 +273,8 @@ public class GameSessionServiceImpl implements GameSessionService {
     }
 
     @Override
-    public ClueListResponse getDiscoveredClues(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public ClueListResponse getDiscoveredClues(long sessionId) {
+        GameSession session = getSession(sessionId);
 
         List<DiscoveredClue> discoveredClues = discoveredClueRepository
                 .findBySessionIdWithClue(sessionId);
@@ -306,9 +304,8 @@ public class GameSessionServiceImpl implements GameSessionService {
     }
 
     @Override
-    public ClueDetailResponse getDiscoveredClue(long sessionId, long clueId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public ClueDetailResponse getDiscoveredClue(long sessionId, long clueId) {
+        getSession(sessionId);
 
         DiscoveredClue discoveredClue = discoveredClueRepository
                 .findBySessionIdAndClueIdWithClue(sessionId, clueId)
@@ -323,9 +320,8 @@ public class GameSessionServiceImpl implements GameSessionService {
     // TODO : session.updateProgress(), saveEventLog() 필요
     @Override
     @Transactional
-    public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
+        GameSession session = getSession(sessionId);
         validatePlaying(session);
 
         // 시나리오 정보를 문자열로 빌드
@@ -333,7 +329,7 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // 용의자 정보 조회
         Suspect suspect = suspectRepository.findById(suspectId)
-                .orElseThrow(() -> new IllegalArgumentException("Suspect not found: " + suspectId));
+                .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
 
         // aiConfigJson에서 성격/말투 추출
         JsonNode aiConfig = suspect.getAiConfigJson();
@@ -665,9 +661,8 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     // TODO : 테스트 필요
     @Override
-    public ChatHistoryResponse getChatHistory(long sessionId, long suspectId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public ChatHistoryResponse getChatHistory(long sessionId, long suspectId) {
+        GameSession session = getSession(sessionId);
 
         Suspect suspect = suspectRepository.findById(suspectId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
@@ -687,9 +682,8 @@ public class GameSessionServiceImpl implements GameSessionService {
      */
     // TODO : 테스트 필요
     @Override
-    public EventLogListResponse getLogs(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public EventLogListResponse getLogs(long sessionId) {
+        getSession(sessionId);
 
         List<EventLog> logs = eventLogRepository.findBySessionIdOrderByCreatedAtAsc(sessionId);
         return EventLogListResponse.from(sessionId, logs);
@@ -700,9 +694,8 @@ public class GameSessionServiceImpl implements GameSessionService {
      */
     @Override
     @Transactional
-    public FloorMoveResponse moveFloor(long sessionId, FloorMoveRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public FloorMoveResponse moveFloor(long sessionId, FloorMoveRequest request) {
+        GameSession session = getSession(sessionId);
         validatePlaying(session);
         Scenario scenario = session.getScenario();
 
@@ -744,18 +737,16 @@ public class GameSessionServiceImpl implements GameSessionService {
      * 추리보드 섹션
      */
     @Override
-    public BoardResponse getBoard(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        getSessionWithOwnershipValidation(sessionId, user);
+    public BoardResponse getBoard(long sessionId) {
+        getSession(sessionId);
 
         return buildBoardResponse(sessionId);
     }
 
     @Override
     @Transactional
-    public BoardResponse saveBoard(long sessionId, BoardSaveRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public BoardResponse saveBoard(long sessionId, BoardSaveRequest request) {
+        GameSession session = getSession(sessionId);
 
         // 1. 기존 연결선 전체 삭제
         boardConnectionRepository.deleteBySessionId(sessionId);
@@ -862,9 +853,8 @@ public class GameSessionServiceImpl implements GameSessionService {
      */
     // TODO: 테스트 필요
     @Override
-    public InvestigationReportResponse getInvestigationReport(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public InvestigationReportResponse getInvestigationReport(long sessionId) {
+        GameSession session = getSession(sessionId);
 
         int cluesCollected = discoveredClueRepository.countBySession(session);
         int totalInterrogations = chatMessageRepository.countBySessionAndRole(session, "user");
@@ -877,22 +867,8 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     // TODO: 테스트 필요
     @Override
-    public InvestigationReportResponse getOtherInvestigationReport(long sessionId, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
+    public InvestigationReportResponse getOtherInvestigationReport(long sessionId) {
         GameSession session = getSession(sessionId);
-
-        // 타인 수사보고서 열람: COMPLETED 세션을 가진 유저만 열람 가능
-        if (session.getStatus() != Status.COMPLETED) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-
-        boolean hasCompletedSession = gameSessionRepository.existsByScenarioIdAndUserIdAndStatus(
-                session.getScenario().getId(), user.getId(), Status.COMPLETED
-        );
-
-        if (!hasCompletedSession) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
 
         int cluesCollected = discoveredClueRepository.countBySession(session);
         int totalInterrogations = chatMessageRepository.countBySessionAndRole(session, "user");
@@ -907,9 +883,9 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     @Override
     @Transactional
-    public SubmitResponse submit(long sessionId, SubmitRequest request, OidcUser oidcUser) {
-        User user = getUser(oidcUser);
-        GameSession session = getSessionWithOwnershipValidation(sessionId, user);
+    public SubmitResponse submit(long sessionId, SubmitRequest request) {
+        GameSession session = getSession(sessionId);
+        User user = session.getUser();
         int attempts = session.getSubmitAttempts() != null ? session.getSubmitAttempts() : 0;
 
         // 1. 게임 상태 확인
@@ -1086,26 +1062,9 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      * private 헬프 메서드 섹션
      */
-    private User getUser(OidcUser oidcUser) {
-        if (oidcUser == null) {
-            throw new BaseException(ErrorCode.UNAUTHORIZED);
-        }
-        String googleId = oidcUser.getSubject();
-        return userRepository.findByGoogleId(googleId)
-                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
-    }
-
     private GameSession getSession(long sessionId) {
         return gameSessionRepository.findById(sessionId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
-    }
-
-    private GameSession getSessionWithOwnershipValidation(long sessionId, User user) {
-        GameSession session = getSession(sessionId);
-        if (session.getUser().getId() != user.getId()) {
-            throw new BaseException(ErrorCode.ACCESS_DENIED);
-        }
-        return session;
     }
 
     private void validatePlaying(GameSession session) {

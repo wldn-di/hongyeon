@@ -2,6 +2,7 @@ package com.ssafy.s14p11a707.user.api;
 
 import com.ssafy.s14p11a707.auth.dto.AuthMeResponse;
 import com.ssafy.s14p11a707.scenario.dto.ScenarioListResponse;
+import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
 import com.ssafy.s14p11a707.user.dto.BookshelfSessionResponse;
 import com.ssafy.s14p11a707.user.dto.BookshelfStatsResponse;
 import com.ssafy.s14p11a707.user.dto.UserNicknameUpdateRequest;
@@ -28,13 +29,15 @@ public class UserMeApi implements UserMeApiDoc {
 
     private final UserMeService userMeService;
     private final UserService userService;
+    private final CurrentUserIdResolver currentUserIdResolver;
 
     @GetMapping("/bookshelf/stats")
     @Override
     public ResponseEntity<BookshelfStatsResponse> getMyBookshelfStats(
             @AuthenticationPrincipal OidcUser oidcUser
     ) {
-        return ResponseEntity.ok(userMeService.getMyBookshelfStats(oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(userMeService.getMyBookshelfStats(userId));
     }
 
     @GetMapping("/bookshelf/sessions")
@@ -43,7 +46,8 @@ public class UserMeApi implements UserMeApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ResponseEntity.ok(userMeService.getMyBookshelfSessions(oidcUser, pageable));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(userMeService.getMyBookshelfSessions(userId, pageable));
     }
 
     @GetMapping("/scenarios")
@@ -52,7 +56,8 @@ public class UserMeApi implements UserMeApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser,
             @PageableDefault(size = 20, sort = "createdAt", direction = Sort.Direction.DESC) Pageable pageable
     ) {
-        return ResponseEntity.ok(userMeService.getMyScenarios(oidcUser, pageable));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(userMeService.getMyScenarios(userId, pageable));
     }
 
     @PatchMapping("/nickname")
@@ -61,6 +66,7 @@ public class UserMeApi implements UserMeApiDoc {
             @AuthenticationPrincipal OidcUser oidcUser,
             @Valid @RequestBody UserNicknameUpdateRequest request
     ) {
-        return ResponseEntity.ok(AuthMeResponse.from(userService.changeMyNickname(oidcUser, request.nickname())));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(AuthMeResponse.from(userService.changeNickname(userId, request.nickname())));
     }
 }

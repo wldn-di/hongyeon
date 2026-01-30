@@ -2,6 +2,7 @@ package com.ssafy.s14p11a707.auth.api;
 
 import com.ssafy.s14p11a707.auth.dto.AuthMeResponse;
 import com.ssafy.s14p11a707.auth.service.AuthService;
+import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.net.URI;
@@ -23,6 +24,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class AuthApi implements AuthApiDoc {
 
     private final AuthService authService;
+    private final CurrentUserIdResolver currentUserIdResolver;
 
     @GetMapping("/login")
     @Override
@@ -37,7 +39,8 @@ public class AuthApi implements AuthApiDoc {
     @GetMapping("/me")
     @Override
     public ResponseEntity<AuthMeResponse> me(@AuthenticationPrincipal OidcUser oidcUser) {
-        return ResponseEntity.ok(authService.me(oidcUser));
+        long userId = currentUserIdResolver.requireUserId(oidcUser);
+        return ResponseEntity.ok(authService.me(userId));
     }
 
     @PostMapping("/refresh")

@@ -66,7 +66,7 @@ public class DebugApi implements DebugApiDoc {
     public ResponseEntity<ClueListResponse> getDiscoveredCluesBySession(
             @PathVariable long sessionId,
             @AuthenticationPrincipal OidcUser oidcUser){
-        return ResponseEntity.ok(gameSessionService.getDiscoveredClues(sessionId, oidcUser));
+        return ResponseEntity.ok(gameSessionService.getDiscoveredClues(sessionId));
     }
 
     @GetMapping("/scenarios/{scenarioId}/victim")
