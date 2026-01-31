@@ -21,7 +21,7 @@ spring:
       # pgvector 등 확장/기본 DDL은 schema.sql에서 관리
       # - 기본값은 embedded(=H2 등 내장 DB에서만 실행)로 두고,
       #   PostgreSQL에서 schema.sql을 실행하려면 SQL_INIT_MODE=always 로 명시
-      mode: ${SQL_INIT_MODE:embedded}
+      mode: ${SQL_INIT_MODE:always}
 
   neo4j:
     uri: ${NEO4J_URI:bolt://localhost:7687}
