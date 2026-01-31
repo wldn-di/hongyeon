@@ -31,16 +31,15 @@ export function AuthProvider({ children }) {
 
   const rawBase = import.meta.env.VITE_API_BASE_URL
   const base = rawBase ? rawBase.replace(/\/$/, "") : "" // 끝 슬래시 제거로 통일
-  const useMock = import.meta.env.VITE_USE_MOCK_AUTH === "true"
 
   // 디버깅용
-  console.log("[AUTH] mode:", import.meta.env.MODE)
-  console.log("[AUTH] base:", base)
-  console.log("[AUTH] useMock:", useMock)
+  // console.log("[AUTH] mode:", import.meta.env.MODE)
+  // console.log("[AUTH] base:", base)
+  // console.log("[AUTH] useMock:", useMock)
 
   // 앱 시작 시: 로그인 여부 확인(mock이면 스킵)
   useEffect(() => {
-    if (useMock || !base) {
+    if (!base) {
       dispatch({ type: "CLEAR_USER" })
       return
     }
@@ -60,13 +59,13 @@ export function AuthProvider({ children }) {
     return () => {
       alive = false
     }
-  }, [useMock, base])
+  }, [base])
 
   const actions = useMemo(
     () => ({
       // 1) 로그인
       login() {
-        if (useMock || !base) {
+        if (!base) {
           dispatch({
             type: "SET_USER",
             user: {
@@ -88,7 +87,7 @@ export function AuthProvider({ children }) {
 
       // 2) 로그아웃
       async logout() {
-        if (useMock || !base) {
+        if (!base) {
           dispatch({ type: "CLEAR_USER" })
           return
         }
@@ -98,7 +97,7 @@ export function AuthProvider({ children }) {
 
       // 3) 수동 재조회
       async refreshMe() {
-        if (useMock || !base) {
+        if (!base) {
           dispatch({ type: "SET_LOADING", loading: false })
           return
         }
@@ -115,7 +114,7 @@ export function AuthProvider({ children }) {
 
       // 4) 회원탈퇴 (서버 엔드포인트 준비되면 활성화)
       async deleteAccount() {
-        if (useMock || !base) {
+        if ( !base) {
           dispatch({ type: "CLEAR_USER" })
           return
         }
@@ -153,7 +152,7 @@ export function AuthProvider({ children }) {
 
         // 닉네임 변경은 서버 반영(개발/Mock 모드에서는 로컬만)
         if (nickname == null) return
-        if (useMock || !base) {
+        if (!base) {
           dispatch({
             type: "UPDATE_USER",
             patch: { nickname, updated_at },
@@ -194,7 +193,7 @@ export function AuthProvider({ children }) {
         })()
       },
     }),
-    [base, useMock]
+    [base]
   )
 
   const value = useMemo(() => ({ state, actions }), [state, actions])

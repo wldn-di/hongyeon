@@ -65,7 +65,7 @@ public class ScenarioServiceImpl implements ScenarioService {
         User creator = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
         int estimatedSeconds = Math.max(20, Math.min(120, 25 + request.suspectCount() * 10));
-
+        //log.info("createScenario request suspectCount={}", request.suspectCount()); 프론트에서 백으로 요청이 잘 전달되는지 디버깅용
         ScenarioCreateResponse.OriginalRequest originalRequest = new ScenarioCreateResponse.OriginalRequest(request.title(), request.userSynopsis(), request.genre(), request.suspectCount());
         try {
             // 1. 사용자 입력 메시지
@@ -127,14 +127,12 @@ public class ScenarioServiceImpl implements ScenarioService {
                     """, suspectCount, suspectCount, suspectCount + 1, suspectCount, suspectCount);
 
             StringBuilder timelineSb = new StringBuilder();
-            chatClient.prompt()
+            String content = chatClient.prompt()
                     .system(timelineSystemMessage)
                     .user(userMessage)
-                    .stream()
-                    .content()
-                    .doOnNext(timelineSb::append)
-                    .blockLast();
-
+                    .call()
+                    .content();
+            timelineSb.append(content);
             String timelineJson = timelineSb.toString();
             timelineJson = timelineJson.replaceAll("```json\\s*", "")
                     .replaceAll("```\\s*$", "")
@@ -184,14 +182,12 @@ public class ScenarioServiceImpl implements ScenarioService {
                     """, timelineJson);
 
             StringBuilder step1Sb = new StringBuilder();
-            chatClient.prompt()
+            String content1 = chatClient.prompt()
                     .system(scenarioSystemMessage1)
                     .user("Generate scenario based on the timeline above.")
-                    .stream()
-                    .content()
-                    .doOnNext(step1Sb::append)
-                    .blockLast();
-
+                    .call()
+                    .content();
+            step1Sb.append(content1);
             String step1Response = step1Sb.toString();
             step1Response = step1Response.replaceAll("```json\\s*", "")
                     .replaceAll("```\\s*$", "")
@@ -313,14 +309,13 @@ public class ScenarioServiceImpl implements ScenarioService {
                     """, suspectCount, step1Response);
 
             StringBuilder step2Sb = new StringBuilder();
-            chatClient.prompt()
+            String content2 =  chatClient.prompt()
                     .system(scenarioSystemMessage2)
                     .user("Generate victim, suspects, and clues based on the scenario above.")
-                    .stream()
-                    .content()
-                    .doOnNext(step2Sb::append)
-                    .blockLast();
+                    .call()
+                    .content();
 
+            step2Sb.append(content2);
             String step2Response = step2Sb.toString();
             step2Response = step2Response.replaceAll("```json\\s*", "")
                     .replaceAll("```\\s*$", "")
@@ -413,14 +408,12 @@ public class ScenarioServiceImpl implements ScenarioService {
         """, combinedContext);
 
             StringBuilder step3Sb = new StringBuilder();
-            chatClient.prompt()
+           String content3 = chatClient.prompt()
                     .system(scenarioSystemMessage3)
                     .user("Generate 6 rooms based on the scenario above.")
-                    .stream()
-                    .content()
-                    .doOnNext(step3Sb::append)
-                    .blockLast();
-
+                    .call()
+                    .content();
+            step2Sb.append(content3);
             String step3Response = step3Sb.toString();
             step3Response = step3Response.replaceAll("```json\\s*", "")
                     .replaceAll("```\\s*$", "")
