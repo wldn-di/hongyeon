@@ -42,6 +42,12 @@ S14P11A707-backend/.env
 S14P11A707-backend/.env.*
 !S14P11A707-backend/.env.example
 
+### Deploy-only compose (do not commit secrets) ###
+S14P11A707-backend/docker-compose.yml
+
+### Local agent state ###
+S14P11A707-backend/.sisyphus/
+
 ### Local Notion spec extraction ###
 .notion_spec/
 

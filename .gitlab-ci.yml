@@ -1,64 +1,30 @@
-# 간단한 CI/CD - 도커 없이
-# main/master 푸시 시 → 프론트 빌드 → 백엔드 jar 빌드 → EC2 배포
+# 간단한 CI/CD - Docker Compose(서버) 기반
+# main/master/test-build 푸시 시 → 프론트 빌드 → 백엔드 bootBuildImage → 서버에 이미지 로드 → compose up
 
 stages:
-  - build
   - deploy
 
 variables:
   FRONTEND_DIR: "S14P11A707-frontend"
   BACKEND_DIR: "S14P11A707-backend"
-  DEPLOY_PATH: "/home/ubuntu/app"
+  REMOTE_COMPOSE_DIR: "/home/ubuntu/infra"
+  # 서버 docker-compose.yml 의 backend.image 와 동일한 태그로 맞춰야 pull 없이 동작함
+  REGISTRY_HOST: "lab.ssafy.com:5050"
 
-# -----------------------------
-# 1) 빌드: 프론트 → 백엔드 static 복사 → jar 생성
-# -----------------------------
-build:
-  stage: build
-  image: gradle:8.10.0-jdk21-jammy
-  rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master)$/'
-  script:
-    - set -euo pipefail
+  # dind (Docker-in-Docker) 사용
+  DOCKER_HOST: "tcp://docker:2375"
+  DOCKER_TLS_CERTDIR: ""
 
-    # Node.js 설치 (프론트 빌드용)
-    - curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    - apt-get install -y nodejs
-
-    # 프론트엔드 빌드
-    - cd "$FRONTEND_DIR"
-    - npm ci
-    - npm run build
-
-    # 스프링부트 resources/static 폴더 생성 및 dist 복사
-    - cd "$CI_PROJECT_DIR"
-    - mkdir -p "$BACKEND_DIR/src/main/resources/static"
-    - cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/main/resources/static/"
-
-    # 스프링부트 jar 빌드
-    - cd "$BACKEND_DIR"
-    - chmod +x gradlew
-    - ./gradlew --no-daemon bootJar
-
-    # jar 파일을 artifact로 저장 (deploy 단계에서 사용)
-    - cd "$CI_PROJECT_DIR"
-    - mkdir -p artifacts
-    - cp "$BACKEND_DIR"/build/libs/*.jar artifacts/app.jar
-  artifacts:
-    paths:
-      - artifacts/app.jar
-    expire_in: 1 hour
-
-# -----------------------------
-# 2) 배포: EC2에 jar 전송 + 재시작
-# -----------------------------
 deploy:
   stage: deploy
-  image: ubuntu:24.04
+  image: gradle:8.10.0-jdk21-jammy
+  services:
+    - name: docker:27.0.3-dind
+      command: ["--tls=false"]
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master)$/'
+    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master|test-build)$/'
   before_script:
-    - apt-get update && apt-get install -y openssh-client
+    - apt-get update && apt-get install -y openssh-client docker.io
     # SSH 키 설정 (GitLab CI Variables에 EC2_SSH_KEY 등록 필요 - File 타입)
     - mkdir -p ~/.ssh
     - chmod 700 ~/.ssh
@@ -67,34 +33,37 @@ deploy:
     - chmod 600 ~/.ssh/id_rsa
     - ssh-keyscan i14a707.p.ssafy.io >> ~/.ssh/known_hosts
   script:
-    # 배포 경로 생성
-    - ssh ubuntu@i14a707.p.ssafy.io "mkdir -p $DEPLOY_PATH"
-
-    # jar 파일 전송
-    - scp artifacts/app.jar ubuntu@i14a707.p.ssafy.io:$DEPLOY_PATH/app.jar
-
-    # 프로세스 종료 후 재시작
     - |
-      ssh ubuntu@i14a707.p.ssafy.io "
-        cd $DEPLOY_PATH
+      set -euo pipefail
+      export IMAGE_TAG="prod"
+      export PROJECT_PATH_LOWER="$(printf '%s' "$CI_PROJECT_PATH" | tr '[:upper:]' '[:lower:]')"
+      export IMAGE_REPO="$REGISTRY_HOST/$PROJECT_PATH_LOWER/backend"
+      export IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
+      echo "IMAGE_NAME=$IMAGE_NAME"
 
-        # Java 설치 (없으면 자동 설치)
-        if ! command -v java &> /dev/null; then
-          sudo apt-get update && sudo apt-get install -y openjdk-21-jdk
-        fi
+      # Node.js 설치 (프론트 빌드용)
+      curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+      apt-get install -y nodejs
 
-        # 기존 프로세스 종료
-        if [ -f pid.txt ]; then
-          kill \$(cat pid.txt) 2>/dev/null || true
-        fi
-        pkill -f 'app.jar' 2>/dev/null || true
-        sleep 2
+      # 프론트엔드 빌드
+      cd "$FRONTEND_DIR"
+      npm ci
+      npm run build
 
-        # 새 jar 실행 (백그라운드)
-        nohup java -jar app.jar > app.log 2>&1 &
-        echo \$! > pid.txt
-        echo '애플리케이션 시작됨'
-      "
+      # 스프링부트 resources/static 폴더 생성 및 dist 복사
+      cd "$CI_PROJECT_DIR"
+      mkdir -p "$BACKEND_DIR/src/main/resources/static"
+      rm -rf "$BACKEND_DIR/src/main/resources/static/"*
+      cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/main/resources/static/"
+
+      # 스프링부트 이미지 빌드
+      cd "$BACKEND_DIR"
+      chmod +x gradlew
+      ./gradlew --no-daemon bootBuildImage --imageName="$IMAGE_NAME"
+
+      # 서버로 이미지 전송/로드 후 compose 재기동
+      docker save "$IMAGE_NAME" | gzip -1 | ssh ubuntu@i14a707.p.ssafy.io "gunzip | docker load"
+      ssh ubuntu@i14a707.p.ssafy.io "cd \"$REMOTE_COMPOSE_DIR\" && (docker compose up -d --pull never --remove-orphans backend || docker compose up -d --remove-orphans backend) && docker compose ps"
 
   environment:
     name: production
