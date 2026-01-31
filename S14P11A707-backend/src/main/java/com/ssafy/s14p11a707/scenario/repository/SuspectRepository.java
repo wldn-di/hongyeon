@@ -21,7 +21,5 @@ public interface SuspectRepository extends JpaRepository<Suspect, Long> {
     @Query("DELETE FROM Suspect s WHERE s.scenario.id = :scenarioId")
     void deleteByScenarioId(@Param("scenarioId") long scenarioId);
 
-    List<ChatMessage> findBySessionIdAndKeyTalkTrueOrderByCreatedAtDesc(long sessionId);
-
 }
 
