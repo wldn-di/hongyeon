@@ -35,7 +35,9 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
         """)
     void deleteBySessionIdAndSuspectId(@Param("sessionId") long sessionId, @Param("suspectId") long suspectId);
 
-    void deleteBySessionId(long sessionId);
+    @Modifying
+    @Query("DELETE FROM ChatMessage cm WHERE cm.session.id = :sessionId")
+    int deleteBySessionId(@Param("sessionId") Long sessionId);
 
     @Query("SELECT cm FROM ChatMessage cm " +
             "LEFT JOIN FETCH cm.suspect " +

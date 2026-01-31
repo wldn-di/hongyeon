@@ -854,7 +854,6 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      * 수사보고서 섹션
      */
-    // TODO: 테스트 필요
     @Override
     public InvestigationReportResponse getInvestigationReport(long sessionId) {
         GameSession session = getSession(sessionId);
@@ -864,6 +863,8 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // TODO: keyTalk은 용의자 심문 API에서 설정됨. 심문 API 담당자가 ChatMessage.keyTalk 플래그 설정 필요
         List<ChatMessage> keyTalks = chatMessageRepository.findBySessionIdAndKeyTalkTrueOrderByCreatedAtDesc(sessionId);
+
+        resetSession(session);
 
         return InvestigationReportResponse.from(session, totalInterrogations, cluesCollected, keyTalks);
     }
@@ -990,12 +991,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             if (newAttempts >= 3) {
                 session.failGame();
                 gameSessionRepository.save(session);
-                // 연관 데이터 삭제
-                boardConnectionRepository.deleteBySessionId(sessionId);
-                boardNodeRepository.deleteBySessionId(sessionId);
-                discoveredClueRepository.deleteBySessionId(sessionId);
-                chatMessageRepository.deleteBySessionId(sessionId);
-                eventLogRepository.deleteBySessionId(sessionId);
+
                 // 유저 플레이 시간 누적
                 long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
                 user.addPlayTime(playTime);

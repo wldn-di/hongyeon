@@ -5,6 +5,7 @@ import com.ssafy.s14p11a707.game.entity.GameSession;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -28,5 +29,7 @@ public interface DiscoveredClueRepository extends JpaRepository<DiscoveredClue, 
     @Query("SELECT dc FROM DiscoveredClue dc JOIN FETCH dc.clue c LEFT JOIN FETCH c.room WHERE dc.session.id = :sessionId AND dc.clue.id = :clueId")
     Optional<DiscoveredClue> findBySessionIdAndClueIdWithClue(@Param("sessionId") long sessionId, @Param("clueId") long clueId);
 
-    void deleteBySessionId(long sessionId);
+    @Modifying
+    @Query("DELETE FROM DiscoveredClue dc WHERE dc.session.id = :sessionId")
+    int deleteBySessionId(@Param("sessionId") Long sessionId);
 }
