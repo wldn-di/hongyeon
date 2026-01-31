@@ -16,7 +16,7 @@ function AppShellInner() {
   const { setJob } = useScenarioJob();
 
   // 게임 플레이 화면에서는 헤더 숨기기
-  const hideHeader = location.startsWith("/room/") || location.startsWith("/game/");
+  const hideHeader = location.startsWith("/room/") || location.startsWith("/game/") || location.startsWith("/tutorial");
 
   useScenarioJobWatcher({
     intervalMs: 3000,

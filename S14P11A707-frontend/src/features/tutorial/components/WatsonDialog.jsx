@@ -8,6 +8,12 @@ export default function WatsonDialog({ dialog, onComplete }) {
   const [messageIndex, setMessageIndex] = useState(0)
   const [isTyping, setIsTyping] = useState(true)
 
+  // dialog가 바뀌면 messageIndex 리셋
+  useEffect(() => {
+    setMessageIndex(0)
+    setIsTyping(true)
+  }, [dialog])
+
   if (!dialog) return null
 
   const currentMessage = dialog.messages[messageIndex]
