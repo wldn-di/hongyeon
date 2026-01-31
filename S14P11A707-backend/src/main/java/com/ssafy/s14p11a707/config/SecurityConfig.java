@@ -119,6 +119,8 @@ public class SecurityConfig {
                         .requestMatchers(SWAGGER_WHITELIST).permitAll()
                         .requestMatchers(PUBLIC_WHITELIST).permitAll()
                         .requestMatchers("/api/v1/**").permitAll()
+                        // Scenario browsing APIs are public (read-only)
+                        .requestMatchers(HttpMethod.GET, "/api/scenarios/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptionHandling -> exceptionHandling

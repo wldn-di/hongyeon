@@ -10,6 +10,9 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+import java.util.Objects;
+
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/scenarios")
@@ -22,14 +25,43 @@ public class ScenarioApi implements ScenarioApiDoc {
 
     @GetMapping
     @Override
-    public ResponseEntity<ScenarioListResponse> listScenarios() {
-        return ResponseEntity.ok(scenarioService.listScenarios());
+    public ResponseEntity<ScenarioListResponse> listScenarios(
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) List<String> genres,
+            @RequestParam(required = false) List<String> difficulties,
+            @RequestParam(required = false) String sortBy,
+            @RequestParam(required = false, defaultValue = "0") int page,
+            @RequestParam(required = false, defaultValue = "20") int size
+    ) {
+        List<ScenarioDifficultyTier> difficultyTiers = difficulties == null
+                ? null
+                : difficulties.stream()
+                        .map(ScenarioDifficultyTier::from)
+                        .filter(Objects::nonNull)
+                        .toList();
+
+        ScenarioListRequest request = new ScenarioListRequest(
+                keyword,
+                genres,
+                difficultyTiers,
+                ScenarioSortBy.from(sortBy),
+                page,
+                size
+        );
+
+        return ResponseEntity.ok(scenarioService.listScenarios(request));
     }
 
-    @GetMapping("/search")
+    @GetMapping("/top/play-count")
     @Override
-    public ResponseEntity<ScenarioListResponse> searchScenarios(@RequestParam(required = false) String keyword) {
-        return ResponseEntity.ok(scenarioService.searchScenarios(keyword));
+    public ResponseEntity<ScenarioListResponse> topScenariosByPlayCount() {
+        return ResponseEntity.ok(scenarioService.topScenariosByPlayCount());
+    }
+
+    @GetMapping("/top/rating")
+    @Override
+    public ResponseEntity<ScenarioListResponse> topScenariosByRating() {
+        return ResponseEntity.ok(scenarioService.topScenariosByRating());
     }
 
     @GetMapping("/{scenarioId}")
