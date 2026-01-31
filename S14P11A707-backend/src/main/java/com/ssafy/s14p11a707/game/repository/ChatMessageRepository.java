@@ -35,7 +35,7 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
         """)
     void deleteBySessionIdAndSuspectId(@Param("sessionId") long sessionId, @Param("suspectId") long suspectId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM ChatMessage cm WHERE cm.session.id = :sessionId")
     int deleteBySessionId(@Param("sessionId") Long sessionId);
 

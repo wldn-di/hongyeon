@@ -12,7 +12,7 @@ public interface BoardNodeRepository extends JpaRepository<BoardNode, Long> {
 
     List<BoardNode> findBySessionId(long sessionId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM BoardNode bn WHERE bn.session.id = :sessionId")
     int deleteBySessionId(@Param("sessionId") Long sessionId);
 

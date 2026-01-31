@@ -25,7 +25,7 @@ public interface BoardConnectionRepository extends JpaRepository<BoardConnection
 
     List<BoardConnection> findBySessionAndConnectionType(GameSession session, ConnectionType connectionType);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM BoardConnection bc WHERE bc.session.id = :sessionId")
     int deleteBySessionId(@Param("sessionId") Long sessionId);
 }

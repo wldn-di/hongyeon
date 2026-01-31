@@ -12,7 +12,7 @@ public interface EventLogRepository extends JpaRepository<EventLog, Long> {
 
     List<EventLog> findBySessionIdOrderByCreatedAtAsc(Long sessionId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM EventLog el WHERE el.session.id = :sessionId")
     int deleteBySessionId(@Param("sessionId") Long sessionId);
 }

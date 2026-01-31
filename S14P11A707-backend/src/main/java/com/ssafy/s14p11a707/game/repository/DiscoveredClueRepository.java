@@ -29,7 +29,7 @@ public interface DiscoveredClueRepository extends JpaRepository<DiscoveredClue, 
     @Query("SELECT dc FROM DiscoveredClue dc JOIN FETCH dc.clue c LEFT JOIN FETCH c.room WHERE dc.session.id = :sessionId AND dc.clue.id = :clueId")
     Optional<DiscoveredClue> findBySessionIdAndClueIdWithClue(@Param("sessionId") long sessionId, @Param("clueId") long clueId);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Query("DELETE FROM DiscoveredClue dc WHERE dc.session.id = :sessionId")
     int deleteBySessionId(@Param("sessionId") Long sessionId);
 }
