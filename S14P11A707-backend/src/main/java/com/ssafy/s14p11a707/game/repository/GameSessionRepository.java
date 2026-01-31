@@ -35,4 +35,8 @@ public interface GameSessionRepository extends JpaRepository<GameSession, Long> 
     @Query("select s from GameSession s join fetch s.user join fetch s.scenario where s.id = :sessionId")
     Optional<GameSession> findByIdWithUserAndScenario(@Param("sessionId") long sessionId);
 
+    // LOB 문제 회피: 권한 체크를 위해 ownerId만 조회
+    @Query("SELECT s.user.id FROM GameSession s WHERE s.id = :sessionId")
+    Optional<Long> findOwnerIdById(@Param("sessionId") long sessionId);
+
 }

@@ -14,8 +14,9 @@ public class GameSessionAccessPolicy {
     private final GameSessionRepository gameSessionRepository;
 
     public void assertSessionOwner(long userId, long sessionId) {
-        GameSession session = requireSession(sessionId);
-        if (session.getUser().getId() != userId) {
+
+        Long ownerId = requireOwnerId(sessionId);
+        if (ownerId == null || ownerId != userId) {
             throw new BaseException(ErrorCode.ACCESS_DENIED);
         }
     }
@@ -38,6 +39,11 @@ public class GameSessionAccessPolicy {
 
     private GameSession requireSession(long sessionId) {
         return gameSessionRepository.findByIdWithUserAndScenario(sessionId)
+                .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
+    }
+
+    private Long requireOwnerId(long sessionId) {
+        return gameSessionRepository.findOwnerIdById(sessionId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
     }
 }
