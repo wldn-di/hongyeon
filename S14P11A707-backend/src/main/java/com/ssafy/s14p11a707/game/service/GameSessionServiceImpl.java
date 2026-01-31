@@ -33,6 +33,9 @@ import com.ssafy.s14p11a707.user.repository.UserRepository;
 import java.time.Instant;
 import java.util.*;
 import java.util.stream.Collectors;
+
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
@@ -73,6 +76,8 @@ public class GameSessionServiceImpl implements GameSessionService {
     private final VectorStore vectorStore;
     private final EmbeddingModel embeddingModel;
     private final ChatMemory chatMemory;
+    @PersistenceContext
+    private EntityManager entityManager;
 
     public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, VectorStore vectorStore, EmbeddingModel embeddingModel, ChatMemoryRepository chatMemoryRepository) {
         this.gameSessionRepository = gameSessionRepository;
@@ -847,9 +852,6 @@ public class GameSessionServiceImpl implements GameSessionService {
     public InvestigationReportResponse getInvestigationReport(long sessionId) {
         GameSession session = getSession(sessionId);
 
-        resetSession(session);
-        session = getSession(sessionId);
-
         JsonNode report = session.getResultReportJson();
         if (report == null) {
             throw new BaseException(ErrorCode.REPORT_NOT_FOUND);
@@ -879,23 +881,13 @@ public class GameSessionServiceImpl implements GameSessionService {
     public SubmitResponse submit(long sessionId, SubmitRequest request) {
         GameSession session = getSession(sessionId);
         User user = session.getUser();
-        int attempts = session.getSubmitAttempts() != null ? session.getSubmitAttempts() : 0;
+
+        int attempts = session.getSubmitAttempts();
 
         // 1. 게임 상태 확인
         if (session.getStatus() != PLAYING) {
             return SubmitResponse.boardInvalid(sessionId, "NOT_PLAYING",
                     "진행 중인 게임이 아닙니다.", attempts);
-        }
-
-        // 2. 제출 횟수 확인 (>= 3이면 FAIL)
-        if (attempts >= 3) {
-            session.failGame();
-
-            // 유저 플레이 시간 누적
-            long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
-            user.addPlayTime(playTime);
-            return SubmitResponse.failed(sessionId, session.getCompletedAt(),
-                    "최대 제출 횟수를 초과하여 게임이 종료되었습니다.");
         }
 
         // 3. 보드 검증: RED 연결 개수 확인 (정확히 3개)
@@ -949,23 +941,27 @@ public class GameSessionServiceImpl implements GameSessionService {
             // 범인 틀림 → 횟수 증가 + 게임화면으로
             if (!culpritCorrect) {
                 session.incrementSubmitAttempts();
-                int newAttempts = session.getSubmitAttempts();
+                attempts = session.getSubmitAttempts();
 
                 // 3회 다 썼으면 FAILED
-                if (newAttempts >= 3) {
+                if (attempts >= 3) {
                     session.failGame();
-                    resetSession(session);
-                    session = getSession(sessionId);;
 
                     // 유저 플레이 시간 누적
                     long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
                     user.addPlayTime(playTime);
+                    entityManager.flush();
+
+
+                    resetSession(session);
+                    session = getSession(sessionId);;
+
                     return SubmitResponse.failed(sessionId, session.getCompletedAt(),
                             "범인이 틀렸습니다. 최대 제출 횟수를 초과하여 게임이 종료되었습니다.");
                 }
 
-                return SubmitResponse.wrongAnswer(sessionId, newAttempts,
-                        "범인이 틀렸습니다. (남은 기회: " + (3 - newAttempts) + ")");
+                return SubmitResponse.wrongAnswer(sessionId, attempts,
+                        "범인이 틀렸습니다. (남은 기회: " + (3 - attempts) + ")");
             }
             weaponCorrect = (request.weaponClueId() == correctWeaponClueId);
             locationCorrect = (request.locationFloor() == correctLocationFloor);
@@ -1024,10 +1020,12 @@ public class GameSessionServiceImpl implements GameSessionService {
             List<ChatMessage> keyTalkMessages =
                     chatMessageRepository.findBySessionIdAndKeyTalkTrueOrderByCreatedAtDesc(sessionId);
 
-            buildInvestigationReport(session, aiComment,totalInterrogations,cluesCollected,keyTalkMessages);
+            ObjectNode report
+                    = buildInvestigationReport(rankGrade.name(), finalScore, aiComment,totalInterrogations,cluesCollected,keyTalkMessages);
+
+            session.saveReport(report);
         }
-        // 재 클리어시 랭킹 반영X, 유저 클리어타임과 등급만 갱신
-        else user.addReClearStats(clearTime, finalScore);
+        // 재 클리어시 랭킹 및 유저 클리어타임과 등급, 클리어 횟수 반영X
 
         // 게임 성공 처리
         session.completeGame(finalScore, rankGrade);
@@ -1048,7 +1046,7 @@ public class GameSessionServiceImpl implements GameSessionService {
      */
 
     private ObjectNode buildInvestigationReport(
-            GameSession session,
+            String rankGrade, int finalScore,
             String aiComment,
             int totalInterrogations,
             int cluesCollected,
@@ -1057,8 +1055,8 @@ public class GameSessionServiceImpl implements GameSessionService {
         ObjectNode report = objectMapper.createObjectNode();
 
         ObjectNode result = report.putObject("result");
-        result.put("rank_grade", session.getRankGrade().name());
-        result.put("final_score", session.getFinalScore());
+        result.put("rank_grade", rankGrade);
+        result.put("final_score",finalScore);
         result.put("ai_comment", aiComment);
 
         ObjectNode stats = report.putObject("stats");
@@ -1151,18 +1149,24 @@ public class GameSessionServiceImpl implements GameSessionService {
     private int calculateScore(GameSession session, int motiveSimilarityPercent) {
         // 100점 만점 기준
         int base = 50;
-        int healthScore = (session.getHealth() != null ? session.getHealth() : 0) / 5; // 최대 10점
-        int clueScore = Math.min(20, discoveredClueRepository.countBySession(session) * 2); // 최대 20점
+        int healthScore = (session.getHealth() != null ? session.getHealth() : 0) / 10; // 최대 10점
+        int clueFound = discoveredClueRepository.countBySession(session);
+        int clueScore = Math.min(30 - clueFound * 2, 20); // 최대 20점
         // 틀릴 때마다 5점 감점
         int attemptCount = session.getSubmitAttempts() != null ? session.getSubmitAttempts() : 1;
         if(attemptCount <= 1) attemptCount = 1;
         int attemptPenalty = (attemptCount-1) * 3;
         long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
         int timePenalty = (int) Math.min(10, playTime / 600); // 10분마다 5점 감점, 최대 10점
-        int similarity = motiveSimilarityPercent / 10; // 최대 10점
+        int similarity = motiveSimilarityPercent / 5; // 최대 20점
 
         int score = base + healthScore + clueScore + similarity - attemptPenalty - timePenalty;
-        return Math.max(0, Math.min(100, score));
+        int finalScore = Math.max(0, Math.min(100, score));
+
+        log.info("[점수 계산] base={}, healthScore={}, clueScore={}, similarity={}, attemptPenalty={}, timePenalty={}, finalScore={}",
+                base, healthScore, clueScore, similarity, attemptPenalty, timePenalty, finalScore);
+
+        return finalScore;
     }
 
     private RankGrade calculateRankGrade(int score) {

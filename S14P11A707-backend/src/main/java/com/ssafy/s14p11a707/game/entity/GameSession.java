@@ -176,13 +176,17 @@ public class GameSession extends BaseEntity {
         this.submitAttempts = 0;
         this.finalScore = null;
         this.rankGrade = null;
-        this.resultReportJson = null;
         this.submittedMotiveEmbedding = null;
         this.startedAt = Instant.now();
         this.completedAt = null;
         this.playTime = 0L;
         this.lastSavedAt = Instant.now();
         this.expiresAt = Instant.now().plusSeconds(7 * 24 * 60 * 60);
+    }
+
+    // 수사보고서 저장
+    public void saveReport(JsonNode report){
+        this.resultReportJson = report;
     }
 
     public enum Status {
