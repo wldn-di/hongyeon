@@ -12,7 +12,7 @@ public record SubmitResponse(
         Instant completedAt,
         Integer finalScore,
         String rankGrade,
-        Boolean isFirstClear,
+        Boolean hasCleared,
         Evaluation evaluation
 ) {
 
@@ -51,10 +51,10 @@ public record SubmitResponse(
 
     // 성공
     public static SubmitResponse success(long sessionId, int attempts, Instant completedAt,
-                                         int finalScore, String rankGrade, boolean isFirstClear, Evaluation evaluation) {
+                                         int finalScore, String rankGrade, boolean hasCleared, Evaluation evaluation) {
         return new SubmitResponse(
                 sessionId, "COMPLETED", attempts, 3 - attempts,
-                null, null, completedAt, finalScore, rankGrade, isFirstClear, evaluation
+                null, null, completedAt, finalScore, rankGrade, hasCleared, evaluation
         );
     }
 }

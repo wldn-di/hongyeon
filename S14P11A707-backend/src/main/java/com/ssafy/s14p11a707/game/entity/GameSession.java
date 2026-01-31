@@ -61,7 +61,7 @@ public class GameSession extends BaseEntity {
     private Integer submitAttempts;
 
     @Column(name = "is_first_play")
-    private Boolean firstPlay; // TRUE:
+    private Boolean hasCleared;
 
     private Integer finalScore;
 
@@ -95,7 +95,7 @@ public class GameSession extends BaseEntity {
             JsonNode visitedFloorsJson,
             Integer health,
             Integer submitAttempts,
-            Boolean firstPlay,
+            Boolean hasCleared,
             Integer finalScore,
             RankGrade rankGrade,
             JsonNode resultReportJson,
@@ -113,7 +113,7 @@ public class GameSession extends BaseEntity {
         this.visitedFloorsJson = visitedFloorsJson;
         this.health = health;
         this.submitAttempts = submitAttempts;
-        this.firstPlay = firstPlay;
+        this.hasCleared = hasCleared;
         this.finalScore = finalScore;
         this.rankGrade = rankGrade;
         this.resultReportJson = resultReportJson;
@@ -154,11 +154,11 @@ public class GameSession extends BaseEntity {
         this.completedAt = Instant.now();
     }
     // 게임성공처리
-    public void completeGame(int finalScore, RankGrade rankGrade, boolean isFirstPlay) {
+    public void completeGame(int finalScore, RankGrade rankGrade) {
         this.status = Status.COMPLETED;
         this.finalScore = finalScore;
         this.rankGrade = rankGrade;
-        this.firstPlay = isFirstPlay;
+        this.hasCleared = true;
         this.completedAt = Instant.now();
         this.expiresAt = null; // 완료된 세션은 만료되지 않음
     }
@@ -174,7 +174,6 @@ public class GameSession extends BaseEntity {
         this.visitedFloorsJson = initialVisitedFloors;
         this.health = 100;
         this.submitAttempts = 0;
-        this.firstPlay = false;
         this.finalScore = null;
         this.rankGrade = null;
         this.resultReportJson = null;
@@ -190,7 +189,6 @@ public class GameSession extends BaseEntity {
         PLAYING,
         COMPLETED,
         FAILED,
-        ABANDONED
     }
 
     public enum RankGrade {
@@ -198,6 +196,7 @@ public class GameSession extends BaseEntity {
         A,
         B,
         C,
+        D,
         F
     }
 }
