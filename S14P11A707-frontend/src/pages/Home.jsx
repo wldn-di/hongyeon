@@ -88,6 +88,19 @@ export default function Home() {
               영화 속 수사반장의 화이트보드를 디지털로 구현한 추리 게임<br />
               증거를 수집하고, 용의자를 심문하며, 진실을 밝혀내라!
             </p>
+
+            {/* 소개 영상 */}
+            <div className="w-full max-w-4xl mx-auto aspect-video rounded-xl overflow-hidden border border-border shadow-2xl">
+              <iframe
+                className="w-full h-full"
+                src="https://www.youtube.com/embed/5hQzvXJod8s"
+                title="DETECTIVE 소개 영상"
+                frameBorder="0"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+
             <div className="flex gap-4 justify-center">
               <Link href="/tutorial">
                 <Button variant="neon" size="lg" className="text-lg px-8">
