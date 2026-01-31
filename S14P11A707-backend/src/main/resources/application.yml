@@ -57,10 +57,12 @@ spring:
   ai:
     google:
       genai:
-        api-key: AIzaSyBMw4Wb1KPcC1SlTy_rJ_8EduAOQ5cVQNw
+        api-key: ${GEMINI_API_KEY}
+
         chat:
           options:
             model: gemini-2.0-flash
+
         embedding:
           options:
             model: gemini-embedding-001
