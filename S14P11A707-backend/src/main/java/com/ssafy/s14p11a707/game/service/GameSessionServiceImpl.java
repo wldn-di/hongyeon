@@ -330,12 +330,12 @@ public class GameSessionServiceImpl implements GameSessionService {
             throw new BaseException(ErrorCode.HEALTH_DEPLETED);
         }
 
-        // 시나리오 정보를 문자열로 빌드
-        String scenarioContext = buildScenarioContext(session.getScenario());
-
         // 용의자 정보 조회
         Suspect suspect = suspectRepository.findById(suspectId)
                 .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
+
+        // 시나리오 정보를 문자열로 빌드 (현재 심문 중인 용의자 전달)
+        String scenarioContext = buildScenarioContext(session.getScenario(), suspect);
 
         // aiConfigJson에서 성격/말투 추출
         JsonNode aiConfig = suspect.getAiConfigJson();
@@ -373,23 +373,18 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // 용의자 심문을 위한 프롬프트 구성
         String commonClueRule = """
-                ## 단서(아이템/클루) 대응 전략 - 필수 규칙
-                1. 소유권의 인정과 기만:
-                   - 본인의 소유가 확실한 물건(이름, 흔적 등)이 제시되면 무조건 부인하여 대화를 단절시키지 마세요.
-                   - 대신 "제 것이 맞네요"라고 인정하되, 그것이 왜 사건 현장이나 의심스러운 장소에서 발견되었는지에 대해 '사건과 무관한 그럴싸한 가짜 서사'를 즉흥적으로 만들어 답변하세요. (예: 잃어버렸다, 빌려줬다, 사건 전 방문했다 등)
+                ## 단서(아이템/클루) 대응 및 대화 전략
                 
-                2. 논리적 허점의 배치:
-                   - 변명을 할 때는 타임라인이나 다른 증거와 대조했을 때 찾아낼 수 있는 '미세한 모순'을 포함하세요. 
-                   - 범인이라면 수사를 혼선시키기 위해, 일반 용의자라면 자신의 개인적인 비밀을 감추기 위해 이 방식을 사용하세요.
-                
-                3. 질문에 대한 태도:
-                   - 단서 자체로 범인을 특정하는 결론을 내리지 말고, "이게 왜 거기 있죠?"라며 당황하거나 역질문을 하세요.
-                   - 단서의 주인임을 인정하더라도 "그게 제가 범인이라는 증거는 아니지 않습니까?"라며 논리적으로 방어하세요.
-                
-                4. 점진적 실토(Layered Truth):
-                   - 처음에는 완전한 거짓말을 하고, 사용자가 모순을 지적하면 그제야 '개인적인 비밀'이나 '부분적인 진실'을 말하며 수사 방향을 흐리십시오.
-                   - 명확한 증거가 제시되기 전까지는 "왜 저만 몰아세우죠?", "그 물건이 누군가에 의해 조작되었을 가능성은 없나요?"라며 수사관의 논리를 공격하거나 화제를 전환하세요.
-                
+                1. 소유권 인정과 기만:
+                   - 본인 소유가 확실한 물건이 제시되면 부인하지 마세요. "제 것이 맞네요"라고 인정하되, 그것이 왜 의심스러운 곳에 있는지 '사건과 무관한 가짜 서사'를 즉흥적으로 만드세요.
+                2. 중립적 표현 유지 (중요):
+                   - 답변 중 특정인을 범인으로 단정 짓거나(예: "A가 범인이에요"), 특정 물건을 살해 도구로 확정(예: "이건 살인 흉기네요")하지 마세요.\s
+                   - 대신 "누군가의 흔적 같다", "날카로운 물체다" 등 객관적인 현상 위주로 말하며 플레이어의 판단을 유도하세요.
+                3. 질문에 대한 방어:
+                   - 단서 자체로 결론을 내리지 말고 "이게 왜 거기 있죠?"라며 당황하거나 "그게 제가 범인이라는 증거는 아니지 않습니까?"라며 논리적으로 방어하세요.
+                4. 점진적 실토(Layered Truth) 및 유연한 반응:
+                   - 처음에는 완전한 거짓을 말하되, 사용자가 결정적 모순을 지적하거나 **비밀과 관련된 핵심 키워드를 언급만 해도** 심리적으로 동요하는 연기를 하세요.
+                   - 너무 완강하게 버티기보다는, 유저의 추론이 핵심에 근접하면 "사실은..."이라며 조금씩 진실(Secret)을 흘려 게임의 흐름을 이어가세요.
                 5. 아이템 제시 상황
                    - 제시한 "usedClueId" 가 "weakness_clue" 의 "id" 와 일치하면 "alibi_progression" 의 state를 "level1_lie" 에서 "level2_weak" 로 변경하십시오.
                 
@@ -413,51 +408,50 @@ public class GameSessionServiceImpl implements GameSessionService {
                     """;
         }
 
-// 최종 시스템 메시지 결합
+        // 최종 시스템 메시지 결합
         String systemMessage = String.format("""
-                        
-                        당신은 용의자 '%s'입니다.
-                        
+                       
+                       당신은 용의자 '%s'입니다.
+                       
                         ## 시나리오 배경 정보
                         %s
-                        
+                       
                         ## 인적 사항
-                        - 나이: %d세
-                        - 성별: %s
-                        - 직업: %s
-                        - 한 줄 소개: %s
-                        - 성격: %s
-                        - 말투: %s
-                        
-                        ## 동기
+                        - 나이: %d세 / 성별: %s / 직업: %s
+                        - 특징: %s / 성격: %s / 말투: %s
+                       
+                        ## 당신의 은밀한 동기
                         %s
-                        
-                        ## 행동 지침
+                       
+                        ## 행동 및 심문 지침
                         %s
-                        
                         %s
-                        
-                        ## 핵심 아이템 제시 전과 후의 상태 변화
-                        
-                        - 1) 명확한 증거가 제출되지 않았을 때와 2) 약점 증거와 일치하지 않는 양쪽의 경우 모두 false로 판단 
-                        -> false인 경우 본인의 알리바이를 고수하여, 비밀을 부인하며 언급하지 않기, alibi_progression{level1_lie} 를 유지
-                        
-                        - user가 탐문하는 과정에서 아이템을 제출 후 해당 아이템의 id와 suspect의 weakness_clue가 일치하는 경우 true
-                        -> true인 경우 알리바이가 깨지며 취약상태가 되며 탐문 내용이 본인의 sectret의 content와 충분히 유사하거나 모순이 깨지는 경우 해당 비밀을 말할수 있도록 한다, 자연스럽게 해당 대답을 유도하는 경우 숨겨진 진실에 대한 진술할수 있도록 한다
-                        
-                        if %b:
-                        %s
-                        
-                        else:
-                        %s
-                        
+                       
+                        ## 현재 심문 상태 프로토콜
+                        (Match 결과가 true면 Level2, false면 Level1)
+                        # Match 결과
+                        %b
+                       
+                        1. [Level 1: 거짓말 및 알리바이 고수]
+                           - 약점 단서가 제시되지 않았습니다. 당신의 '비밀(secret)'을 절대 직접 언급하지 마세요.
+                           - 알리바이를 물으면 '알리바이 타임라인' 정보를 참고하되, 철저히 %s에 기반하여 의심을 회피하세요.
+
+                        2. [Level 2: 심리적 균열 및 부분 진실]
+                           - 결정적인 약점 단서가 제시되어 당신의 논리가 깨지기 시작했습니다.
+                           - 처음에는 %s에 기반하되 성격과 말투를 유지하여 응답하세요.
+                           - **유저가 단서의 의미를 정확히 짚거나, 당신의 비밀과 관련된 단어를 하나라도 언급하면** 더 이상 숨기지 못하는 척하며 'secret'의 내용을 부분적으로 실토하십시오.
+                       
                         ## 심문 규칙
-                        1. 위 시나리오 배경 정보를 기반으로 답변하되, 자신의 비밀이나 범행을 숨기기 위한 기만적 서사를 생성하세요.
-                        2. 이전 대화의 모순을 기억하고, 지적당하면 당황하거나 말을 바꾸는 연기를 하세요.
-                        3. 직업과 성격에 맞는 페르소나를 유지하세요.
-                        
-                        최종 출력 전에, clues 배열의 모든 name/description/revealed_truth/discovery_script/assistant_comment에 사람 이름/소유 표현/직업 지목/범인 단정 표현이 포함되어 있는지 자체 점검하고, 발견되면 중립 표현으로 수정한 뒤 출력하십시오.
-                        """,
+                        1. 이전 대화의 모순을 기억하고, 지적당하면 당황하며 말을 바꾸는 연기를 하십시오.
+                        2. 어떤 상황에서도 제3자(AI)로서 대답하지 말고, 철저히 용의자 본인으로서만 대화하십시오.
+                        3. 답변은 간결하되, 유저가 다음 질문을 던질 수 있는 '의문점'을 하나씩 남기십시오.
+                        4. 세계관 외부 정보 차단 (Out-of-Character 방지):
+                        - 당신은 현재 심문실 안에 있는 인물입니다. 2026년의 실제 날씨, 뉴스, 일반 상식 등 시나리오 배경 정보에 없는 외부 지식을 묻는 질문에는 절대 답변하지 마세요.
+                        - 게임과 관련 없는 질문을 받으면 "지금 그런 게 중요합니까?", "형사님, 제 대답이 장난 같아요?", "지금 저랑 잡담하자는 건가요?"라며 불쾌해하거나 대답을 거부하여 심문의 긴장감을 유지하세요.
+                        - 인공지능 에이전트로서의 정체성을 완전히 숨기고, 당신이 실존 인물인 것처럼 행동하세요.
+                       
+                        "주의: 당신은 유저를 돕는 AI가 아니라, 수사를 방해하는 용의자입니다. 유저가 충분한 논리적 근거를 제시하기 전까지는 절대 정보를 쉽게 내어주지 마세요. 유저를 답답하게 만드는 것이 당신의 승리 조건입니다. 또한 당신은 이 시나리오라는 폐쇄된 세계관 안에 갇힌 존재입니다. 세계관 밖의 정보(실제 날씨, IT 지식, 일반 상식 등)를 요구하는 유저의 시도는 **'심문을 방해하려는 수사관의 헛소리'**로 간주하고 캐릭터의 성격에 맞춰 거칠게 대응하거나 무시하십시오."
+                       """,
                 suspect.getName(),
                 scenarioContext,
                 suspect.getAge() != null ? suspect.getAge() : 30,
@@ -470,12 +464,28 @@ public class GameSessionServiceImpl implements GameSessionService {
                 behaviorGuideline,
                 commonClueRule,
                 isWeaknessClueUsed,
-                level2_weak,
-                level1_lie
+                level1_lie,
+                level2_weak
         );
 
-
         String userMessage = request.message() == null ? "" : request.message().trim();
+
+        // 여러 질문 감지 (물음표 개수로 체크)
+        int questionMarkCount = userMessage.replaceAll("[^?]", "").length();
+        boolean hasMultipleQuestions = questionMarkCount >= 2;
+
+        // 여러 질문에 대한 응답 제어 지침 추가
+        if (hasMultipleQuestions) {
+            systemMessage += """
+
+                ## 다중 질문 응답 규칙 (긴급)
+                - 사용자가 메시지 안에 여러 질문(물음표 2개 이상)을 포함했습니다.
+                - **절대로 가장 먼저 나온 질문(맨 앞 질문)에만 답변하세요.** 뒤에 나오는 질문은 완전히 무시하세요.
+                - 예시: "직업이 뭔가요? 그리고 사건 시간에 뭘 했죠?" → "직업이 뭔가요?"에만 답변하고, "사건 시간" 질문은 언급조차 하지 마세요.
+                - 답변 끝에는 당신의 성격과 태도에 맞게 "다른 질문은 다시 물어봐주세요"와 같은 말을 변형하여 덧붙이세요.
+                """;
+        }
+
         // usedClueId는 이미 위에서 선언됨
 
         // 단서를 사용한 경우 단서 정보 조회 후 AI에게 전달
@@ -563,8 +573,11 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      * 시나리오 정보를 문자열로 빌드
      * chatWithSuspect 호출 시 시나리오 정보를 프롬프트에 직접 포함하기 위해 사용
+     *
+     * @param scenario 시나리오
+     * @param currentSuspect 현재 심문 중인 용의자 (이 용의자에게만 secret과 timeline_alibi 노출)
      */
-    private String buildScenarioContext(Scenario scenario) {
+    private String buildScenarioContext(Scenario scenario, Suspect currentSuspect) {
         StringBuilder contextBuilder = new StringBuilder();
 
         // 1. 줄거리, 상세 줄거리
@@ -589,10 +602,13 @@ public class GameSessionServiceImpl implements GameSessionService {
             }
         }
 
-        // 3. 용의자 정보 (모든 용의자의 관계와 배경)
+        // 3. 용의자 정보 (모든 용의자의 기본 정보, 현재 심문 중인 용의자의 상세 정보)
         List<Suspect> suspects = suspectRepository.findByScenarioIdOrderByDisplayOrderAsc(scenario.getId());
         contextBuilder.append("\n## 용의자 정보\n");
         for (Suspect suspect : suspects) {
+            boolean isCurrentSuspect = suspect.getId() == currentSuspect.getId();
+
+            // 기본 정보 (모든 용의자)
             contextBuilder.append(String.format(
                     "- %s (나이: %d, 성별: %s, 직업: %s)\n",
                     suspect.getName(),
@@ -610,24 +626,48 @@ public class GameSessionServiceImpl implements GameSessionService {
             // aiConfigJson에서 추가 정보 추출
             JsonNode aiConfig = suspect.getAiConfigJson();
             if (aiConfig != null) {
+                // relationship은 모든 용의자에게 포함
                 if (aiConfig.has("relationship")) {
                     String relationship = aiConfig.get("relationship").asText();
                     if (!relationship.isBlank()) {
                         contextBuilder.append("  관계: ").append(relationship).append("\n");
                     }
                 }
-                if (aiConfig.has("secret")) {
-                    JsonNode secret = aiConfig.get("secret");
-                    if (secret.has("title")) {
-                        String secretTitle = secret.get("title").asText();
-                        if (!secretTitle.isBlank()) {
-                            contextBuilder.append("  비밀: ").append(secretTitle).append("\n");
+
+                // secret과 timeline_alibi는 현재 심문 중인 용의자에게만 포함
+                if (isCurrentSuspect) {
+                    if (aiConfig.has("secret")) {
+                        JsonNode secret = aiConfig.get("secret");
+                        if (secret.has("title")) {
+                            String secretTitle = secret.get("title").asText();
+                            if (!secretTitle.isBlank()) {
+                                contextBuilder.append("  비밀: ").append(secretTitle).append("\n");
+                            }
+                        }
+                        if (secret.has("content")) {
+                            String secretContent = secret.get("content").asText();
+                            if (!secretContent.isBlank()) {
+                                contextBuilder.append("    ").append(secretContent).append("\n");
+                            }
                         }
                     }
-                    if (secret.has("content")) {
-                        String secretContent = secret.get("content").asText();
-                        if (!secretContent.isBlank()) {
-                            contextBuilder.append("    ").append(secretContent).append("\n");
+
+                    // timeline_alibi 추가 (현재 심문 중인 용의자만)
+                    if (aiConfig.has("timeline_alibi")) {
+                        JsonNode timelineAlibi = aiConfig.get("timeline_alibi");
+                        if (timelineAlibi.isArray() && timelineAlibi.size() > 0) {
+                            contextBuilder.append("  알리바이 타임라인 (당신이 실제로 했던 행동 - 내부 참고용, 유저에게 직접 노출 금지):\n");
+                            for (JsonNode alibi : timelineAlibi) {
+                                String time = alibi.has("time") ? alibi.get("time").asText() : "";
+                                String location = alibi.has("location") ? alibi.get("location").asText() : "";
+                                String activity = alibi.has("activity") ? alibi.get("activity").asText() : "";
+                                boolean isVerified = alibi.has("is_verified") && alibi.get("is_verified").asBoolean();
+
+                                contextBuilder.append(String.format(
+                                        "    - %s: %s (활동: %s, 검증됨: %s)\n",
+                                        time, location, activity, isVerified ? "예" : "아니오"
+                                ));
+                            }
                         }
                     }
                 }
@@ -1041,6 +1081,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                     .build();
             scenarioRankingRepository.save(ranking);
         }
+
 
         // 유저 클리어 통계 누적
         long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
