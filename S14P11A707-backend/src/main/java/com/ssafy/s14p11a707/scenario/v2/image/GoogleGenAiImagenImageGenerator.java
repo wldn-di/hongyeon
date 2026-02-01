@@ -1,9 +1,11 @@
 package com.ssafy.s14p11a707.scenario.v2.image;
 
+import com.google.common.util.concurrent.RateLimiter;
 import com.google.genai.Client;
 import com.google.genai.types.GenerateImagesConfig;
 import com.google.genai.types.GenerateImagesResponse;
 import com.google.genai.types.Image;
+import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -40,6 +42,28 @@ public class GoogleGenAiImagenImageGenerator implements ScenarioV2ImageGenerator
     @Value("${app.scenario.v2.image.model:imagen-4.0-fast-generate-001}")
     private String model;
 
+    @Value("${app.scenario.v2.image.max-requests-per-minute:10}")
+    private double maxRequestsPerMinute;
+
+    private RateLimiter rateLimiter;
+
+    @PostConstruct
+    void initRateLimiter() {
+        if (maxRequestsPerMinute <= 0) {
+            log.info("[v2] google imagen rate limiter disabled. maxRequestsPerMinute={}", maxRequestsPerMinute);
+            this.rateLimiter = null;
+            return;
+        }
+
+        double permitsPerSecond = maxRequestsPerMinute / 60.0;
+        this.rateLimiter = RateLimiter.create(permitsPerSecond);
+        log.info(
+                "[v2] google imagen rate limiter configured. maxRequestsPerMinute={}, permitsPerSecond={}",
+                maxRequestsPerMinute,
+                permitsPerSecond
+        );
+    }
+
     /**
      * Google Imagen을 통해 PNG 바이트 생성
      * <p>
@@ -54,13 +78,21 @@ public class GoogleGenAiImagenImageGenerator implements ScenarioV2ImageGenerator
     @Override
     public byte[] generatePng(String prompt) {
         String safePrompt = prompt == null ? "" : prompt;
-        log.info("[v2] google imagen generate started. model={}, promptLen={}", model, safePrompt.length());
+        double waitedSeconds = 0.0;
+        if (rateLimiter != null) {
+            waitedSeconds = rateLimiter.acquire();
+        }
+        log.info(
+                "[v2] google imagen generate started. model={}, promptLen={}, waitedMs={}",
+                model,
+                safePrompt.length(),
+                Math.round(waitedSeconds * 1000.0)
+        );
 
         GenerateImagesConfig config = GenerateImagesConfig.builder()
                 .numberOfImages(1)
                 .aspectRatio("1:1")
                 .outputMimeType("image/png")
-                .addWatermark(false)
                 .build();
 
         try {
@@ -84,4 +116,3 @@ public class GoogleGenAiImagenImageGenerator implements ScenarioV2ImageGenerator
         }
     }
 }
-

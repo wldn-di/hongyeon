@@ -121,16 +121,6 @@ public class ValidateNode implements ScenarioV2Node {
             log.info("[v2] ValidateNode normalized suspects. scenarioId={}, from={}, to={}", state.getScenarioId(), suspects.size(), suspectCount);
         }
 
-        JsonNode rooms = root.get("rooms");
-        if (rooms != null && rooms.isArray() && rooms.size() == 6) {
-            for (int i = 0; i < rooms.size(); i++) {
-                JsonNode room = rooms.get(i);
-                if (room instanceof ObjectNode roomObject) {
-                    roomObject.put("floor_number", i + 1);
-                }
-            }
-        }
-
         JsonNode clues = root.get("clues");
         if (clues != null && clues.isArray() && clues.size() > 12) {
             ArrayNode trimmed = objectMapper.createArrayNode();

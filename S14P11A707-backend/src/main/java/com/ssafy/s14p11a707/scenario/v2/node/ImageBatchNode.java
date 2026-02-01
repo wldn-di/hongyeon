@@ -4,16 +4,20 @@ import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
+import com.ssafy.s14p11a707.scenario.v2.image.PlaceholderPngImageGenerator;
 import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageGenerator;
 import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageJob;
 import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ObjectStorageService;
 import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageUrlUpdater;
 import java.util.Map;
+import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -44,6 +48,11 @@ import org.springframework.stereotype.Component;
 @Slf4j
 @RequiredArgsConstructor
 public class ImageBatchNode implements ScenarioV2Node {
+
+    private static final Pattern RETRY_IN_SECONDS_PATTERN =
+            Pattern.compile("retry\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)s", Pattern.CASE_INSENSITIVE);
+
+    private static final PlaceholderPngImageGenerator PLACEHOLDER_GENERATOR = new PlaceholderPngImageGenerator();
 
     private final ScenarioV2ImageGenerator imageGenerator;
     private final ScenarioV2ObjectStorageService objectStorageService;
@@ -120,14 +129,41 @@ public class ImageBatchNode implements ScenarioV2Node {
     }
 
     private String runJobWithRetry(ScenarioV2ImageJob job) {
-        long[] backoffMillis = {0L, 300L, 1000L};
+        int maxAttempts = 6;
+        long[] backoffMillis = {0L, 300L, 1000L, 2000L, 5000L};
 
-        for (int attempt = 0; attempt < 3; attempt++) {
+        boolean usePlaceholder = false;
+        for (int attempt = 0; attempt < maxAttempts; attempt++) {
             try {
-                byte[] png = imageGenerator.generatePng(job.prompt());
+                byte[] png = usePlaceholder
+                        ? PLACEHOLDER_GENERATOR.generatePng(job.prompt())
+                        : imageGenerator.generatePng(job.prompt());
                 return objectStorageService.uploadPng(job.objectKey(), png);
             } catch (Exception e) {
-                if (attempt == 2) {
+                if (!usePlaceholder && isEmptyImagenResult(e)) {
+                    log.warn(
+                            "[v2] google imagen returned empty images/bytes. falling back to placeholder. target={}, targetId={}, objectKey={}, error={}",
+                            job.target(),
+                            job.targetId(),
+                            job.objectKey(),
+                            rootMessage(e)
+                    );
+                    usePlaceholder = true;
+                    continue;
+                }
+                if (!usePlaceholder && isDailyQuotaExceeded(e)) {
+                    log.warn(
+                            "[v2] google imagen daily quota exceeded. falling back to placeholder. target={}, targetId={}, objectKey={}, error={}",
+                            job.target(),
+                            job.targetId(),
+                            job.objectKey(),
+                            rootMessage(e)
+                    );
+                    usePlaceholder = true;
+                    continue;
+                }
+
+                if (attempt == maxAttempts - 1) {
                     log.error(
                             "[v2] Image job failed (final). target={}, targetId={}, objectKey={}",
                             job.target(),
@@ -137,14 +173,21 @@ public class ImageBatchNode implements ScenarioV2Node {
                     );
                     throw e;
                 }
-                long sleepMs = backoffMillis[attempt + 1] + ThreadLocalRandom.current().nextLong(0, 120);
+
+                Long retryAfterMs = resolveRetryAfterMillis(e);
+                long baseSleepMs = retryAfterMs != null
+                        ? retryAfterMs
+                        : backoffMillis[Math.min(attempt + 1, backoffMillis.length - 1)];
+                long sleepMs = baseSleepMs + ThreadLocalRandom.current().nextLong(0, 250);
                 log.warn(
-                        "[v2] Image job failed (retry). attempt={}/3, sleepMs={}, target={}, targetId={}, objectKey={}, error={}",
+                        "[v2] Image job failed (retry). attempt={}/{}, sleepMs={}, target={}, targetId={}, objectKey={}, rateLimited={}, error={}",
                         attempt + 1,
+                        maxAttempts,
                         sleepMs,
                         job.target(),
                         job.targetId(),
                         job.objectKey(),
+                        retryAfterMs != null,
                         e.getMessage()
                 );
                 sleep(sleepMs);
@@ -152,6 +195,74 @@ public class ImageBatchNode implements ScenarioV2Node {
         }
 
         throw new IllegalStateException("unreachable");
+    }
+
+    private static boolean isEmptyImagenResult(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message == null || message.isBlank()) {
+                continue;
+            }
+
+            String normalized = message.toLowerCase(Locale.ROOT);
+            if (normalized.contains("no images returned from google imagen")) {
+                return true;
+            }
+            if (normalized.contains("image bytes missing")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean isDailyQuotaExceeded(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message == null || message.isBlank()) {
+                continue;
+            }
+
+            String normalized = message.toLowerCase(Locale.ROOT);
+            if (normalized.contains("predict_requests_per_model_per_day")) {
+                return true;
+            }
+            if (normalized.contains("quota exceeded") && normalized.contains("per_day")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static String rootMessage(Throwable throwable) {
+        Throwable root = throwable;
+        while (root.getCause() != null) {
+            root = root.getCause();
+        }
+        String message = root.getMessage();
+        return (message == null || message.isBlank()) ? root.getClass().getSimpleName() : message;
+    }
+
+    private Long resolveRetryAfterMillis(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message == null || message.isBlank()) {
+                continue;
+            }
+            Matcher matcher = RETRY_IN_SECONDS_PATTERN.matcher(message);
+            if (!matcher.find()) {
+                continue;
+            }
+            try {
+                double seconds = Double.parseDouble(matcher.group(1));
+                if (seconds <= 0) {
+                    return 1_000L;
+                }
+                return (long) Math.ceil(seconds * 1000.0);
+            } catch (NumberFormatException ignored) {
+                return 20_000L;
+            }
+        }
+        return null;
     }
 
     private void sleep(long millis) {

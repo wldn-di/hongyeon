@@ -57,11 +57,13 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${SPRING_AI_GOOGLE_GENAI_API_KEY}
+        api-key: ${SPRING_AI_GOOGLE_GENAI_API_KEY:}
         chat:
           options:
-            model: gemini-2.0-flash
+            model: gemini-2.5-flash
         embedding:
+          # embedding 커넥션은 별도 prefix(spring.ai.google.genai.embedding.*)를 사용하므로 api-key를 함께 지정
+          api-key: ${SPRING_AI_GOOGLE_GENAI_API_KEY:}
           options:
             model: gemini-embedding-001
         base-url: https://generativelanguage.googleapis.com
@@ -86,6 +88,16 @@ management:
       mode: full
 
 app:
+  vertex:
+    # Vertex AI 기반 GenAI 연동 사용 여부
+    enabled: ${APP_VERTEX_ENABLED:false}
+    # Vertex AI 프로젝트/리전 (enabled=true일 때 필수)
+    project-id: ${APP_VERTEX_PROJECT_ID:}
+    location: ${APP_VERTEX_LOCATION:}
+    # 서비스 계정 키 JSON 경로 (예: file:/path/to/sa.json). 설정 시 access-token/ADC보다 우선.
+    credentials-uri: ${APP_VERTEX_CREDENTIALS_URI:}
+    # Vertex OAuth2 access token(또는 ADC)
+    access-token: ${APP_VERTEX_ACCESS_TOKEN:}
   auth:
     # 로그인 완료 후 이동할 URL (상대경로 또는 절대 URL)
     # - 예) /swagger-ui/index.html
@@ -102,6 +114,8 @@ app:
         generator: ${APP_SCENARIO_V2_IMAGE_GENERATOR:google}
         # 예) imagen-4.0-fast-generate-001 / imagen-4.0-generate-001 / imagen-4.0-ultra-generate-001
         model: ${APP_SCENARIO_V2_IMAGE_MODEL:imagen-4.0-fast-generate-001}
+        # Gemini API(Imagen) 모델 요청 쿼터(RPM) 대비 쓰로틀링 값(0 이하로 설정 시 비활성화)
+        max-requests-per-minute: ${APP_SCENARIO_V2_IMAGE_MAX_REQUESTS_PER_MINUTE:10}
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
