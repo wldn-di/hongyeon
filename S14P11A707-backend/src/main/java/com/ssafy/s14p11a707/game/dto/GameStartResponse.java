@@ -51,7 +51,23 @@ public record GameStartResponse(
             String opening
     ) {
         public static ScenarioItem from(Scenario entity) {
-            return new ScenarioItem(entity.getTitle(), entity.getSynopsis());
+            // storyConfigJson에서 narration.opening 추출
+            String opening = null;
+            JsonNode storyConfig = entity.getStoryConfigJson();
+            if (storyConfig != null) {
+                JsonNode narration = storyConfig.path("narration");
+                if (!narration.isMissingNode()) {
+                    JsonNode openingNode = narration.path("opening");
+                    if (!openingNode.isMissingNode()) {
+                        opening = openingNode.asText();
+                    }
+                }
+            }
+            // narration.opening이 없으면 synopsis를 fallback으로 사용
+            if (opening == null || opening.isBlank()) {
+                opening = entity.getSynopsis();
+            }
+            return new ScenarioItem(entity.getTitle(), opening);
         }
     }
     public static GameStartResponse alreadyPlaying(GameSession session) {

@@ -16,19 +16,13 @@ public record GameResumeResponse(
         int submitAttempts,
         long playTime,
         Instant startedAt,
-        Instant lastSavedAt,
-        List<InventoryClue> inventory
+        Instant lastSavedAt
 ) {
 
     public static GameResumeResponse from(
             GameSession session,
-            List<Integer> visitedFloors,
-            List<DiscoveredClue> discoveredClues
+            List<Integer> visitedFloors
     ) {
-        List<InventoryClue> inventory = discoveredClues.stream()
-                .map(InventoryClue::from)
-                .toList();
-
         return new GameResumeResponse(
                 session.getId(),
                 session.getScenario().getId(),
@@ -40,27 +34,7 @@ public record GameResumeResponse(
                 session.getSubmitAttempts() != null ? session.getSubmitAttempts() : 0,
                 session.getPlayTime() != null ? session.getPlayTime() : 0,
                 session.getStartedAt(),
-                session.getLastSavedAt(),
-                inventory
+                session.getLastSavedAt()
         );
-    }
-
-    public record InventoryClue(
-            long clueId,
-            String name,
-            String importance,
-            String detailImageUrl,
-            Instant discoveredAt
-    ) {
-        public static InventoryClue from(DiscoveredClue discoveredClue) {
-            var clue = discoveredClue.getClue();
-            return new InventoryClue(
-                    clue.getId(),
-                    clue.getName(),
-                    clue.getImportance().name(),
-                    clue.getDetailImageUrl(),
-                    discoveredClue.getDiscoveredAt()
-            );
-        }
     }
 }

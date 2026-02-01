@@ -99,11 +99,15 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     /**
      * 게임 시작 및 관리 섹션
+     *
+     * 세션 없음 : createSession()
+     * Playing : resumeGame API 호출
+     * Completed/Failed : 세션 데이터 삭제 후 해당 세션 재사용(세션 연관 테이블은 sumbit()에서 세션 실패/성공 시점에 이미 삭제됨)
+     *
      */
     @Override
     @Transactional
     public GameStartResponse startGame(long scenarioId, long userId) {
-        log.info("[게임 시작] 요청 - userId: {}, scenarioId: {}", userId, scenarioId);
 
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
@@ -114,35 +118,32 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         if (existingSession.isPresent()) {
             GameSession session = existingSession.get();
-            log.info("[게임 시작] 기존 세션 발견 - sessionId: {}, status: {}", session.getId(), session.getStatus());
 
             if (session.getStatus() == PLAYING) {
                 // TODO: 프론트에서 resumeGame API 호출
-                log.info("[게임 진행중] 이미 플레이 중인 세션 - sessionId: {}, userId: {}", session.getId(), userId);
                 return GameStartResponse.alreadyPlaying(session);
             } else {
                 // COMPLETED | FAILED -> 세션 연관테이블은 이미 성공,실패시 초기화됨(submit)
                 // 체력, 상태 등 초기화
-                log.info("[게임 재시작] 이전 상태({})에서 세션 초기화 - sessionId: {}", session.getStatus(), session.getId());
                 session.reset(objectMapper.valueToTree(List.of(1)));
 
                 EventLog startLog = saveEventLog(session, GAME_START, null);
-                log.info("[게임 시작 완료] 세션 리셋 후 재시작 - sessionId: {}, userId: {}", session.getId(), userId);
                 return buildStartResponse(session, scenario, startLog);
             }
         }
 
         // 첫 플레이 - 새 세션 생성
-        log.info("[게임 시작] 신규 세션 생성 시작 - userId: {}, scenarioId: {}", userId, scenarioId);
         GameSession session = createNewSession(user, scenario);
         EventLog startLog = saveEventLog(session, GAME_START, null);
         scenario.incrementPlayCount();
         user.incrementTotalAttempts();
-        log.info("[게임 시작 완료] 신규 세션 생성 완료 - sessionId: {}, userId: {}, scenarioId: {}", session.getId(), userId, scenarioId);
 
         return buildStartResponse(session, scenario, startLog);
     }
 
+    /**
+     *  사용 X(프론트 API 호출 삭제)
+     */
     @Override
     @Transactional
     public GameStartResponse restartGame(long scenarioId, long userId) {
@@ -191,8 +192,10 @@ public class GameSessionServiceImpl implements GameSessionService {
         return session;
     }
 
+    /**
+     *  세션 연관 테이블 삭제 cf)세션테이블 데이터 삭제 : session.reset(@Param 방문 층수)
+     */
     private void resetSession(GameSession session) {
-        // 연관 데이터 삭제
         boardConnectionRepository.deleteBySessionId(session.getId());
         boardNodeRepository.deleteBySessionId(session.getId());
         discoveredClueRepository.deleteBySessionId(session.getId());
@@ -211,29 +214,31 @@ public class GameSessionServiceImpl implements GameSessionService {
         return GameStartResponse.from(session, scenario, victim, room, startLog);
     }
 
-    // TODO: 프론트 호출 흐름: 세션 기본정보(현) + 인벤토리, 보드, 로그, 채팅내역
+    /**
+     *
+     * PLAYING 세션 이어하기 : 현 세션 정보
+     *
+     * 프론트 추가 API 호출 필요
+     * - getClues API : 발견한 단서 정보
+     * - getBoard API : 추리보드 정보
+     * - getLogs API : 수사로그 정보
+     * - getChatLogs API : 용의자 심문 내역
+     */
     @Override
     @Transactional
     public GameResumeResponse resumeGame(long sessionId) {
         GameSession session = getSession(sessionId);
 
-        // PLAYING이 아니면 리셋 후 재시작
+        // PLAYING이 아니라면 예외
         if (session.getStatus() != PLAYING) {
-            resetSession(session);
-            session = getSession(sessionId);;
-            saveEventLog(session, GAME_START, null);
-            // 리셋 후 save 확인
-            gameSessionRepository.save(session);
+            throw new BaseException(ErrorCode.INVALID_SESSION_STATUS);
         }
 
         // VectorStore 복구: 이전 대화 내역을 VectorStore에 다시 로드
         loadChatHistoryToVectorStore(sessionId);
-
         List<Integer> visitedFloors = parseVisitedFloors(session.getVisitedFloorsJson());
-        List<DiscoveredClue> discoveredClues = discoveredClueRepository
-                .findBySessionIdWithClue(sessionId);
 
-        return GameResumeResponse.from(session, visitedFloors, discoveredClues);
+        return GameResumeResponse.from(session, visitedFloors);
     }
 
     /**
@@ -302,8 +307,6 @@ public class GameSessionServiceImpl implements GameSessionService {
         if (allClues.isEmpty()) {
             // Defensive fallback: in case fetch-join query behaves unexpectedly (e.g., nullable room),
             // still return clues rather than an empty list.
-            log.warn("No clues found via findByScenarioIdWithRoom. Falling back to findByScenarioId. sessionId={}, scenarioId={}",
-                    sessionId, scenarioId);
             allClues = clueRepository.findByScenarioId(scenarioId);
             allClues = allClues.stream()
                     .sorted(Comparator
@@ -985,28 +988,21 @@ public class GameSessionServiceImpl implements GameSessionService {
     @Override
     @Transactional
     public SubmitResponse submit(long sessionId, SubmitRequest request) {
-        log.info("[제출] 요청 시작 - sessionId: {}, culpritId: {}, weaponClueId: {}, locationFloor: {}",
-                sessionId, request.culpritId(), request.weaponClueId(), request.locationFloor());
 
         GameSession session = getSession(sessionId);
         User user = session.getUser();
 
         int attempts = session.getSubmitAttempts();
-        log.debug("[제출] 현재 세션 정보 - sessionId: {}, userId: {}, status: {}, 현재 제출횟수: {}",
-                sessionId, user.getId(), session.getStatus(), attempts);
 
         // 1. 게임 상태 확인
         if (session.getStatus() != PLAYING) {
-            log.warn("[제출 실패] 게임 진행중이 아님 - sessionId: {}, status: {}", sessionId, session.getStatus());
             return SubmitResponse.boardInvalid(sessionId, "NOT_PLAYING",
                     "진행 중인 게임이 아닙니다.", attempts);
         }
 
         // 3. 보드 검증: RED 연결 개수 확인 (정확히 3개)
         int redCount = boardConnectionRepository.countBySessionAndConnectionType(session, ConnectionType.RED);
-        log.debug("[제출] 보드 검증 - sessionId: {}, RED 연결 개수: {}", sessionId, redCount);
         if (redCount != 3) {
-            log.warn("[제출 실패] RED 연결 개수 불일치 - sessionId: {}, expected: 3, actual: {}", sessionId, redCount);
             return SubmitResponse.boardInvalid(sessionId, "INVALID_RED_COUNT",
                     "붉은 실 연결이 3개여야 합니다. (현재: " + redCount + "개)", attempts);
         }
@@ -1028,11 +1024,9 @@ public class GameSessionServiceImpl implements GameSessionService {
         if (!connectedTypes.containsAll(requiredTypes)) {
             Set<ItemType> missingTypes = EnumSet.copyOf(requiredTypes);
             missingTypes.removeAll(connectedTypes);
-            log.warn("[제출 실패] 보드 타입 미연결 - sessionId: {}, missingTypes: {}", sessionId, missingTypes);
             return SubmitResponse.boardInvalid(sessionId, "INCOMPLETE_BOARD",
                     "모든 타입이 연결되어야 합니다. (미연결: " + missingTypes + ")", attempts);
         }
-        log.debug("[제출] 보드 검증 통과 - sessionId: {}, connectedTypes: {}", sessionId, connectedTypes);
 
         //  Scenario 조회
         Scenario scenario = session.getScenario();
@@ -1055,23 +1049,15 @@ public class GameSessionServiceImpl implements GameSessionService {
             culpritCorrect = (request.culpritId() == correctCulpritId);
             weaponCorrect = (request.weaponClueId() == correctWeaponClueId);
             locationCorrect = (request.locationFloor() == correctLocationFloor);
-
-            log.debug("[제출] 정답 검증 - sessionId: {}, 제출(culprit: {}, weapon: {}, location: {}), 정답(culprit: {}, weapon: {}, location: {})",
-                    sessionId, request.culpritId(), request.weaponClueId(), request.locationFloor(),
-                    correctCulpritId, correctWeaponClueId, correctLocationFloor);
-            log.info("[제출] 정답 비교 결과 - sessionId: {}, culpritCorrect: {}, weaponCorrect: {}, locationCorrect: {}",
-                    sessionId, culpritCorrect, weaponCorrect, locationCorrect);
         }
 
             // 범인 틀림 → 횟수 증가 + 게임화면으로
             if (!culpritCorrect) {
                 session.incrementSubmitAttempts();
                 attempts = session.getSubmitAttempts();
-                log.warn("[제출 오답] 범인 틀림 - sessionId: {}, 제출 횟수: {}/3", sessionId, attempts);
 
                 // 3회 다 썼으면 FAILED
                 if (attempts >= 3) {
-                    log.error("[게임 실패] 범인 오답으로 최대 횟수 도달 - sessionId: {}, userId: {}", sessionId, user.getId());
                     session.failGame();
 
                     // 유저 플레이 시간 누적
@@ -1083,20 +1069,19 @@ public class GameSessionServiceImpl implements GameSessionService {
                     // VectorStore에서도 해당 세션 데이터 삭제
                     clearVectorStoreBySession(sessionId);
                     session = getSession(sessionId);;
-                    log.info("[게임 실패 처리 완료] sessionId: {}, userId: {}, playTime: {}초, 연관 데이터 삭제 완료",
-                            sessionId, user.getId(), playTime);
 
+                    // storyConfigJson에서 unsolved_monologue 추출
+                    String unsolvedMonologue = extractNarration(scenario, "unsolved_monologue");
                     return SubmitResponse.failed(sessionId, session.getCompletedAt(),
-                            "범인이 틀렸습니다. 최대 제출 횟수를 초과하여 게임이 종료되었습니다.");
+                            "범인이 틀렸습니다. 최대 제출 횟수를 초과하여 게임이 종료되었습니다.",
+                            unsolvedMonologue);
                 }
 
-                log.info("[제출 진행중] 범인 오답, 재시도 가능 - sessionId: {}, 남은 기회: {}", sessionId, 3 - attempts);
                 return SubmitResponse.wrongAnswer(sessionId, attempts,
                         "범인이 틀렸습니다. (남은 기회: " + (3 - attempts) + ")");
             }
 
         // 4. 범인 맞음 - motive 임베딩
-        log.info("[제출 정답] 범인 맞춤! - sessionId: {}, userId: {}", sessionId, user.getId());
         float[] motiveEmbedding = null;
         float motiveSimilarity = 0.0f;
 
@@ -1122,17 +1107,14 @@ public class GameSessionServiceImpl implements GameSessionService {
         // 점수 계산 및 게임 완료 처리
         int finalScore = calculateScore(session, motiveSimilarityPercent);
         RankGrade rankGrade = calculateRankGrade(finalScore);
-        log.info("[게임 완료] 점수 계산 완료 - sessionId: {}, finalScore: {}, rankGrade: {}", sessionId, finalScore, rankGrade);
 
         long clearTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
 
         boolean hasCleared = session.getHasCleared();
-        log.debug("[게임 완료] 클리어 여부 - sessionId: {}, hasCleared: {}", sessionId, hasCleared);
 
         String aiComment = "";
         // 첫 클리어 시 랭킹 & 유저 통계 & 수사보고서 저장
         if (!hasCleared) {
-            log.info("[게임 완료] 첫 클리어! 랭킹 및 통계 저장 시작 - sessionId: {}, userId: {}", sessionId, user.getId());
             ScenarioRanking ranking = ScenarioRanking.builder()
                     .scenario(scenario)
                     .user(user)
@@ -1156,8 +1138,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                     = buildInvestigationReport(rankGrade.name(), finalScore, aiComment,totalInterrogations,cluesCollected,keyTalkMessages);
 
             session.saveReport(report);
-            log.info("[게임 완료] 첫 클리어 랭킹 저장 완료 - sessionId: {}, userId: {}, score: {}, clearTime: {}초",
-                    sessionId, user.getId(), finalScore, clearTime);
         }
         // 재 클리어시 랭킹 및 유저 클리어타임과 등급, 클리어 횟수 반영X
 
@@ -1167,11 +1147,12 @@ public class GameSessionServiceImpl implements GameSessionService {
         resetSession(session);
         // VectorStore에서도 해당 세션 데이터 삭제
         clearVectorStoreBySession(sessionId);
-        log.debug("[게임 완료] 세션 연관 데이터 삭제 완료 - sessionId: {}", sessionId);
+
+        // storyConfigJson에서 epilogue, culprit_monologue 추출
+        String epilogue = extractNarration(scenario, "epilogue");
+        String culpritMonologue = extractNarration(scenario, "culprit_monologue");
 
         // 성공 응답 반환
-        log.info("[게임 완료] 성공 응답 반환 - sessionId: {}, userId: {}, scenarioId: {}, score: {}, rank: {}, weaponCorrect: {}, locationCorrect: {}, motiveSimilarity: {}%",
-                sessionId, user.getId(), scenario.getId(), finalScore, rankGrade, weaponCorrect, locationCorrect, motiveSimilarityPercent);
         return SubmitResponse.success(
                 sessionId,
                 newAttempts,
@@ -1179,13 +1160,34 @@ public class GameSessionServiceImpl implements GameSessionService {
                 finalScore,
                 rankGrade.name(),
                 hasCleared,
-                new SubmitResponse.Evaluation(culpritCorrect, weaponCorrect, locationCorrect, motiveSimilarityPercent, aiComment)
+                new SubmitResponse.Evaluation(culpritCorrect, weaponCorrect, locationCorrect, motiveSimilarityPercent, aiComment),
+                epilogue,
+                culpritMonologue
         );
     }
 
     /**
      * private 헬프 메서드 섹션
      */
+
+    /**
+     * 시나리오의 storyConfigJson에서 narration 필드 추출
+     */
+    private String extractNarration(Scenario scenario, String field) {
+        try {
+            JsonNode storyConfig = scenario.getStoryConfigJson();
+            if (storyConfig == null) return null;
+
+            JsonNode narration = storyConfig.path("narration");
+            if (narration.isMissingNode()) return null;
+
+            JsonNode value = narration.path(field);
+            return value.isMissingNode() ? null : value.asText();
+        } catch (Exception e) {
+            log.warn("Failed to extract narration field '{}': {}", field, e.getMessage());
+            return null;
+        }
+    }
 
     private ObjectNode buildInvestigationReport(
             String rankGrade, int finalScore,

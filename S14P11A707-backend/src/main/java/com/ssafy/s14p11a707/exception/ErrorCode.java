@@ -22,6 +22,7 @@ public enum ErrorCode {
     SESSION_NOT_PLAYING(HttpStatus.CONFLICT,"SESSION-003","진행 중인 게임이 아닙니다."),
     HEALTH_DEPLETED(HttpStatus.BAD_REQUEST, "SESSION-004", "체력이 모두 소진되어 더 이상 채팅할 수 없습니다."),
     REPORT_NOT_FOUND(HttpStatus.NOT_FOUND,"SESSION-005","수사보고서를 찾을 수 없습니다."),
+    INVALID_SESSION_STATUS(HttpStatus.BAD_REQUEST,"SESSION-005","비정상적인 세션 접근입니다."),
 
     CLUE_NOT_FOUND(HttpStatus.NOT_FOUND, "CLUE-001", "단서를 찾을 수 없습니다."),
     CLUE_ALREADY_DISCOVERED(HttpStatus.CONFLICT, "CLUE-002", "이미 획득한 단서입니다."),
