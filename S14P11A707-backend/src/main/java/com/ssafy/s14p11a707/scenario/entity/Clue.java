@@ -87,6 +87,10 @@ public class Clue {
         this.transformJson = transformJson;
     }
 
+    public void setDetailImageUrl(String detailImageUrl) {
+        this.detailImageUrl = detailImageUrl;
+    }
+
     public enum Importance {
         CRITICAL,
         SUPPORTING,

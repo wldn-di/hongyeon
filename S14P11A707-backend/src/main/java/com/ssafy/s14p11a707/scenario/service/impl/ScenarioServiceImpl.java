@@ -2,6 +2,7 @@ package com.ssafy.s14p11a707.scenario.service.impl;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.ssafy.s14p11a707.config.RedisConfig;
 import com.ssafy.s14p11a707.exception.BaseException;
 import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
@@ -17,17 +18,27 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import jakarta.persistence.criteria.Predicate;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.Random;
+import java.util.stream.Collectors;
 
 @Slf4j
 @Service
@@ -788,33 +799,120 @@ public class ScenarioServiceImpl implements ScenarioService {
 
     @Override
     @Transactional(readOnly = true)
-    public ScenarioListResponse listScenarios() {
-        List<ScenarioListProjection> scenarios = scenarioRepository.findAllProjectedBy();
+    public ScenarioListResponse listScenarios(ScenarioListRequest request) {
+        ScenarioSortBy sortBy = request == null || request.sortBy() == null ? ScenarioSortBy.LATEST : request.sortBy();
+        int page = request == null ? 0 : Math.max(0, request.page());
+        int size = request == null ? 1000 : Math.max(1, Math.min(1000, request.size()));
 
-        List<ScenarioListResponse.Item> items = scenarios.stream()
+        Specification<Scenario> spec = (root, query, cb) -> cb.conjunction();
+
+        Pageable pageable = switch (sortBy) {
+            case POPULAR -> PageRequest.of(page, size, Sort.by(
+                    Sort.Order.desc("playCount"),
+                    Sort.Order.desc("createdAt"),
+                    Sort.Order.desc("id")
+            ));
+            case LATEST -> PageRequest.of(page, size, Sort.by(
+                    Sort.Order.desc("createdAt"),
+                    Sort.Order.desc("id")
+            ));
+            case RATING -> {
+                spec = spec.and((root, query, cb) -> {
+                    if (!Long.class.equals(query.getResultType()) && !long.class.equals(query.getResultType())) {
+                        var avgRating = root.<BigDecimal>get("avgRating");
+                        query.orderBy(
+                                cb.asc(cb.isNull(avgRating)),
+                                cb.desc(avgRating),
+                                cb.desc(root.get("createdAt")),
+                                cb.desc(root.get("id"))
+                        );
+                    }
+                    return cb.conjunction();
+                });
+                yield PageRequest.of(page, size);
+            }
+        };
+
+        if (request != null) {
+            if (request.keyword() != null && !request.keyword().isBlank()) {
+                String keyword = request.keyword().trim().toLowerCase();
+                spec = spec.and((root, query, cb) -> cb.like(cb.lower(root.get("title")), "%" + keyword + "%"));
+            }
+
+            Set<String> genres = request.genres() == null
+                    ? Set.of()
+                    : request.genres().stream()
+                            .filter(genre -> genre != null && !genre.isBlank() && !"all".equalsIgnoreCase(genre.trim()))
+                            .map(genre -> genre.trim().toLowerCase())
+                            .collect(Collectors.toSet());
+            if (!genres.isEmpty()) {
+                spec = spec.and((root, query, cb) -> cb.lower(root.get("genre")).in(genres));
+            }
+
+            Set<ScenarioDifficultyTier> difficultyTiers = request.difficulties() == null
+                    ? Set.of()
+                    : request.difficulties().stream()
+                            .filter(Objects::nonNull)
+                            .collect(Collectors.toSet());
+            if (!difficultyTiers.isEmpty()) {
+                spec = spec.and((root, query, cb) -> {
+                    var avgDifficulty = root.<BigDecimal>get("avgDifficulty");
+                    List<Predicate> predicates = new ArrayList<>();
+
+                    // Match frontend mapping: <=2 easy, <=4 medium, else hard. Null treated as easy.
+                    if (difficultyTiers.contains(ScenarioDifficultyTier.EASY)) {
+                        predicates.add(cb.or(
+                                cb.isNull(avgDifficulty),
+                                cb.lessThanOrEqualTo(avgDifficulty, BigDecimal.valueOf(2))
+                        ));
+                    }
+                    if (difficultyTiers.contains(ScenarioDifficultyTier.MEDIUM)) {
+                        predicates.add(cb.and(
+                                cb.isNotNull(avgDifficulty),
+                                cb.greaterThan(avgDifficulty, BigDecimal.valueOf(2)),
+                                cb.lessThanOrEqualTo(avgDifficulty, BigDecimal.valueOf(4))
+                        ));
+                    }
+                    if (difficultyTiers.contains(ScenarioDifficultyTier.HARD)) {
+                        predicates.add(cb.and(
+                                cb.isNotNull(avgDifficulty),
+                                cb.greaterThan(avgDifficulty, BigDecimal.valueOf(4))
+                        ));
+                    }
+
+                    return cb.or(predicates.toArray(Predicate[]::new));
+                });
+            }
+        }
+
+        Page<ScenarioListProjection> scenarioPage = scenarioRepository.findBy(spec, query ->
+                query.as(ScenarioListProjection.class).page(pageable)
+        );
+
+        List<ScenarioListResponse.Item> items = scenarioPage.getContent().stream()
                 .map(this::toScenarioListItem)
                 .toList();
 
-        return new ScenarioListResponse(items, 1, items.size(), 0);
+        return new ScenarioListResponse(
+                items,
+                scenarioPage.getTotalPages(),
+                scenarioPage.getTotalElements(),
+                scenarioPage.getNumber()
+        );
     }
 
     @Override
     @Transactional(readOnly = true)
-    public ScenarioListResponse searchScenarios(String keyword) {
-        List<ScenarioListProjection> scenarios;
+    @Cacheable(cacheNames = RedisConfig.SCENARIO_TOP10_PLAY_COUNT, key = "'v1'")
+    public ScenarioListResponse topScenariosByPlayCount() {
+        return listScenarios(new ScenarioListRequest(null, null, null, ScenarioSortBy.POPULAR, 0, 10));
+    }
 
-        if (keyword == null || keyword.isBlank()) {
-            scenarios = scenarioRepository.findAllProjectedBy();
-        } else {
-            String trimmed = keyword.trim();
-            scenarios = scenarioRepository.searchProjectedByKeyword(trimmed);
-        }
-
-        List<ScenarioListResponse.Item> items = scenarios.stream()
-                .map(this::toScenarioListItem)
-                .toList();
-
-        return new ScenarioListResponse(items, 1, items.size(), 0);
+    @Override
+    @Transactional(readOnly = true)
+    @Cacheable(cacheNames = RedisConfig.SCENARIO_TOP10_RATING, key = "'v1'")
+    public ScenarioListResponse topScenariosByRating() {
+        return listScenarios(new ScenarioListRequest(null, null, null, ScenarioSortBy.RATING, 0, 10));
     }
 
     private int normalizeFloorNumber(String roomType, int rawFloor, Map<Integer, Room> roomMap) {
@@ -1020,6 +1118,3 @@ public class ScenarioServiceImpl implements ScenarioService {
         return fallback;
     }
 }
-
-
-

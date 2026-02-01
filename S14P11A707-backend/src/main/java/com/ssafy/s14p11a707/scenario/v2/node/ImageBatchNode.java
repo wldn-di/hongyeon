@@ -1,0 +1,168 @@
+package com.ssafy.s14p11a707.scenario.v2.node;
+
+import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
+import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
+import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
+import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
+import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageGenerator;
+import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageJob;
+import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ObjectStorageService;
+import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageUrlUpdater;
+import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
+import java.util.concurrent.ThreadLocalRandom;
+import java.util.concurrent.atomic.AtomicInteger;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.stereotype.Component;
+
+/**
+ * 이미지 병렬 생성/업로드 및 URL 반영 노드
+ * <p>
+ * {@link ImagePromptNode}가 구성한 {@link ScenarioV2ImageJob} 목록을 병렬로 처리하여,
+ * 이미지 생성({@link ScenarioV2ImageGenerator}) → 업로드({@link ScenarioV2ObjectStorageService})를 수행한다.
+ * 모든 작업이 완료되면 {@link ScenarioV2ImageUrlUpdater}로 URL을 엔티티에 반영한다.
+ * </p>
+ * <p><b>병렬 처리</b></p>
+ * <ul>
+ *   <li>{@code imageJobExecutor} 스레드 풀에서 각 작업을 {@link CompletableFuture}로 실행</li>
+ *   <li>작업 완료마다 {@link EventType#IMAGE_PROGRESS} 이벤트를 발행하여 ({@code done/total}) 진행 상황을 전달</li>
+ * </ul>
+ * <p><b>재시도</b></p>
+ * <ul>
+ *   <li>개별 작업은 최대 2회 재시도(총 3회 시도)</li>
+ *   <li>지수형이 아닌 고정 backoff(0ms → 300ms → 1000ms) + jitter</li>
+ * </ul>
+ *
+ * @see ScenarioV2ImageJob
+ * @see ScenarioV2ImageUrlUpdater
+ */
+@Component
+@Slf4j
+@RequiredArgsConstructor
+public class ImageBatchNode implements ScenarioV2Node {
+
+    private final ScenarioV2ImageGenerator imageGenerator;
+    private final ScenarioV2ObjectStorageService objectStorageService;
+    private final ScenarioV2ImageUrlUpdater imageUrlUpdater;
+    private final ScenarioV2EventPublisher eventPublisher;
+
+    @Qualifier("imageJobExecutor")
+    private final Executor imageJobExecutor;
+
+    /**
+     * 이미지 작업을 병렬 실행하고 URL을 도메인에 반영
+     * <p>
+     * 상태에 이미지 작업이 존재하지 않으면 아무 작업도 수행하지 않고 상태를 그대로 반환한다.
+     * 이미지 생성/업로드 중 예외가 발생하면 상위 작업에서 전체 실패로 처리된다.
+     * </p>
+     *
+     * @param state 현재 상태
+     * @return 이미지 URL이 반영된 상태
+     * @throws RuntimeException 이미지 생성/업로드/URL 반영 과정에서 문제가 발생했을 때
+     */
+    @Override
+    public ScenarioV2State execute(ScenarioV2State state) {
+        var jobs = state.getImageJobs();
+        if (jobs == null || jobs.isEmpty()) {
+            log.info("[v2] ImageBatchNode skipped. scenarioId={}, reason=no jobs", state.getScenarioId());
+            return state;
+        }
+
+        int total = jobs.size();
+        log.info("[v2] ImageBatchNode execute. scenarioId={}, jobs={}", state.getScenarioId(), total);
+
+        AtomicInteger done = new AtomicInteger(0);
+        Map<String, String> urlByKey = new ConcurrentHashMap<>();
+
+        CompletableFuture<?>[] futures = jobs.stream()
+                .map(job -> CompletableFuture.runAsync(() -> {
+                    log.info(
+                            "[v2] Image job started. scenarioId={}, target={}, targetId={}, objectKey={}",
+                            state.getScenarioId(),
+                            job.target(),
+                            job.targetId(),
+                            job.objectKey()
+                    );
+
+                    String url = runJobWithRetry(job);
+                    urlByKey.put(key(job.target(), job.targetId()), url);
+                    log.info(
+                            "[v2] Image job finished. scenarioId={}, target={}, targetId={}, url={}",
+                            state.getScenarioId(),
+                            job.target(),
+                            job.targetId(),
+                            url
+                    );
+
+                    int nowDone = done.incrementAndGet();
+                    int progress = 65 + (int) Math.floor(30.0 * nowDone / total);
+                    eventPublisher.publish(new ScenarioV2EventMessage(
+                            state.getUserId(),
+                            state.getScenarioId(),
+                            EventType.IMAGE_PROGRESS,
+                            progress,
+                            "증거 사진을 확보 중… (%d/%d)".formatted(nowDone, total),
+                            Map.of("done", nowDone, "total", total)
+                    ));
+                }, imageJobExecutor))
+                .toArray(CompletableFuture[]::new);
+
+        CompletableFuture.allOf(futures).join();
+
+        log.info("[v2] ImageBatchNode uploads finished. scenarioId={}, uploadedKeys={}", state.getScenarioId(), urlByKey.size());
+        imageUrlUpdater.applyImageUrls(state.getScenarioId(), urlByKey);
+        log.info("[v2] ImageBatchNode url apply finished. scenarioId={}", state.getScenarioId());
+        return state;
+    }
+
+    private String runJobWithRetry(ScenarioV2ImageJob job) {
+        long[] backoffMillis = {0L, 300L, 1000L};
+
+        for (int attempt = 0; attempt < 3; attempt++) {
+            try {
+                byte[] png = imageGenerator.generatePng(job.prompt());
+                return objectStorageService.uploadPng(job.objectKey(), png);
+            } catch (Exception e) {
+                if (attempt == 2) {
+                    log.error(
+                            "[v2] Image job failed (final). target={}, targetId={}, objectKey={}",
+                            job.target(),
+                            job.targetId(),
+                            job.objectKey(),
+                            e
+                    );
+                    throw e;
+                }
+                long sleepMs = backoffMillis[attempt + 1] + ThreadLocalRandom.current().nextLong(0, 120);
+                log.warn(
+                        "[v2] Image job failed (retry). attempt={}/3, sleepMs={}, target={}, targetId={}, objectKey={}, error={}",
+                        attempt + 1,
+                        sleepMs,
+                        job.target(),
+                        job.targetId(),
+                        job.objectKey(),
+                        e.getMessage()
+                );
+                sleep(sleepMs);
+            }
+        }
+
+        throw new IllegalStateException("unreachable");
+    }
+
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private static String key(ScenarioV2ImageJob.Target target, long targetId) {
+        return target.name() + ":" + targetId;
+    }
+}
