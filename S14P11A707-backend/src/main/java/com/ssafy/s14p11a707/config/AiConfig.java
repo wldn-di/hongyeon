@@ -4,7 +4,6 @@ import com.google.genai.Client;
 import com.google.genai.types.HttpOptions;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
-import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -33,12 +32,15 @@ public class AiConfig {
     private String genAiProjectId;
 
     @Bean
-    ChatModel googleGenAiChatModel() {
-        Client client = Client.builder()
+    Client googleGenAiClient() {
+        return Client.builder()
                 .apiKey(genAiApiKey)
                 .httpOptions(HttpOptions.builder().baseUrl(genAiBaseUrl).build())
                 .build();
+    }
 
+    @Bean
+    ChatModel googleGenAiChatModel(Client googleGenAiClient) {
         GoogleGenAiChatOptions options = GoogleGenAiChatOptions.builder()
                 .model("gemini-2.0-flash")
                 .temperature(0.7)
@@ -46,7 +48,7 @@ public class AiConfig {
                 .build();
 
         return GoogleGenAiChatModel.builder()
-                .genAiClient(client)
+                .genAiClient(googleGenAiClient)
                 .defaultOptions(options)
                 .build();
     }

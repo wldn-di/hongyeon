@@ -16,10 +16,8 @@ import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -58,6 +56,7 @@ public class Scenario extends BaseEntity {
     @Column(columnDefinition = "text")
     private String synopsisDetail;
 
+    @Setter
     @Column(length = 500)
     private String thumbnailUrl;
 
@@ -73,6 +72,7 @@ public class Scenario extends BaseEntity {
     @Column(columnDefinition = "jsonb")
     private JsonNode storyConfigJson;
 
+    @Setter
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private JsonNode truthConfigJson;
@@ -145,8 +145,21 @@ public class Scenario extends BaseEntity {
         this.playCount = 0;
     }
 
-    public void setTruthConfigJson(JsonNode truthConfigJson) {
+    public void applyGeneratedContent(
+            String title,
+            String synopsis,
+            String synopsisDetail,
+            JsonNode storyConfigJson,
+            JsonNode truthConfigJson,
+            String correctMotiveEmbedding
+    ) {
+        this.title = title;
+        this.synopsis = synopsis;
+        this.synopsisDetail = synopsisDetail;
+        this.storyConfigJson = storyConfigJson;
         this.truthConfigJson = truthConfigJson;
+        this.correctMotiveEmbedding = correctMotiveEmbedding;
+        this.generationError = null;
     }
 
     public enum GenerationStatus {

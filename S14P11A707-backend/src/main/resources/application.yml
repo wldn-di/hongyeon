@@ -8,7 +8,7 @@ spring:
   # - `.env` 파일은 properties 형식(KEY=VALUE)으로 작성
   # - 파일이 없으면 무시(optional)
   config:
-    import: optional:file:.env[.properties]
+    import: optional:file:.env[.properties],optional:file:S14P11A707-backend/.env[.properties]
 
   datasource:
     url: ${DB_URL}
@@ -94,6 +94,14 @@ app:
     # 절대 URL 리다이렉트를 허용할 origin allowlist (comma-separated)
     # - 예) https://hongyeon.cloud-ip.cc,http://localhost:5173
     allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:}
+  scenario:
+    v2:
+      image:
+        # google(기본): Google GenAI Imagen 기반 실제 이미지 생성
+        # placeholder: 더미 단색 PNG 생성(비용/속도/테스트용)
+        generator: ${APP_SCENARIO_V2_IMAGE_GENERATOR:google}
+        # 예) imagen-4.0-fast-generate-001 / imagen-4.0-generate-001 / imagen-4.0-ultra-generate-001
+        model: ${APP_SCENARIO_V2_IMAGE_MODEL:imagen-4.0-fast-generate-001}
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
