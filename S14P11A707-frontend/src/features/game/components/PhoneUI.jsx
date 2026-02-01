@@ -2,19 +2,27 @@ import { ArrowLeft, Send, Users } from "lucide-react"
 import { React, useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
-// 조력자 대화용 휴대폰 UI 컴포넌트
-export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistories, onSendMessage, currentChat, setCurrentChat, onContactSelect }) {
+// 용의자 심문용 휴대폰 UI 컴포넌트
+export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistories, onSendMessage, currentChat, setCurrentChat, onContactSelect, onMarkAsRead }) {
   const [message, setMessage] = useState('')
   const [selectedContact, setSelectedContact] = useState(null)
   const chatEndRef = useRef(null)
 
-  const allContacts = [helper, ...suspects]
+  // 용의자만 표시 (조수 왓슨 제외)
+  const allContacts = suspects.filter(Boolean)
 
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
     }
   }, [chatHistories, selectedContact])
+
+  // 채팅방 입장 시 읽음 처리
+  useEffect(() => {
+    if (selectedContact && onMarkAsRead) {
+      onMarkAsRead(selectedContact.id)
+    }
+  }, [selectedContact, onMarkAsRead])
 
   const handleSend = () => {
     if (message.trim() && selectedContact) {

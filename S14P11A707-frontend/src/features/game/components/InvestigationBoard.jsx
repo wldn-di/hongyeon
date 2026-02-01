@@ -29,6 +29,7 @@ export function InvestigationBoard({
   hideFilter = false,
   hideSave = false,
   onBoardStateChange = null,
+  fullHeight = false, // 전체 높이 사용 여부
 }) {
   const isSubmitMode = mode === 'submit'
   const effectiveAllowedLineModes =
@@ -53,8 +54,10 @@ export function InvestigationBoard({
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 })
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
+  const [hoveredItem, setHoveredItem] = useState(null) // 호버된 카드 ID
 
   const boardRef = useRef(null)
+  const hoverTimeoutRef = useRef(null) // 호버 1초 딜레이용
   const autosaveTimerRef = useRef(null)
   const pendingConnectFromRef = useRef(null)
   const isLoadedRef = useRef(false)  // 로드 중복 방지
@@ -897,14 +900,11 @@ export function InvestigationBoard({
         ref={boardRef}
         className="relative overflow-auto"
         style={{
-          height: isModal ? '65vh' : '500px',
-          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)',
-          backgroundImage: `
-            linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-            linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px),
-            linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f0f23 100%)
-          `,
-          backgroundSize: '30px 30px, 30px 30px, 100% 100%',
+          height: fullHeight ? 'calc(100% - 120px)' : (isModal ? '65vh' : '500px'),
+          minHeight: fullHeight ? '60vh' : undefined,
+          backgroundImage: 'url(/board/board.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}
         onDragOver={handleExternalDragOver}
         onDrop={handleExternalDrop}
@@ -921,52 +921,98 @@ export function InvestigationBoard({
           </div>
         )}
 
-        {/* 연결선 */}
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '100%', minHeight: '100%' }}>
-          {connections.map(conn => {
-            if (!conn?.from || !conn?.to) return null
-            const fromItem = boardItems.find(item => item.id === conn.from)
-            const toItem = boardItems.find(item => item.id === conn.to)
-            if (!fromItem || !toItem) return null
+        {/* 연결선 - 확정은 실 이미지, 의심은 점선 */}
+        {connections.map(conn => {
+          if (!conn?.from || !conn?.to) return null
+          const fromItem = boardItems.find(item => item.id === conn.from)
+          const toItem = boardItems.find(item => item.id === conn.to)
+          if (!fromItem || !toItem) return null
 
-            const key = getConnectionKey(conn.from, conn.to)
-            const hash = hashString(key)
-            const fromX = fromItem.x + 88, fromY = fromItem.y + 100
-            const toX = toItem.x + 88, toY = toItem.y + 100
-            const midX = (fromX + toX) / 2, midY = (fromY + toY) / 2
-            const controlX = midX + ((hash % 7) - 3) * 10
-            const controlY = midY - 50 + ((hash % 5) - 2) * 5
-            const pathD = `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toX} ${toY}`
-            const isConfirmed = conn.type !== 'suspected'
+          const key = getConnectionKey(conn.from, conn.to)
+          const isConfirmed = conn.type !== 'suspected'
+          const fromX = fromItem.x + 88, fromY = fromItem.y + 100
+          const toX = toItem.x + 88, toY = toItem.y + 100
+          const dx = toX - fromX, dy = toY - fromY
+          const distance = Math.sqrt(dx * dx + dy * dy)
+          const angle = Math.atan2(dy, dx) * 180 / Math.PI
+          const midX = (fromX + toX) / 2, midY = (fromY + toY) / 2
+          const isSelected = selectedConnectionKey === key
 
+          // 확정 연결선: 실 이미지 사용 (튜토리얼과 동일)
+          if (isConfirmed) {
+            const sag = Math.min(distance * 0.08, 25)
             return (
-              <g key={key}>
-                <path
-                  d={pathD}
-                  stroke="transparent"
-                  strokeWidth={20}
-                  fill="none"
-                  style={{ pointerEvents: 'stroke' }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setPendingConnectFromWithRef(null)
-                    setSelectedItem(null)
-                    setSelectedConnectionPos({ x: controlX, y: controlY })
-                    setSelectedConnectionKey(prev => prev === key ? null : key)
+              <div
+                key={key}
+                className={cn("absolute cursor-pointer", isSelected && "z-10")}
+                style={{
+                  left: midX,
+                  top: midY,
+                  width: distance,
+                  height: 40,
+                  transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+                  transformOrigin: 'center center',
+                }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setPendingConnectFromWithRef(null)
+                  setSelectedItem(null)
+                  setSelectedConnectionPos({ x: midX, y: midY })
+                  setSelectedConnectionKey(prev => prev === key ? null : key)
+                }}
+              >
+                <div
+                  className="w-full h-full relative"
+                  style={{
+                    backgroundImage: 'url(/board/thread.png)',
+                    backgroundSize: 'auto 100%',
+                    backgroundRepeat: 'repeat-x',
+                    backgroundPosition: 'center',
+                    filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(1px 2px 2px rgba(0,0,0,0.3))',
+                    borderRadius: `0 0 ${sag}px ${sag}px`,
+                    transform: `scaleY(${1 + sag/50})`,
                   }}
                 />
-                <path
-                  d={pathD}
-                  stroke={isConfirmed ? '#dc2626' : '#f59e0b'}
-                  strokeWidth={isConfirmed ? 4 : 3}
-                  strokeDasharray={isConfirmed ? undefined : '8 8'}
-                  fill="none"
-                  style={{ pointerEvents: 'none', filter: 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))' }}
-                />
-              </g>
+                {isSelected && (
+                  <div className="absolute inset-0 bg-white/30 rounded animate-pulse" />
+                )}
+              </div>
             )
-          })}
-        </svg>
+          }
+
+          // 의심 연결선: 기존 SVG 점선 유지
+          const hash = hashString(key)
+          const controlX = midX + ((hash % 7) - 3) * 10
+          const controlY = midY - 50 + ((hash % 5) - 2) * 5
+          const pathD = `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toX} ${toY}`
+
+          return (
+            <svg key={key} className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '100%', minHeight: '100%', zIndex: isSelected ? 10 : 1 }}>
+              <path
+                d={pathD}
+                stroke="transparent"
+                strokeWidth={20}
+                fill="none"
+                style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setPendingConnectFromWithRef(null)
+                  setSelectedItem(null)
+                  setSelectedConnectionPos({ x: controlX, y: controlY })
+                  setSelectedConnectionKey(prev => prev === key ? null : key)
+                }}
+              />
+              <path
+                d={pathD}
+                stroke="#f59e0b"
+                strokeWidth={3}
+                strokeDasharray="8 8"
+                fill="none"
+                style={{ pointerEvents: 'none', filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))' }}
+              />
+            </svg>
+          )
+        })}
 
         {/* 연결선 삭제 버튼 */}
         {!readOnly && selectedConnectionKey && selectedConnectionPos && (
@@ -978,8 +1024,8 @@ export function InvestigationBoard({
               setSelectedConnectionKey(null)
               setSelectedConnectionPos(null)
             }}
-            className="absolute w-7 h-7 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 flex items-center justify-center text-sm border border-white/20"
-            style={{ left: selectedConnectionPos.x, top: selectedConnectionPos.y, transform: 'translate(-50%, -50%)', zIndex: 5 }}
+            className="absolute w-9 h-9 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 flex items-center justify-center text-base font-bold border-2 border-white/50 transition-transform hover:scale-110"
+            style={{ left: selectedConnectionPos.x, top: selectedConnectionPos.y, transform: 'translate(-50%, -50%)', zIndex: 200 }}
           >
             ✕
           </button>
@@ -1005,13 +1051,96 @@ export function InvestigationBoard({
                 lineMode && pendingConnectFrom === item.id && (lineMode === 'confirmed' ? "ring-4 ring-red-500 ring-offset-2" : "ring-4 ring-amber-500 ring-offset-2"),
                 !readOnly && "cursor-move"
               )}
-              style={{ left: item.x, top: item.y, zIndex: selectedItem === item.id ? 10 : 2 }}
+              style={{ left: item.x, top: item.y, zIndex: hoveredItem === item.id ? 50 : (selectedItem === item.id ? 10 : 2) }}
               onMouseDown={(e) => handleMouseDown(e, item.id)}
               onClick={(e) => {
                 e.stopPropagation()
                 handleCardClick(item.id)
               }}
+              onMouseEnter={() => {
+                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                hoverTimeoutRef.current = setTimeout(() => {
+                  setHoveredItem(item.id)
+                }, 1000) // 1초 딜레이
+              }}
+              onMouseLeave={() => {
+                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                setHoveredItem(null)
+              }}
             >
+              {/* 호버 툴팁 - 상세정보 (1초 딜레이, 튜토리얼 스타일) */}
+              {hoveredItem === item.id && item.type !== 'note' && (
+                <div
+                  className="absolute left-full ml-4 top-0 w-72 bg-gray-900/95 backdrop-blur border-2 border-gray-600 rounded-xl shadow-2xl pointer-events-none animate-in fade-in slide-in-from-left-2 duration-200"
+                  style={{ zIndex: 200 }}
+                >
+                  {/* 헤더 */}
+                  <div className={cn("px-4 py-3 rounded-t-xl border-b border-gray-700",
+                    item.type === 'victim' && "bg-red-500/20",
+                    item.type === 'suspect' && "bg-amber-500/20",
+                    item.type === 'evidence' && "bg-blue-500/20",
+                    item.type === 'location' && "bg-green-500/20"
+                  )}>
+                    <div className="flex items-center gap-3">
+                      <span className={cn("px-2.5 py-1 text-xs font-bold text-white rounded-md shadow", config.color)}>
+                        {config.label}
+                      </span>
+                      <span className="font-bold text-base text-white">{item.name}</span>
+                    </div>
+                  </div>
+
+                  {/* 내용 */}
+                  <div className="p-4 space-y-3">
+                    {item.type === 'victim' && (
+                      <>
+                        {item.occupation && (
+                          <div className="flex justify-between items-center py-1.5 border-b border-gray-700/50">
+                            <span className="text-gray-400 text-sm">직업</span>
+                            <span className="text-white font-medium text-sm">{item.occupation}</span>
+                          </div>
+                        )}
+                        {item.note && (
+                          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line bg-black/30 rounded-lg p-3">{item.note}</p>
+                        )}
+                      </>
+                    )}
+                    {item.type === 'suspect' && (
+                      <>
+                        {item.role && (
+                          <div className="flex justify-between items-center py-1.5 border-b border-gray-700/50">
+                            <span className="text-gray-400 text-sm">역할</span>
+                            <span className="text-white font-medium text-sm">{item.role}</span>
+                          </div>
+                        )}
+                        {item.note && (
+                          <p className="text-gray-300 text-sm leading-relaxed bg-black/30 rounded-lg p-3 italic">"{item.note}"</p>
+                        )}
+                      </>
+                    )}
+                    {item.type === 'evidence' && (
+                      <>
+                        {item.note && (
+                          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line bg-black/30 rounded-lg p-3">{item.note}</p>
+                        )}
+                      </>
+                    )}
+                    {item.type === 'location' && (
+                      <>
+                        {item.floorNumber && (
+                          <div className="flex justify-between items-center py-1.5 border-b border-gray-700/50">
+                            <span className="text-gray-400 text-sm">위치</span>
+                            <span className="text-green-400 font-bold text-sm">{item.floorNumber}층</span>
+                          </div>
+                        )}
+                        {item.note && (
+                          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line bg-black/30 rounded-lg p-3">{item.note}</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {/* 핀 */}
               <div className="absolute -top-3 left-1/2 -translate-x-1/2 z-10">
                 <Pin className="w-6 h-6 text-red-600 fill-red-600" style={{ filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }} />

@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { AppRoutes } from "./routes";
 import { Header } from "@/components/layout/Header";
 import { Toaster, toast } from "sonner";
+import { AlertModal } from "@/components/ui/AlertModal";
+import { LoginRequiredModal } from "@/components/ui/LoginRequiredModal";
 
 import { ScenarioJobProvider, useScenarioJob } from "@/features/scenarios/polling/ScenarioJobContext";
 import { useScenarioJobWatcher } from "@/features/scenarios/polling/useScenarioJobWatcher";
@@ -39,6 +41,8 @@ function AppShellInner() {
   return (
     <div className="dark">
       <Toaster richColors position="top-right" />
+      <AlertModal />
+      <LoginRequiredModal />
       {!hideHeader && <Header />}
       <AppRoutes />
     </div>

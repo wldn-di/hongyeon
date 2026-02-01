@@ -3,12 +3,13 @@ import { Link, useLocation } from 'wouter'
 
 import { Button } from '@/components/ui/Button'
 import { ReportModal } from '@/features/game/modals'
-import { fetchMyReport } from '@/features/session/api/sessionApi'
+import { ReplayConfirmModal } from '@/components/ui/ReplayConfirmModal'
+import { fetchMyReport, restartGame } from '@/features/session/api/sessionApi'
 import { normalizeInvestigationReportResponse } from '@/features/session/api/sessionMappers'
 import { useBookshelf } from '@/features/user/hooks/useBookshelf'
 import {
   ChevronLeft, ChevronRight, Clock, Award,
-  FileText, BookOpen
+  FileText, BookOpen, RotateCcw
 } from 'lucide-react'
 import { toast } from 'sonner'
 import { cn } from '@/lib/utils'
@@ -26,7 +27,7 @@ const gradeStyles = {
 // =========================
 // 책 표지 카드
 // =========================
-function BookCard({ book, mode, isActive, onViewReport }) {
+function BookCard({ book, mode, isActive, onViewReport, onReplay }) {
   const [, setLocation] = useLocation()
 
   // mode: 'solved' | 'progress' | 'failed'
@@ -40,6 +41,17 @@ function BookCard({ book, mode, isActive, onViewReport }) {
   const handleResume = () => {
     // sessionId를 사용하여 resume 경로로 이동
     setLocation(`/room/${book.sessionId}/resume`)
+  }
+
+  // 처음부터 하기 클릭 핸들러 (실패한 게임)
+  const handleRestart = () => {
+    // scenarioId를 사용하여 새 게임 시작
+    setLocation(`/room/${book.scenarioId}/solo`)
+  }
+
+  // 재플레이 클릭 핸들러 (완료한 게임)
+  const handleReplay = () => {
+    onReplay?.(book)
   }
 
   return (
@@ -135,17 +147,39 @@ function BookCard({ book, mode, isActive, onViewReport }) {
         {isActive && (
           <div className="absolute inset-0 bg-primary/10 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center">
             {isSolved ? (
+              // 완료한 게임은 수사보고서 + 재플레이
+              <div className="flex flex-col gap-2">
+                <Button
+                  variant="neon"
+                  size="sm"
+                  className="shadow-lg"
+                  onClick={() => onViewReport(book)}
+                >
+                  <FileText className="w-4 h-4 mr-1" />
+                  수사보고서 열람
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="shadow-lg"
+                  onClick={handleReplay}
+                >
+                  <RotateCcw className="w-4 h-4 mr-1" />
+                  재플레이
+                </Button>
+              </div>
+            ) : isFailed ? (
+              // 실패한 게임은 처음부터 다시
               <Button
                 variant="neon"
                 size="sm"
                 className="shadow-lg"
-                onClick={() => onViewReport(book)}
+                onClick={handleRestart}
               >
-                <FileText className="w-4 h-4 mr-1" />
-                수사보고서 열람
+                처음부터 하기
               </Button>
             ) : (
-              // 진행중/실패 둘 다 "이어하기"로 처리
+              // 진행중인 게임은 이어하기
               <Button
                 variant="neon"
                 size="sm"
@@ -177,7 +211,7 @@ function ShelfHeader({ title, count }) {
 // =========================
 // 책장 캐러셀 (가운데 활성)
 // =========================
-function BookShelf({ books, mode, title, onViewReport }) {
+function BookShelf({ books, mode, title, onViewReport, onReplay }) {
   const [activeIndex, setActiveIndex] = useState(0)
 
   const safeBooks = Array.isArray(books) ? books : []
@@ -273,6 +307,7 @@ function BookShelf({ books, mode, title, onViewReport }) {
                   mode={mode}
                   isActive={idx === 1}
                   onViewReport={onViewReport}
+                  onReplay={onReplay}
                 />
               ))}
             </div>
@@ -295,9 +330,15 @@ function BookShelf({ books, mode, title, onViewReport }) {
 // 메인 페이지
 // =========================
 export default function MyBookshelf() {
+  const [, setLocation] = useLocation()
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [selectedReport, setSelectedReport] = useState(null)
   const [reportLoading, setReportLoading] = useState(false)
+
+  // 재플레이 모달 상태
+  const [replayModalOpen, setReplayModalOpen] = useState(false)
+  const [selectedReplayBook, setSelectedReplayBook] = useState(null)
+  const [replayLoading, setReplayLoading] = useState(false)
 
   // API 기반 데이터 조회
   const {
@@ -329,6 +370,35 @@ export default function MyBookshelf() {
       setReportLoading(false)
     }
   }, [reportLoading])
+
+  // 재플레이 모달 열기
+  const handleReplayClick = useCallback((book) => {
+    setSelectedReplayBook(book)
+    setReplayModalOpen(true)
+  }, [])
+
+  // 재플레이 확정
+  const handleReplayConfirm = useCallback(async () => {
+    if (!selectedReplayBook?.scenarioId) return
+
+    try {
+      setReplayLoading(true)
+      const response = await restartGame(selectedReplayBook.scenarioId)
+      setReplayModalOpen(false)
+
+      // 새 세션으로 이동
+      if (response?.sessionId) {
+        setLocation(`/room/${response.sessionId}/resume`)
+      } else {
+        setLocation(`/game/${selectedReplayBook.scenarioId}`)
+      }
+    } catch (err) {
+      console.error('Replay error:', err)
+      toast.error(err.message || '재플레이 시작에 실패했습니다.')
+    } finally {
+      setReplayLoading(false)
+    }
+  }, [selectedReplayBook, setLocation])
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -372,6 +442,7 @@ export default function MyBookshelf() {
                 mode="solved"
                 title="해결한 사건들"
                 onViewReport={handleViewReport}
+                onReplay={handleReplayClick}
               />
 
               <BookShelf
@@ -399,6 +470,19 @@ export default function MyBookshelf() {
           setSelectedReport(null)
         }}
         report={selectedReport}
+      />
+
+      {/* 재플레이 확인 모달 */}
+      <ReplayConfirmModal
+        isOpen={replayModalOpen}
+        onClose={() => {
+          setReplayModalOpen(false)
+          setSelectedReplayBook(null)
+        }}
+        onConfirm={handleReplayConfirm}
+        status={selectedReplayBook?.status}
+        scenarioTitle={selectedReplayBook?.title}
+        loading={replayLoading}
       />
 
       <footer className="border-t border-border py-8 bg-card/30">
