@@ -4,23 +4,22 @@ import { AppRoutes } from "./routes";
 import { Header } from "@/components/layout/Header";
 import { Toaster, toast } from "sonner";
 
+// [추가] 턴테이블 컴포넌트 import
+import { Turntable } from "@/components/ui/Turntable";
+import { Atmosphere } from "@/components/ui/Atmosphere";
 import { ScenarioJobProvider, useScenarioJob } from "@/features/scenarios/polling/ScenarioJobContext";
 import { useScenarioJobWatcher } from "@/features/scenarios/polling/useScenarioJobWatcher";
 
-/**
- * 시나리오 생성 상태를 저장하고 생성 완료 토스트에 바로 보기 기능
- * Header를 한 번만 렌더링하고 페이지 라우팅을 관리함
- */
 function AppShellInner() {
   const [location, setLocation] = useLocation();
   const { setJob } = useScenarioJob();
 
-  // 게임 플레이 화면에서는 헤더 숨기기
-  const hideHeader = location.startsWith("/room/") || location.startsWith("/game/");
+  // 게임 플레이 화면 등 특정 경로 감지
+  const hideHeader = location.startsWith("/room/") || location.startsWith("/game/") || location.startsWith("/tutorial");
 
   useScenarioJobWatcher({
     intervalMs: 3000,
-    onTick: (res) => setJob(res), // 시나리오 생성 상태 progress/message 저장
+    onTick: (res) => setJob(res),
     onCompleted: (res) => {
       setJob(null);
       toast.success("시나리오 생성 완료!", {
@@ -37,11 +36,18 @@ function AppShellInner() {
   });
 
   return (
-    <div className="dark">
-      <Toaster richColors position="top-right" />
-      {!hideHeader && <Header />}
-      <AppRoutes />
-    </div>
+      <div className="dark min-h-screen relative bg-neutral-950 text-neutral-200">
+          <Toaster richColors position="top-right" />
+
+
+          <Atmosphere />
+
+        {!hideHeader && <Header />}
+
+        <AppRoutes />
+        <Turntable />
+
+      </div>
   );
 }
 
@@ -50,8 +56,8 @@ function AppShellInner() {
  */
 export function AppShell() {
   return (
-    <ScenarioJobProvider>
-      <AppShellInner />
-    </ScenarioJobProvider>
+      <ScenarioJobProvider>
+        <AppShellInner />
+      </ScenarioJobProvider>
   );
 }
