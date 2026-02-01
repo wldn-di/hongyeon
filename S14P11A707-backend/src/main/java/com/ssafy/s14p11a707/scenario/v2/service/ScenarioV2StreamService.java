@@ -1,5 +1,12 @@
 package com.ssafy.s14p11a707.scenario.v2.service;
 
+import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent;
+import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
+import com.ssafy.s14p11a707.scenario.v2.stream.ScenarioV2EmitterRepository;
+import java.io.IOException;
+import java.time.Duration;
+import lombok.RequiredArgsConstructor;
+import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
@@ -10,10 +17,15 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * 본 서비스는 사용자별 emitter를 보관({@link com.ssafy.s14p11a707.scenario.v2.stream.ScenarioV2EmitterRepository})한다.
  * </p>
  *
- * @see com.ssafy.s14p11a707.scenario.v2.service.impl.ScenarioV2StreamServiceImpl
  * @see com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2RedisSubscriber
  */
-public interface ScenarioV2StreamService {
+@Service
+@RequiredArgsConstructor
+public class ScenarioV2StreamService {
+
+    private static final long DEFAULT_TIMEOUT_MILLIS = Duration.ofMinutes(5).toMillis();
+
+    private final ScenarioV2EmitterRepository emitterRepository;
 
     /**
      * 사용자별 SSE 연결을 생성하고 emitter 반환
@@ -24,5 +36,34 @@ public interface ScenarioV2StreamService {
      * @param userId 사용자 식별자(id)
      * @return SSE emitter
      */
-    SseEmitter connect(long userId);
+    public SseEmitter connect(long userId) {
+        SseEmitter emitter = new SseEmitter(DEFAULT_TIMEOUT_MILLIS);
+
+        emitterRepository.find(userId).ifPresent(existing -> {
+            existing.complete();
+            emitterRepository.remove(userId);
+        });
+
+        emitterRepository.put(userId, emitter);
+
+        emitter.onCompletion(() -> emitterRepository.remove(userId));
+        emitter.onTimeout(() -> emitterRepository.remove(userId));
+        emitter.onError(e -> emitterRepository.remove(userId));
+
+        try {
+            emitter.send(SseEmitter.event()
+                    .name("connect")
+                    .data(new ScenarioV2StreamEvent(
+                            0L,
+                            EventType.CONNECT,
+                            0,
+                            "connected",
+                            null
+                    )));
+        } catch (IOException e) {
+            emitterRepository.remove(userId);
+        }
+
+        return emitter;
+    }
 }

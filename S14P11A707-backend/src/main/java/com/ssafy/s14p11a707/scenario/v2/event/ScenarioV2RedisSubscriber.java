@@ -91,15 +91,10 @@ public class ScenarioV2RedisSubscriber implements MessageListener {
     }
 
     private String toSseName(EventType type) {
-        if (type == EventType.COMPLETE) {
-            return "complete";
-        }
-        if (type == EventType.ERROR) {
-            return "error";
-        }
-        if (type == EventType.PING) {
-            return "ping";
-        }
+        if (type == EventType.COMPLETE) return "complete";
+        if (type == EventType.ERROR) return "error";
+        if (type == EventType.PING) return "ping";
+
         return "progress";
     }
 }
