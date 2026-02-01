@@ -30,8 +30,11 @@ export function GameEndModal({
   if (!isOpen) return null
 
   // API 응답에서 텍스트 가져오기 (없으면 기본값)
+  // 1. result (submit 응답)에서 먼저 찾기
+  // 2. scenario (시나리오 상세)에서 찾기
+  // 3. 기본값 사용
   const unsolvedMonologue = result?.unsolvedMonologue ||
-    scenario?.narrations_unsolved_monologue ||
+    scenario?.unsolved_monologue ||
     `"후후... 결국 찾아내지 못했군요."\n\n범인은 어둠 속으로 사라졌습니다.\n\n진실은 영원히 묻히고 말았습니다...`
 
   const epilogueText = result?.epilogue ||

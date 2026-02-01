@@ -74,6 +74,9 @@ export const mapDifficulty = (difficulty) => {
 export const mapScenarioDetailResponse = (response) => {
   if (!response) return null
 
+  // narration 데이터 추출 (storyConfigJson 또는 직접 필드에서)
+  const narration = response.narration || response.storyConfigJson?.narration || {}
+
   return {
     id: response.id,
     title: response.title,
@@ -88,6 +91,10 @@ export const mapScenarioDetailResponse = (response) => {
     // UI 호환성 필드
     rating: response.avgRating ? Math.round(response.avgRating * 100) : 0,
     estimatedTime: response.estimatedTime || 30, // 기본값 30분
+    // 나레이션 데이터 (에필로그, 범인 독백 등)
+    narration_epilogue: response.narration_epilogue || narration.epilogue || null,
+    culprit_monologue: response.culprit_monologue || narration.culprit_monologue || null,
+    unsolved_monologue: response.unsolved_monologue || narration.unsolved_monologue || null,
     // 중첩 데이터 매핑
     victim: response.victim ? mapVictim(response.victim) : null,
     suspects: response.suspects?.map(mapSuspect) || [],

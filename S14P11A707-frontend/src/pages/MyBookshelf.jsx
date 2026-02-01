@@ -37,10 +37,10 @@ function BookCard({ book, mode, isActive, onViewReport, onReplay }) {
   const isProgress = mode === 'progress'
   const isFailed = mode === 'failed'
 
-  // 이어하기 클릭 핸들러
+  // 이어하기 클릭 핸들러 (시나리오 상세 페이지와 동일한 흐름 사용)
   const handleResume = () => {
-    // sessionId를 사용하여 resume 경로로 이동
-    setLocation(`/room/${book.sessionId}/resume`)
+    // scenarioId를 사용하여 게임 페이지로 이동 (startGame API가 기존 세션 처리)
+    setLocation(`/game/${book.scenarioId}`)
   }
 
   // 처음부터 하기 클릭 핸들러 (실패한 게임)
