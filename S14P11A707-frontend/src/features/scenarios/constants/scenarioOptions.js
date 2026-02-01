@@ -2,7 +2,10 @@ export const GENRES = [
   { value: "all", label: "전체 장르" },
   { value: "crime", label: "범죄/수사" },
   { value: "mystery", label: "미스터리" },
-  { value: "horror", label: "시대극" },
+  { value: "horror", label: "공포/스릴러" },
+  { value: "historical", label: "시대극" },
+  { value: "romance", label: "로맨스" },
+  { value: "sf", label: "SF/판타지" },
 ];
 
 export const DIFFICULTIES = [
@@ -13,7 +16,7 @@ export const DIFFICULTIES = [
 ];
 
 export const SORT_OPTIONS = [
-  { value: "views", label: "최신순" },
+  { value: "latest", label: "최신순" },
   { value: "popular", label: "인기순" },
   { value: "rating", label: "별점순" },
 ];

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { fetchGlobalRankings } from '../api/rankingApi'
-import { normalizeRankingResponse } from '../api/rankingMappers'
+import { fetchGlobalRankings, fetchMyRankings } from '../api/rankingApi'
+import { normalizeMyRankingResponse, normalizeRankingResponse } from '../api/rankingMappers'
 import { getErrorMessage } from '@/api/errors/errorHandler'
 
 /**
@@ -22,7 +22,20 @@ export const useRanking = () => {
 
     try {
       const response = await fetchGlobalRankings()
-      const { rankingData: data, myRanking: myRank } = normalizeRankingResponse(response)
+      const { rankingData: data, myRanking: myRankFromGlobal } = normalizeRankingResponse(response)
+
+      let myRank = myRankFromGlobal
+
+      // 글로벌 응답에 내 랭킹이 없으면 /me로 보완 (401은 무시)
+      if (!myRank) {
+        try {
+          const myResponse = await fetchMyRankings()
+          myRank = normalizeMyRankingResponse(myResponse)
+        } catch (e) {
+          // 인증이 없거나(401) /me 엔드포인트 미구현(404) 등은 silent
+          myRank = null
+        }
+      }
 
       setRankingData(data)
       setMyRanking(myRank)

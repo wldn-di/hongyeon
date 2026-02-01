@@ -34,6 +34,8 @@ export const ENDPOINTS = {
     rankings: (scenarioId) => `/api/scenarios/${scenarioId}/rankings`,
     status: (scenarioId) => `/api/scenarios/${scenarioId}/status`,
     search: '/api/scenarios/search',
+    topByRating: '/api/scenarios/top/rating',
+    topByPlayCount: '/api/scenarios/top/play-count',
   },
 
   // ========================================

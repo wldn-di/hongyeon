@@ -61,19 +61,26 @@ export const normalizeRankingEntry = (entry, fallbackIndex) => {
  * @returns {{ rankingData: NormalizedRanking[], myRanking: NormalizedRanking | null }}
  */
 export const normalizeRankingResponse = (response) => {
-  if (!response || typeof response !== 'object') {
+  if (!response) {
     console.error('Invalid ranking response:', response)
-    return {
-      rankingData: [],
-      myRanking: null,
-    }
+    return { rankingData: [], myRanking: null }
   }
 
-  const top10 = Array.isArray(response?.top10) ? response.top10.slice(0, 10) : []
+  // 응답이 배열인 경우도 허용 (top10만 내려주는 케이스)
+  const top10Source = Array.isArray(response)
+    ? response
+    : Array.isArray(response?.top10)
+      ? response.top10
+      : Array.isArray(response?.rankings)
+        ? response.rankings
+        : Array.isArray(response?.content)
+          ? response.content
+          : []
+
+  const top10 = top10Source.slice(0, 10)
   const validatedData = top10.map((item, index) => normalizeRankingEntry(item, index))
-  const validatedMyRank = response?.myRank
-    ? normalizeRankingEntry(response.myRank, validatedData.length)
-    : null
+  const myRankSource = response?.myRank || response?.myRanking || null
+  const validatedMyRank = myRankSource ? normalizeRankingEntry(myRankSource, validatedData.length) : null
 
   return {
     rankingData: validatedData,
@@ -81,7 +88,26 @@ export const normalizeRankingResponse = (response) => {
   }
 }
 
+/**
+ * 내 랭킹 응답 변환 (/api/rankings/me)
+ * @param {any} response
+ * @returns {NormalizedRanking | null}
+ */
+export const normalizeMyRankingResponse = (response) => {
+  if (!response) return null
+
+  const entry =
+    response?.myRank ||
+    response?.myRanking ||
+    // 단일 RankEntry를 바로 반환하는 케이스
+    (response?.rank !== undefined && response?.userId !== undefined ? response : null)
+
+  if (!entry) return null
+  return normalizeRankingEntry(entry, 0)
+}
+
 export default {
   normalizeRankingEntry,
   normalizeRankingResponse,
+  normalizeMyRankingResponse,
 }
