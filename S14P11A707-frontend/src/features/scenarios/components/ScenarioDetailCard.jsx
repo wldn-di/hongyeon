@@ -1,7 +1,7 @@
 import React from 'react'
 // import { Link } from 'wouter'
 import { Button } from '@/components/ui/Button'
-import { Star, Clock, Users, Play, Trophy, ChevronLeft, ChevronRight, User, AlertTriangle } from 'lucide-react'
+import { Star, Clock, Users, Play, Trophy, ChevronLeft, ChevronRight, User, AlertTriangle, RotateCcw, CheckCircle, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useReviews } from '../hooks/useReviews'
 
@@ -145,7 +145,7 @@ function ReviewItem({ review }) {
   )
 }
 
-export default function ScenarioDetailCard({ scenario, onPlay }) {
+export default function ScenarioDetailCard({ scenario, onPlay, playStatus, isPlaying }) {
   const { reviews, loading: reviewsLoading, page, totalPages, hasNext, hasPrev, nextPage, prevPage } = useReviews(scenario?.id, 2)
 
   if (!scenario) return null
@@ -155,6 +155,40 @@ export default function ScenarioDetailCard({ scenario, onPlay }) {
   const avgRating = scenario.avgRating || 0
   const suspects = scenario.suspects || []
   const rankings = scenario.rankings || []
+
+  // 플레이 상태에 따른 버튼 설정
+  const getPlayButtonConfig = () => {
+    if (isPlaying) {
+      return {
+        label: '이어하기',
+        icon: <Play className="w-5 h-5 mr-2" />,
+        variant: 'neon',
+      }
+    }
+    if (playStatus === 'COMPLETED') {
+      return {
+        label: '재플레이',
+        icon: <RotateCcw className="w-5 h-5 mr-2" />,
+        variant: 'outline',
+        badge: { label: '해결', color: 'bg-green-500/20 text-green-400 border-green-500/50' },
+      }
+    }
+    if (playStatus === 'FAILED') {
+      return {
+        label: '재도전',
+        icon: <RotateCcw className="w-5 h-5 mr-2" />,
+        variant: 'outline',
+        badge: { label: '미제', color: 'bg-red-500/20 text-red-400 border-red-500/50' },
+      }
+    }
+    return {
+      label: '플레이 시작',
+      icon: <Play className="w-5 h-5 mr-2" />,
+      variant: 'neon',
+    }
+  }
+
+  const buttonConfig = getPlayButtonConfig()
 
   return (
     <div className="relative pb-24">
@@ -305,16 +339,35 @@ export default function ScenarioDetailCard({ scenario, onPlay }) {
 
       {/* 플레이 버튼 (오른쪽 하단 고정) */}
       <div className="fixed bottom-8 right-8 z-50">
+        <div className="flex flex-col items-end gap-2">
+          {/* 상태 배지 */}
+          {buttonConfig.badge && (
+            <div className={cn(
+              "px-3 py-1 rounded-full text-xs font-bold border flex items-center gap-1.5",
+              buttonConfig.badge.color
+            )}>
+              {playStatus === 'COMPLETED' ? (
+                <CheckCircle className="w-3.5 h-3.5" />
+              ) : (
+                <XCircle className="w-3.5 h-3.5" />
+              )}
+              {buttonConfig.badge.label}
+            </div>
+          )}
           <Button
-                    variant="neon"
-                    size="lg"
-                    className="shadow-lg shadow-primary/25 px-8"
-                    onClick={onPlay}
-                  >
-                    <Play className="w-5 h-5 mr-2" />
-                    플레이 시작
-                  </Button>
-                </div>
-              </div>
+            variant={buttonConfig.variant}
+            size="lg"
+            className={cn(
+              "shadow-lg px-8",
+              buttonConfig.variant === 'neon' && "shadow-primary/25"
+            )}
+            onClick={onPlay}
+          >
+            {buttonConfig.icon}
+            {buttonConfig.label}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }

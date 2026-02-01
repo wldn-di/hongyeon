@@ -3,6 +3,8 @@ import { useLocation } from "wouter";
 import { AppRoutes } from "./routes";
 import { Header } from "@/components/layout/Header";
 import { Toaster, toast } from "sonner";
+import { AlertModal } from "@/components/ui/AlertModal";
+import { LoginRequiredModal } from "@/components/ui/LoginRequiredModal";
 
 // [추가] 턴테이블 컴포넌트 import
 import { Turntable } from "@/components/ui/Turntable";
@@ -38,10 +40,9 @@ function AppShellInner() {
   return (
       <div className="dark min-h-screen relative bg-neutral-950 text-neutral-200">
           <Toaster richColors position="top-right" />
-
-
+          <AlertModal />
+          <LoginRequiredModal />
           <Atmosphere />
-
         {!hideHeader && <Header />}
 
         <AppRoutes />

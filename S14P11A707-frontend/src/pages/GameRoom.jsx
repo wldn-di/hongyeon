@@ -6,7 +6,7 @@ import { DoorOpen, Heart, Clock, Lightbulb, Send, MessageCircle, MapPin, Smartph
 import LeftEvidencePanel from "@/features/game/panels/LeftEvidencePanel"
 import RightLogSidebar from "@/features/game/panels/RightLogSidebar"
 import BottomBoardPanel from "@/features/game/panels/BottomBoardPanel"
-import { ReportModal, EvidenceDetailModal, SubmitAnswerModal, ReviewModal } from '@/features/game/modals'
+import { ReportModal, EvidenceDetailModal, SubmitAnswerModal, ReviewModal, GameEndModal } from '@/features/game/modals'
 import PhoneUI from '@/features/game/components/PhoneUI'
 import AgitRoom from '@/features/game/engine/AgitRoom'
 import TypingText from '@/features/tutorial/components/TypingText'
@@ -24,6 +24,7 @@ import { normalizeClueDetailResponse } from '@/features/session/api/sessionMappe
 import { chatWithSuspect, fetchChatHistory } from '@/features/session/api/sessionApi'
 
 import { toast } from 'sonner'
+import { alertError } from '@/components/ui/AlertModal'
 import { cn } from '@/lib/utils'
 
 const START_GAME_DEDUP_MS = 5000
@@ -336,6 +337,11 @@ export default function GameRoom() {
   const [submitAnswerOpen, setSubmitAnswerOpen] = useState(false)
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
   const [reportModalOpen, setReportModalOpen] = useState(false)
+
+  // 게임 종료 모달 상태
+  const [gameEndModalOpen, setGameEndModalOpen] = useState(false)
+  const [gameEndType, setGameEndType] = useState('fail') // 'success' | 'fail'
+  const [gameEndResult, setGameEndResult] = useState(null)
 
   // 방문한 층 (첫 방문 여부 체크용)
   const [visitedFloors, setVisitedFloors] = useState(new Set([1]))
@@ -983,6 +989,17 @@ export default function GameRoom() {
       }
     }, [sessionId])
 
+  // 메시지 읽음 처리
+  const handleMarkAsRead = useCallback((contactId) => {
+    setChatHistories(prev => ({
+      ...prev,
+      [contactId]: (prev[contactId] || []).map(msg => ({
+        ...msg,
+        read: true
+      }))
+    }))
+  }, [])
+
   const handleDragStart = (e, data, type) => {
     const payload = JSON.stringify({ data, type })
     e.dataTransfer.setData('itemData', payload)
@@ -1059,16 +1076,30 @@ export default function GameRoom() {
 
       if (result.status === 'COMPLETED') {
         setSubmitAnswerOpen(false)
-        toast.success(`사건 해결! 랭크: ${result.rankGrade}, 점수: ${result.finalScore}`)
-        setReviewModalOpen(true)
+        // 성공 - 에필로그 모달 표시
+        setGameEndResult(result)
+        setGameEndType('success')
+        setGameEndModalOpen(true)
       } else if (result.status === 'WRONG_ANSWER') {
-        toast.error(`틀렸습니다. 남은 기회: ${result.remainingAttempts}회`)
+        setRemainingAttempts(result.remainingAttempts)
+        // 남은 기회가 0이면 게임오버
+        if (result.remainingAttempts <= 0) {
+          setSubmitAnswerOpen(false)
+          setGameEndResult(result)
+          setGameEndType('fail')
+          setGameEndModalOpen(true)
+        } else {
+          alertError(`틀렸습니다. 남은 기회: ${result.remainingAttempts}회`)
+        }
       } else if (result.status === 'FAILED') {
         setSubmitAnswerOpen(false)
         setRemainingAttempts(0)
-        toast.error('게임 오버! 기회를 모두 소진했습니다.')
+        // 게임오버 모달 표시
+        setGameEndResult(result)
+        setGameEndType('fail')
+        setGameEndModalOpen(true)
       } else if (result.status === 'BOARD_INVALID') {
-        toast.error(result.errorMessage || '추리보드가 유효하지 않습니다.')
+        alertError(result.errorMessage || '추리보드가 유효하지 않습니다.')
       }
     } catch (err) {
       console.error('[Submit] 제출 실패:', err)
@@ -1098,6 +1129,17 @@ export default function GameRoom() {
       toast.error('보고서 생성에 실패했습니다.')
     }
   }
+
+  // 게임 종료 모달 핸들러
+  const handleGameEndGoHome = useCallback(() => {
+    setGameEndModalOpen(false)
+    setLocation('/')
+  }, [setLocation])
+
+  const handleGameEndProceedToReview = useCallback(() => {
+    setGameEndModalOpen(false)
+    setReviewModalOpen(true)
+  }, [])
 
   const handleAddToBoard = (item, type) => {
     if (!item) return
@@ -1342,6 +1384,7 @@ export default function GameRoom() {
         currentChat={currentChat}
         setCurrentChat={setCurrentChat}
         onContactSelect={handleContactSelect}
+        onMarkAsRead={handleMarkAsRead}
       />
 
       {/* 모달들 */}
@@ -1356,6 +1399,16 @@ export default function GameRoom() {
 	      />
       <ReviewModal isOpen={reviewModalOpen} onSubmit={handleReviewSubmit} />
       <ReportModal isOpen={reportModalOpen} onClose={() => setReportModalOpen(false)} report={report} />
+
+      {/* 게임 종료 모달 (성공/실패) */}
+      <GameEndModal
+        isOpen={gameEndModalOpen}
+        type={gameEndType}
+        scenario={scenario}
+        result={gameEndResult}
+        onGoHome={handleGameEndGoHome}
+        onProceedToReview={handleGameEndProceedToReview}
+      />
     </div>
   )
 }

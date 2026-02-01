@@ -1,4 +1,5 @@
 import axios from "axios";
+import { showLoginRequired } from "@/components/ui/LoginRequiredModal";
 
 /**
  * API 기본 URL 가져오기
@@ -51,7 +52,14 @@ apiClient.interceptors.response.use(
     return response;
   },
   (error) => {
-    // 필요한 경우 에러 처리 로직 추가
+    // 401 Unauthorized - 로그인 필요
+    if (error.response?.status === 401) {
+      // 로그인 페이지가 아닌 경우에만 모달 표시
+      const isLoginPage = window.location.pathname === '/login';
+      if (!isLoginPage) {
+        showLoginRequired();
+      }
+    }
     return Promise.reject(error);
   },
 );

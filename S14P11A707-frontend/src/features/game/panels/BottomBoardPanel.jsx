@@ -58,14 +58,14 @@ export default function BottomBoardPanel({
           {isOpen ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />}
         </button>
 
-        {/* 보드 패널 */}
+        {/* 보드 패널 - 화면 전체 높이로 */}
         <div className={cn(
           "bg-card/95 backdrop-blur border-t border-l border-r border-border rounded-t-lg transition-all duration-300",
-          isOpen ? "opacity-100" : "h-0 opacity-0 overflow-hidden"
+          isOpen ? "opacity-100 h-[calc(100vh-120px)]" : "h-0 opacity-0 overflow-hidden"
         )}>
-          <div className="p-4">
+          <div className="p-4 h-full">
             <InvestigationBoard
-              sessionId={sessionId}    // ✅ 추가
+              sessionId={sessionId}
               scenarioId={scenarioId}
               title="개인 추리보드"
               victim={victim}
@@ -74,6 +74,7 @@ export default function BottomBoardPanel({
               acceptExternalDrop={true}
               pendingAddItem={pendingAddItem}
               onConsumePendingAddItem={onConsumePendingAddItem}
+              fullHeight={true}
             />
           </div>
         </div>
