@@ -1029,6 +1029,8 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // 게임 성공 처리
         session.completeGame(finalScore, rankGrade);
+        entityManager.flush();
+        resetSession(session);
 
         // 성공 응답 반환
         return SubmitResponse.success(
