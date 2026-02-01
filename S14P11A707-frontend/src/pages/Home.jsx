@@ -11,7 +11,7 @@ import { useScenarioReviews } from '@/features/scenarios/hooks/useScenarioReview
 function SectionHeader({ title, to = '/scenarios', rightText = '전체 보기 →' }) {
   return (
     <div className="flex items-center justify-between mb-8">
-      <h2 className="text-3xl font-bold bracket-both gold-glow">{title}</h2>
+      <h2 className="text-3xl font-bold gold-glow">{title}</h2>
       <Link href={to}>
         <Button variant="ghost" className="text-primary hover:text-primary/80">
           {rightText}
@@ -78,10 +78,10 @@ export default function Home() {
           <div className="max-w-4xl mx-auto text-center space-y-8">
             <h1
               className="text-6xl md:text-8xl font-bold gold-glow glitch"
-              data-text="DETECTIVE"
+              data-text="HONG-YEON"
               style={{ color: 'var(--primary)' }}
             >
-              DETECTIVE
+              HONG-YEON
             </h1>
             <p className="text-xl md:text-2xl text-muted-foreground font-mono">[SYSTEM_DETECTED]</p>
             <p className="text-lg text-foreground/80 max-w-2xl mx-auto">
@@ -94,7 +94,7 @@ export default function Home() {
               <iframe
                 className="w-full h-full"
                 src="https://www.youtube.com/embed/5hQzvXJod8s"
-                title="DETECTIVE 소개 영상"
+                title="HONG-YEON 소개 영상"
                 frameBorder="0"
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
@@ -170,7 +170,7 @@ export default function Home() {
           <section className="pt-16 pb-16 bg-card/30">
             <div className="container">
               <div className="flex items-center justify-between mb-8">
-                <h2 className="text-3xl font-bold bracket-both gold-glow">유저들의 한 줄 평</h2>
+                <h2 className="text-3xl font-bold gold-glow">유저들의 한 줄 평</h2>
                 <Link href="/scenarios">
                   <Button variant="ghost" className="text-primary hover:text-primary/80">
                     더 보기 →

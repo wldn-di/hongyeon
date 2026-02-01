@@ -225,14 +225,26 @@ export function GameEndModal({
               />
             </div>
             {typingDone && (
-              <Button
-                variant="neon"
-                size="lg"
-                onClick={onProceedToReview}
-                className="animate-in fade-in duration-500"
-              >
-                리뷰 작성하기 <ArrowRight className="w-5 h-5 ml-2" />
-              </Button>
+              // 첫 클리어: 리뷰 작성, 재클리어: 홈으로
+              result?.hasCleared ? (
+                <Button
+                  variant="ghost"
+                  size="lg"
+                  onClick={onGoHome}
+                  className="animate-in fade-in duration-500"
+                >
+                  <Home className="w-5 h-5 mr-2" /> 홈으로 돌아가기
+                </Button>
+              ) : (
+                <Button
+                  variant="neon"
+                  size="lg"
+                  onClick={onProceedToReview}
+                  className="animate-in fade-in duration-500"
+                >
+                  리뷰 작성하기 <ArrowRight className="w-5 h-5 ml-2" />
+                </Button>
+              )
             )}
           </div>
         )}

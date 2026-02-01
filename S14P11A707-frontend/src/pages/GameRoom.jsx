@@ -1,4 +1,4 @@
-﻿import React, { useCallback, useEffect, useLayoutEffect, useState, useMemo, useRef } from 'react'
+﻿import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react'
 import { useLocation, useRoute } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { Card } from '@/components/ui/Card'
@@ -10,6 +10,7 @@ import { ReportModal, EvidenceDetailModal, SubmitAnswerModal, ReviewModal, GameE
 import PhoneUI from '@/features/game/components/PhoneUI'
 import AgitRoom from '@/features/game/engine/AgitRoom'
 import TypingText from '@/features/tutorial/components/TypingText'
+import WatsonDialog from '@/features/tutorial/components/WatsonDialog'
 import { useGameSession } from '@/features/game/session'
 import { useScenarioById } from '@/features/scenarios/hooks/useScenarioById'
 import { useGameRooms } from '@/features/game/hooks/useGameRooms'
@@ -59,10 +60,13 @@ const startGameDedup = async (scenarioId) => {
 // ========================================
 // 오프닝 페이즈 (시나리오 도입 나레이션)
 // ========================================
-function OpeningPhase({ scenario, onComplete, onSkip }) {
+function OpeningPhase({ scenario, openingNarration, onComplete, onSkip }) {
   const [stage, setStage] = useState('title')
 
   if (!scenario) return null
+
+  // 오프닝 텍스트: GameStartResponse의 opening 우선, 없으면 시나리오 fallback
+  const openingText = openingNarration || scenario.synopsisDetail || scenario.synopsis || '사건이 발생했습니다. 진실을 밝혀주세요.'
 
   return (
     <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
@@ -88,7 +92,7 @@ function OpeningPhase({ scenario, onComplete, onSkip }) {
             <h1 className="text-3xl font-bold gold-glow mb-6">{scenario.title}</h1>
             <p className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line">
               <TypingText
-                text={scenario.synopsisDetail || scenario.synopsis || '사건이 발생했습니다. 진실을 밝혀주세요.'}
+                text={openingText}
                 speed={30}
                 onComplete={() => setTimeout(() => setStage('ready'), 500)}
               />
@@ -101,7 +105,7 @@ function OpeningPhase({ scenario, onComplete, onSkip }) {
             <p className="text-sm text-primary tracking-widest mb-4">CASE FILE</p>
             <h1 className="text-3xl font-bold gold-glow mb-6">{scenario.title}</h1>
             <p className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line mb-8">
-              {scenario.synopsisDetail || scenario.synopsis}
+              {openingText}
             </p>
             <Button variant="neon" size="lg" onClick={onComplete}>
               수사 시작하기 <ArrowRight className="w-5 h-5 ml-2" />
@@ -346,7 +350,30 @@ export default function GameRoom() {
   // 방문한 층 (첫 방문 여부 체크용)
   const [visitedFloors, setVisitedFloors] = useState(new Set([1]))
 
+  // 조수 다이얼로그 상태 (Watson 스타일)
+  const [assistantDialog, setAssistantDialog] = useState(null)
+  // 대기 중인 조수 코멘트 (게임 팝업 닫힌 후 표시)
+  const [pendingAssistantComment, setPendingAssistantComment] = useState(null)
+
+  // 오프닝 나레이션 (GameStartResponse에서 받음)
+  const [openingNarration, setOpeningNarration] = useState(null)
+
   const SIDE_PANEL_WIDTH_PX = 288
+
+  // 보드 로컬스토리지 초기화 함수
+  const clearBoardLocalStorage = useCallback((scenarioId, sessId) => {
+    // InvestigationBoard에서 사용하는 키 형식에 맞춰서 삭제
+    // 시나리오 기반 키 (sessionId 없을 때 사용)
+    if (scenarioId) {
+      localStorage.removeItem(`board-scenario-${scenarioId}-items`)
+      localStorage.removeItem(`board-scenario-${scenarioId}-connections`)
+    }
+    // 세션 기반 키 (sessionId 있을 때 사용)
+    if (sessId) {
+      localStorage.removeItem(`board-${sessId}-items`)
+      localStorage.removeItem(`board-${sessId}-connections`)
+    }
+  }, [])
 
   // 용의자 데이터 (시나리오에서 가져옴)
   const suspects = scenario?.suspects || []
@@ -386,6 +413,21 @@ export default function GameRoom() {
       console.error('Failed to fetch clues:', err)
       return null
     }
+  }, [])
+
+  // 조수 다이얼로그 표시 헬퍼
+  const showAssistantDialog = useCallback((comment) => {
+    if (!comment) return
+    setAssistantDialog({
+      speaker: "조수 왓슨",
+      avatar: "🔍",
+      messages: [comment]
+    })
+  }, [])
+
+  // 조수 다이얼로그 닫기
+  const handleAssistantDialogComplete = useCallback(() => {
+    setAssistantDialog(null)
   }, [])
 
   // 단서 데이터 (Phaser용) - API에서 가져온 데이터 사용
@@ -464,6 +506,9 @@ export default function GameRoom() {
     isInitializedRef.current = true
     console.log('[GameRoom] initializeNewGame 시작:', activeScenarioId)
 
+    // ✅ 새 게임 시작 전 시나리오 기반 보드 로컬스토리지 초기화 (이전 데이터 방지)
+    clearBoardLocalStorage(activeScenarioId, null)
+
     try {
       setGameInitializing(true)
       setGameInitError(null)
@@ -484,6 +529,14 @@ export default function GameRoom() {
 
       if (!normalized.sessionId) {
         throw new Error('세션 ID를 받지 못했습니다.')
+      }
+
+      // ✅ 새 게임 시작 시 이전 보드 로컬스토리지 초기화
+      clearBoardLocalStorage(activeScenarioId, normalized.sessionId)
+
+      // 오프닝 나레이션 저장 (GameStartResponse에서)
+      if (normalized.scenario?.opening) {
+        setOpeningNarration(normalized.scenario.opening)
       }
 
       setSessionId(normalized.sessionId)
@@ -514,7 +567,7 @@ export default function GameRoom() {
       gameInitInFlightRef.current = false
       setGameInitializing(false)
     }
-  }, [activeScenarioId, addLog, getRoomIndexFromFloor, loadCluesForSession, setLocation])
+  }, [activeScenarioId, addLog, clearBoardLocalStorage, getRoomIndexFromFloor, loadCluesForSession, setLocation])
 
   const resumeGame = useCallback(async (resumeId) => {
     if (!resumeId) return
@@ -534,6 +587,9 @@ export default function GameRoom() {
     // 초기화 시작 표시
     isInitializedRef.current = true
 
+    // ✅ 이어하기 전 이전 보드 로컬스토리지 초기화 (깨진 데이터 방지)
+    clearBoardLocalStorage(activeScenarioId, resumeId)
+
     try {
       setGameInitializing(true)
       setGameInitError(null)
@@ -545,6 +601,9 @@ export default function GameRoom() {
       if (!normalized.sessionId) {
         throw new Error('세션 ID를 받지 못했습니다.')
       }
+
+      // ✅ 세션 ID로도 보드 로컬스토리지 초기화
+      clearBoardLocalStorage(null, normalized.sessionId)
 
       setSessionId(normalized.sessionId)
       setApiClues([])
@@ -633,7 +692,7 @@ export default function GameRoom() {
       gameInitInFlightRef.current = false
       setGameInitializing(false)
     }
-  }, [addLog, collectEvidence, getRoomIndexFromFloor, loadCluesForSession, scenario?.suspects])
+  }, [activeScenarioId, addLog, clearBoardLocalStorage, collectEvidence, getRoomIndexFromFloor, loadCluesForSession, scenario?.suspects])
 
   // 함수 ref 업데이트 (useEffect에서 최신 함수 사용)
   resumeGameRef.current = resumeGame
@@ -655,13 +714,6 @@ export default function GameRoom() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError])
-
-  useLayoutEffect(() => {
-    if (activeScenarioId) {
-      localStorage.removeItem(`board-items-${activeScenarioId}`)
-      localStorage.removeItem(`board-connections-${activeScenarioId}`)
-    }
-  }, [activeScenarioId])
 
   // 시나리오 시작/변경 시 세션 초기화 (로그 추가는 initializeNewGame/resumeGame에서만)
   useEffect(() => {
@@ -703,6 +755,24 @@ export default function GameRoom() {
 
     return () => clearInterval(timer)
   }, [sessionId])
+
+  // 대기 중인 조수 코멘트 표시 (게임 팝업 닫힌 후 Space/ESC 감지)
+  useEffect(() => {
+    if (!pendingAssistantComment) return
+
+    const handleKeyDown = (e) => {
+      if (e.code === 'Space' || e.code === 'Escape') {
+        // 약간의 딜레이 후 Watson 다이얼로그 표시 (게임 팝업이 완전히 닫힌 후)
+        setTimeout(() => {
+          showAssistantDialog(pendingAssistantComment)
+          setPendingAssistantComment(null)
+        }, 100)
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [pendingAssistantComment, showAssistantDialog])
 
     //처음ㅁ&이어하기
     const handleEvidenceClick = useCallback(async (item) => {
@@ -754,6 +824,11 @@ export default function GameRoom() {
 
       // 로그 추가
       addLog('evidence', `${evidence.name} 단서를 발견했습니다.`)
+
+      // 조수 코멘트가 있으면 대기 상태로 저장 (게임 팝업 닫힌 후 표시)
+      if (clueData.assistantComment) {
+        setPendingAssistantComment(clueData.assistantComment)
+      }
 
       // 로컬 상태에서 즉시 discovered 처리 (재요청 레이스로 인한 "잠깐 다시 보임" 방지)
       setApiClues((prev) => {
@@ -818,9 +893,13 @@ export default function GameRoom() {
         // 로그 추가
         addLog('system', `${room.name}에 도착했습니다.`)
 
+        // 조수 코멘트가 있으면 Watson 다이얼로그 표시 (첫 방문 시에만)
+        if (room.assistantComment) {
+          showAssistantDialog(room.assistantComment)
+        }
       }
     }
-  }, [rooms, visitedFloors, addLog, sessionId, refetchLogs])
+  }, [rooms, visitedFloors, addLog, sessionId, refetchLogs, showAssistantDialog])
 
     const handleSendMessage = async (contactId, text) => {
       const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
@@ -962,6 +1041,11 @@ export default function GameRoom() {
 
       const suspectId = contact.id
 
+      // 이미 채팅 기록이 있으면 다시 조회하지 않음 (중복 호출 방지)
+      if (chatHistories[suspectId] && chatHistories[suspectId].length > 0) {
+        return
+      }
+
       try {
         const response = await fetchChatHistory(sessionId, suspectId)
 
@@ -987,7 +1071,7 @@ export default function GameRoom() {
         console.error('심문 기록 조회 실패:', err)
         // 실패해도 빈 히스토리로 시작 가능
       }
-    }, [sessionId])
+    }, [sessionId, chatHistories])
 
   // 메시지 읽음 처리
   const handleMarkAsRead = useCallback((contactId) => {
@@ -1190,6 +1274,7 @@ export default function GameRoom() {
     return (
       <OpeningPhase
         scenario={scenario}
+        openingNarration={openingNarration}
         onComplete={handleOpeningComplete}
         onSkip={handleOpeningSkip}
       />
@@ -1345,7 +1430,7 @@ export default function GameRoom() {
 	      />
 
       {/* 오른쪽 하단: 방 이동 + 휴대폰 */}
-      <div className="fixed right-6 bottom-6 z-40 flex items-center gap-3">
+      <div className="fixed right-28 bottom-6 z-40 flex items-center gap-3">
         {/* 휴대폰 아이콘 */}
         <div className="relative">
           <button
@@ -1409,6 +1494,14 @@ export default function GameRoom() {
         onGoHome={handleGameEndGoHome}
         onProceedToReview={handleGameEndProceedToReview}
       />
+
+      {/* 조수 왓슨 다이얼로그 (단서 발견, 층 첫 방문 시) */}
+      {assistantDialog && (
+        <WatsonDialog
+          dialog={assistantDialog}
+          onComplete={handleAssistantDialogComplete}
+        />
+      )}
     </div>
   )
 }

@@ -1,51 +1,33 @@
 import React, { useState, useEffect } from 'react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Trophy, Medal, Award, Search, User, Clock, CheckCircle } from 'lucide-react'
+import { Trophy, Medal, Award, Search, User, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
-import { useRanking } from '@/features/ranking/hooks/useRanking'
+import { useRanking, RANKING_TYPES } from '@/features/ranking/hooks/useRanking'
 
 export default function Ranking() {
-  // ========================================
-  // AuthContext 연동
-  // ========================================
   const { state } = useAuth()
   const currentUser = state.user
-
-  // 사용자 정보 추출
   const currentUserId = currentUser?.userId ?? currentUser?.user_id ?? null
-
-  const currentUserIdNumber =
-    currentUserId === null || currentUserId === undefined
-    ? null
-    : Number.isFinite(Number(currentUserId))
-      ? Number(currentUserId)
-      : null
-
+  const currentUserIdNumber = currentUserId ? Number(currentUserId) : null
   const currentUsername = currentUser?.nickname || currentUser?.email || null
 
-  // ========================================
-  // 랭킹 데이터 훅
-  // ========================================
-  const { rankingData, myRanking, isLoading, error, refetch } = useRanking()
+  const {
+    rankingType,
+    rankingData,
+    myRanking,
+    isLoading,
+    error,
+    refetch,
+    changeRankingType
+  } = useRanking()
 
-  // ========================================
-  // 검색 상태 관리
-  // ========================================
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResult, setSearchResult] = useState(null)
 
-  // ========================================
-  // 이벤트 핸들러
-  // ========================================
-
-  /**
-   * 사용자 이름으로 검색
-   */
   const handleSearch = (e) => {
     e.preventDefault()
-
     const trimmedQuery = searchQuery.trim()
 
     if (!trimmedQuery) {
@@ -54,10 +36,7 @@ export default function Ranking() {
     }
 
     if (trimmedQuery.length < 2) {
-      setSearchResult({
-        success: false,
-        message: "검색어는 최소 2자 이상 입력해주세요."
-      })
+      setSearchResult({ success: false, message: '검색어는 최소 2자 이상 입력해주세요.' })
       return
     }
 
@@ -71,15 +50,9 @@ export default function Ranking() {
     )
 
     if (found) {
-      setSearchResult({
-        success: true,
-        data: found
-      })
+      setSearchResult({ success: true, data: found })
     } else {
-      setSearchResult({
-        success: false,
-        message: "해당 사용자를 찾을 수 없습니다."
-      })
+      setSearchResult({ success: false, message: '해당 사용자를 찾을 수 없습니다.' })
     }
   }
 
@@ -88,13 +61,6 @@ export default function Ranking() {
     setSearchResult(null)
   }
 
-  const handleRefresh = () => {
-    refetch()
-  }
-
-  // ========================================
-  // 로그인/로그아웃 전환 처리
-  // ========================================
   useEffect(() => {
     if (!currentUserId) {
       setSearchResult(null)
@@ -102,10 +68,6 @@ export default function Ranking() {
       refetch()
     }
   }, [currentUserId])
-
-  // ========================================
-  // UI 헬퍼 함수
-  // ========================================
 
   const getRankIcon = (index) => {
     if (index === 0) return <Trophy className="w-5 h-5 text-yellow-500" />
@@ -118,9 +80,9 @@ export default function Ranking() {
     return index < 3 ? 'font-bold text-primary' : ''
   }
 
-  // ========================================
-  // 렌더링
-  // ========================================
+  const getValueLabel = () => {
+    return RANKING_TYPES[rankingType]?.label || '점수'
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -131,33 +93,45 @@ export default function Ranking() {
             <h1 className="text-4xl font-bold gold-glow mb-2">명탐정 랭킹</h1>
             <p className="text-muted-foreground">최고의 탐정들을 확인하세요</p>
 
-            {/* 로그인 상태 표시 */}
             {currentUser && (
               <div className="mt-2 inline-flex items-center gap-2 bg-primary/10 border border-primary/30 rounded-full px-4 py-1">
-                <span className="text-xs text-primary">
-                  {currentUsername}
-                </span>
+                <span className="text-xs text-primary">{currentUsername}</span>
               </div>
             )}
+          </div>
+
+          {/* 랭킹 타입 필터 탭 */}
+          <div className="flex items-center justify-center gap-2 mb-6">
+            {Object.values(RANKING_TYPES).map((type) => (
+              <button
+                key={type.value}
+                onClick={() => changeRankingType(type.value)}
+                className={cn(
+                  "px-6 py-2.5 text-sm font-medium transition-all duration-200",
+                  "border-b-2",
+                  rankingType === type.value
+                    ? "text-primary border-primary"
+                    : "text-muted-foreground border-transparent hover:text-foreground hover:bg-muted/30"
+                )}
+              >
+                {type.label}
+              </button>
+            ))}
           </div>
 
           {/* 에러 메시지 */}
           {error && (
             <Card className="bg-red-500/10 border-red-500/30 p-4 mb-6">
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-red-400 text-lg">⚠️</span>
-                  <p className="text-red-400 text-sm">{error}</p>
-                </div>
-                <Button variant="outline" size="sm" onClick={handleRefresh}>
-                  <span className="mr-2">🔄</span>
+                <p className="text-red-400 text-sm">{error}</p>
+                <Button variant="outline" size="sm" onClick={refetch}>
                   다시 시도
                 </Button>
               </div>
             </Card>
           )}
 
-          {/* 검색 기능 */}
+          {/* 검색 */}
           <Card className="bg-card/50 border-border p-4 mb-6">
             <form onSubmit={handleSearch} className="flex gap-3">
               <div className="flex-1 relative">
@@ -166,69 +140,36 @@ export default function Ranking() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="사용자 이름으로 검색 (최소 2자)..."
-                  className="w-full bg-muted border border-border rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  placeholder="사용자 이름으로 검색..."
+                  className="w-full bg-muted border border-border rounded-lg pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                   disabled={isLoading}
-                  maxLength={50}
                 />
               </div>
-              <Button
-                type="submit"
-                variant="neon"
-                disabled={isLoading || !searchQuery.trim() || searchQuery.trim().length < 2}
-              >
-                {isLoading ? '검색 중...' : '검색'}
+              <Button type="submit" variant="neon" disabled={isLoading || !searchQuery.trim()}>
+                검색
               </Button>
               {searchQuery && (
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleClearSearch}
-                  disabled={isLoading}
-                >
+                <Button type="button" variant="outline" onClick={handleClearSearch}>
                   초기화
                 </Button>
               )}
             </form>
 
-            {/* 검색 결과 */}
             {searchResult && (
               <div className="mt-4 pt-4 border-t border-border">
                 {searchResult.success ? (
                   <div className="bg-primary/10 border border-primary/30 rounded-lg p-4">
-                    <div className="flex items-center gap-3 mb-3">
-                      <User className="w-5 h-5 text-primary" />
-                      <h3 className="font-bold text-lg">{searchResult.data.username}</h3>
-                      {searchResult.data.rank && (
-                        <span className="text-sm bg-primary/20 text-primary px-2 py-1 rounded-full">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <User className="w-5 h-5 text-primary" />
+                        <span className="font-bold">{searchResult.data.username}</span>
+                        <span className="text-sm bg-primary/20 text-primary px-2 py-0.5 rounded-full">
                           {searchResult.data.rank}위
                         </span>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-3 gap-4 text-sm">
-                      <div className="flex items-center gap-2">
-                        <Trophy className="w-4 h-4 text-yellow-500" />
-                        <div>
-                          <p className="text-muted-foreground text-xs">총점</p>
-                          <p className="font-bold text-primary">
-                            {searchResult.data.totalScore.toLocaleString()}
-                          </p>
-                        </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <CheckCircle className="w-4 h-4 text-green-500" />
-                        <div>
-                          <p className="text-muted-foreground text-xs">해결</p>
-                          <p className="font-bold">{searchResult.data.solvedCases}건</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-4 h-4 text-blue-500" />
-                        <div>
-                          <p className="text-muted-foreground text-xs">평균 시간</p>
-                          <p className="font-bold">{searchResult.data.avgClearTime}</p>
-                        </div>
-                      </div>
+                      <span className="font-mono text-primary font-bold">
+                        {searchResult.data.formattedValue}
+                      </span>
                     </div>
                   </div>
                 ) : (
@@ -242,7 +183,7 @@ export default function Ranking() {
 
           {/* Top 10 랭킹 테이블 */}
           <Card className="bg-card/50 border-border overflow-hidden mb-6">
-            <div className="p-4 bg-muted/50 border-b border-border flex items-center justify-between">
+            <div className="p-4 bg-muted/30 border-b border-border flex items-center justify-between">
               <h2 className="font-bold flex items-center gap-2">
                 <Trophy className="w-5 h-5 text-primary" />
                 Top 10 랭킹
@@ -250,31 +191,26 @@ export default function Ranking() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={handleRefresh}
+                onClick={refetch}
                 disabled={isLoading}
-                className={cn(isLoading && "opacity-50")}
               >
-                <span className={cn("text-lg", isLoading && "animate-spin inline-block")}>
-                  🔄
-                </span>
+                <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
               </Button>
             </div>
 
             <div className="overflow-x-auto">
               <table className="w-full">
-                <thead className="bg-muted/50">
+                <thead className="bg-muted/30">
                   <tr>
-                    <th className="text-left p-4 font-semibold">순위</th>
-                    <th className="text-left p-4 font-semibold">이름</th>
-                    <th className="text-right p-4 font-semibold">점수</th>
-                    <th className="text-right p-4 font-semibold">해결</th>
-                    <th className="text-right p-4 font-semibold">평균 시간</th>
+                    <th className="text-left p-4 font-semibold text-sm">순위</th>
+                    <th className="text-left p-4 font-semibold text-sm">이름</th>
+                    <th className="text-right p-4 font-semibold text-sm">{getValueLabel()}</th>
                   </tr>
                 </thead>
                 <tbody>
                   {isLoading ? (
                     <tr>
-                      <td colSpan="5" className="p-8 text-center text-muted-foreground">
+                      <td colSpan="3" className="p-8 text-center text-muted-foreground">
                         <div className="flex items-center justify-center gap-2">
                           <div className="w-5 h-5 border-2 border-primary border-t-transparent rounded-full animate-spin" />
                           <span>로딩 중...</span>
@@ -283,34 +219,29 @@ export default function Ranking() {
                     </tr>
                   ) : rankingData.length === 0 ? (
                     <tr>
-                      <td colSpan="5" className="p-8 text-center text-muted-foreground">
+                      <td colSpan="3" className="p-8 text-center text-muted-foreground">
                         랭킹 데이터가 없습니다.
                       </td>
                     </tr>
                   ) : (
-                    rankingData.slice(0, 10).map((user, index) => (
+                    rankingData.map((user, index) => (
                       <tr
                         key={user.userId}
                         className={cn(
-                          "border-t border-border hover:bg-muted/30 transition-colors",
-                          currentUserIdNumber !== null &&
-                            user.userId === currentUserIdNumber &&
-                            "bg-primary/10"
+                          "border-t border-border hover:bg-muted/20 transition-colors",
+                          currentUserIdNumber && user.userId === currentUserIdNumber && "bg-primary/10"
                         )}
                       >
                         <td className="p-4">
                           <div className="flex items-center gap-2">
                             {getRankIcon(index)}
-                            <span className={getRankStyle(index)}>
-                              {user.rank}
-                            </span>
+                            <span className={getRankStyle(index)}>{user.rank}</span>
                           </div>
                         </td>
                         <td className="p-4">
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{user.username}</span>
-                            {currentUserIdNumber !== null &&
-                              user.userId === currentUserIdNumber && (
+                            {currentUserIdNumber && user.userId === currentUserIdNumber && (
                               <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
                                 나
                               </span>
@@ -318,11 +249,7 @@ export default function Ranking() {
                           </div>
                         </td>
                         <td className="p-4 text-right font-mono text-primary">
-                          {user.totalScore.toLocaleString()}
-                        </td>
-                        <td className="p-4 text-right">{user.solvedCases}건</td>
-                        <td className="p-4 text-right text-muted-foreground">
-                          {user.avgClearTime}
+                          {user.formattedValue}
                         </td>
                       </tr>
                     ))
@@ -332,76 +259,35 @@ export default function Ranking() {
             </div>
           </Card>
 
-          {/* 내 랭킹 (10위 밖일 때만 표시) */}
-          {myRanking && myRanking.rank && myRanking.rank > 10 && (
+          {/* 내 랭킹 (10위 밖일 때만) */}
+          {myRanking && myRanking.rank > 10 && (
             <Card className="bg-card/50 border-border overflow-hidden">
-              <div className="p-4 bg-muted/50 border-b border-border">
+              <div className="p-4 bg-muted/30 border-b border-border">
                 <h2 className="font-bold flex items-center gap-2">
                   <User className="w-5 h-5 text-primary" />
                   내 랭킹
                 </h2>
               </div>
 
-              {/* ... (생략 표시) */}
               <div className="p-4 text-center border-b border-border">
                 <div className="flex items-center justify-center gap-2 text-muted-foreground">
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full" />
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full" />
-                  <div className="w-2 h-2 bg-muted-foreground rounded-full" />
+                  <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full" />
+                  <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full" />
+                  <div className="w-1.5 h-1.5 bg-muted-foreground rounded-full" />
                 </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  {myRanking.rank - 10}개 순위 생략
-                </p>
+                <p className="text-xs text-muted-foreground mt-2">{myRanking.rank - 10}개 순위 생략</p>
               </div>
 
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <tbody>
-                    <tr className="border-t border-primary/50 bg-primary/10">
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <User className="w-5 h-5 text-primary" />
-                          <span className="font-bold text-primary">
-                            {myRanking.rank}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-4">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold">{myRanking.username}</span>
-                          <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">
-                            나
-                          </span>
-                        </div>
-                      </td>
-                      <td className="p-4 text-right font-mono text-primary font-bold">
-                        {myRanking.totalScore.toLocaleString()}
-                      </td>
-                      <td className="p-4 text-right font-bold">
-                        {myRanking.solvedCases}건
-                      </td>
-                      <td className="p-4 text-right text-muted-foreground">
-                        {myRanking.avgClearTime}
-                      </td>
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-
-              {/* 상세 통계 */}
-              {myRanking.perfectClears > 0 && (
-                <div className="p-4 border-t border-border bg-muted/20">
-                  <div className="flex items-center gap-4 text-sm">
-                    <div className="flex items-center gap-2">
-                      <Trophy className="w-4 h-4 text-yellow-500" />
-                      <span className="text-muted-foreground">완벽한 클리어:</span>
-                      <span className="font-bold text-yellow-500">
-                        {myRanking.perfectClears}회
-                      </span>
-                    </div>
+              <div className="p-4 bg-primary/10">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-primary text-lg">{myRanking.rank}위</span>
+                    <span className="font-bold">{myRanking.username}</span>
+                    <span className="text-xs bg-primary/20 text-primary px-2 py-0.5 rounded-full">나</span>
                   </div>
+                  <span className="font-mono text-primary font-bold">{myRanking.formattedValue}</span>
                 </div>
-              )}
+              </div>
             </Card>
           )}
 
@@ -409,7 +295,7 @@ export default function Ranking() {
           {!currentUserId && (
             <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg text-center">
               <p className="text-sm text-blue-400">
-                💡 Google 로그인하고 사건을 해결하여 랭킹에 도전하세요!
+                로그인하고 사건을 해결하여 랭킹에 도전하세요!
               </p>
             </div>
           )}
@@ -417,7 +303,7 @@ export default function Ranking() {
           {currentUserId && !myRanking && (
             <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg text-center">
               <p className="text-sm text-blue-400">
-                💡 사건을 해결하고 랭킹에 도전하세요!
+                사건을 해결하고 랭킹에 도전하세요!
               </p>
             </div>
           )}
@@ -427,7 +313,7 @@ export default function Ranking() {
       <footer className="border-t border-border py-8 bg-card/30">
         <div className="container text-center">
           <p className="error-code">
-            [SYSTEM_STATUS: OPERATIONAL] | DETECTIVE v2.0 | [COPYRIGHT_2024]
+            [SYSTEM_STATUS: OPERATIONAL] | HONG-YEON v2.0 | [COPYRIGHT_2024]
           </p>
         </div>
       </footer>

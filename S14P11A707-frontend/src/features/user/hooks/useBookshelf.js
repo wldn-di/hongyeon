@@ -3,7 +3,6 @@ import { fetchBookshelfSessions, fetchBookshelfStats } from "../api/userApi";
 import {
   mapBookshelfSessionResponse,
   mapBookshelfStatsResponse,
-  mapBookshelfItem,
 } from "@/features/session/api/sessionMappers";
 import { toast } from "sonner";
 
@@ -39,8 +38,9 @@ export function useBookshelf() {
       ]);
 
       // 세션 데이터 매핑 및 상태별 분류
+      // mapBookshelfSessionResponse 내부에서 이미 mapBookshelfItem을 호출하므로 중복 호출 제거
       const mappedSessions = mapBookshelfSessionResponse(sessionsResponse);
-      const items = mappedSessions.content.map(mapBookshelfItem);
+      const items = mappedSessions.content;
 
       const completed = items.filter((item) => item.status === "COMPLETED");
       const playing = items.filter((item) => item.status === "PLAYING");

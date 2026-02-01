@@ -48,7 +48,7 @@ export function useGameRooms(scenarioId) {
           roomType: room.roomType || 'default',
           name: room.roomName || room.name || `${idx + 1}층`,
           description: room.description || '',
-          assistantComment: room.assistantComment || '',
+          assistantComment: room.assistantComment || room.assistant_comment || '',
           objects: room.objects || null,
           unlocked: true,
           image: `/images/rooms/room-${room.roomId || idx}.png`,

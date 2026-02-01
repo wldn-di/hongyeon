@@ -1,6 +1,19 @@
 import React from "react"
-import { FileText } from "lucide-react"
+import { FileText, Search, MessageCircle, MapPin, Save, AlertCircle, Pin } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+// 로그 타입별 설정
+const logTypeConfig = {
+  evidence: { label: '증거', color: 'bg-blue-500/20 text-blue-400', icon: Search },
+  clue: { label: '단서', color: 'bg-blue-500/20 text-blue-400', icon: Search },
+  memo: { label: '메모', color: 'bg-yellow-500/20 text-yellow-400', icon: Pin },
+  interrogation: { label: '심문', color: 'bg-purple-500/20 text-purple-400', icon: MessageCircle },
+  chat: { label: '대화', color: 'bg-purple-500/20 text-purple-400', icon: MessageCircle },
+  system: { label: '시스템', color: 'bg-gray-500/20 text-gray-400', icon: AlertCircle },
+  save: { label: '저장', color: 'bg-green-500/20 text-green-400', icon: Save },
+  move: { label: '이동', color: 'bg-cyan-500/20 text-cyan-400', icon: MapPin },
+  board: { label: '보드', color: 'bg-amber-500/20 text-amber-400', icon: Pin },
+}
 
 // 오른쪽 수사 로그 사이드바
 export default function RightLogSidebar({ isOpen, onToggle, logs = [] }) {
@@ -17,36 +30,48 @@ export default function RightLogSidebar({ isOpen, onToggle, logs = [] }) {
         <FileText className="w-5 h-5" />
       </button>
 
-      <div className="p-4 border-b border-border">
+      <div className="p-4 border-b border-border bg-muted/20">
         <h3 className="font-bold flex items-center gap-2">
           <FileText className="w-5 h-5 text-primary" />
           수사 로그
+          <span className="text-xs text-muted-foreground ml-auto">({logs.length})</span>
         </h3>
+        <p className="text-xs text-muted-foreground mt-1">수사 진행 상황이 기록됩니다</p>
       </div>
 
-      <div className="flex-1 p-3 overflow-y-auto">
-        <div className="space-y-2">
-          {logs.map(log => (
-            <div key={log.id} className="flex items-start gap-2 py-2 border-b border-border/30 last:border-0">
-              <span className="text-xs font-mono text-muted-foreground whitespace-nowrap">{log.time}</span>
-              <span className={cn(
-                "text-xs px-1.5 py-0.5 rounded whitespace-nowrap",
-                log.type === 'evidence' && "bg-primary/20 text-primary",
-                log.type === 'memo' && "bg-yellow-500/20 text-yellow-400",
-                log.type === 'interrogation' && "bg-purple-500/20 text-purple-400",
-                log.type === 'system' && "bg-muted/50 text-muted-foreground",
-                log.type === 'save' && "bg-green-500/20 text-green-400"
-              )}>
-                {log.type === 'evidence' && '증거'}
-                {log.type === 'memo' && '메모'}
-                {log.type === 'interrogation' && '심문'}
-                {log.type === 'system' && '시스템'}
-                {log.type === 'save' && '저장'}
-              </span>
-              <span className="text-xs flex-1">{log.message}</span>
-            </div>
-          ))}
-        </div>
+      <div className="flex-1 p-3 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'thin' }}>
+        {logs.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-8">
+            아직 수사 기록이 없습니다.<br />
+            현장을 탐색해보세요!
+          </p>
+        ) : (
+          <div className="space-y-2">
+            {logs.map(log => {
+              const config = logTypeConfig[log.type] || logTypeConfig.system
+              const IconComponent = config.icon
+
+              return (
+                <div
+                  key={log.id}
+                  className="flex items-start gap-2 py-2.5 px-2 rounded-lg bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors"
+                >
+                  <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">
+                    {log.time}
+                  </span>
+                  <span className={cn(
+                    "text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap flex items-center gap-1",
+                    config.color
+                  )}>
+                    <IconComponent className="w-3 h-3" />
+                    {config.label}
+                  </span>
+                  <span className="text-xs flex-1 text-gray-300 leading-relaxed">{log.message}</span>
+                </div>
+              )
+            })}
+          </div>
+        )}
       </div>
     </div>
   )

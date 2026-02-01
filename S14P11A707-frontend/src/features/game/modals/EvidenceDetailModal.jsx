@@ -1,9 +1,8 @@
 import React from "react"
 import { Search, X } from "lucide-react"
 import { Button } from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
 
-// 증거 상세 보기 팝업(발견 장소, 설명)
+// 증거 상세 보기 팝업 (튜토리얼 스타일)
 export default function EvidenceDetailModal({ evidence, onClose }) {
   if (!evidence) return null
 
@@ -18,36 +17,35 @@ export default function EvidenceDetailModal({ evidence, onClose }) {
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
-      <div className="relative z-10 w-full max-w-md bg-card border border-border rounded-xl overflow-hidden">
-        <div className="p-4 border-b border-border flex items-center justify-between">
-          <h3 className="font-bold flex items-center gap-2">
-            <Search className="w-5 h-5 text-primary" />
-            증거 상세
-          </h3>
-          <button onClick={onClose} className="p-1 hover:bg-muted rounded">
+      <div className="relative z-10 w-full max-w-md bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
+        {/* 헤더 */}
+        <div className="p-4 border-b border-gray-700 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 text-xs font-bold text-white bg-blue-500 rounded">
+              증거
+            </span>
+            <h3 className="font-bold text-white">{evidence.name}</h3>
+          </div>
+          <button onClick={onClose} className="p-1 hover:bg-gray-800 rounded">
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        <div className="p-6">
-          <div className="w-full h-36 bg-muted rounded-xl mb-4 flex items-center justify-center overflow-hidden">
+        <div className="p-4">
+          {/* 이미지 */}
+          <div className="w-full h-36 bg-gray-800 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
             {imageUrl ? (
               <img src={imageUrl} alt={evidence.name} className="w-full h-full object-cover" />
             ) : (
-              <Search className="w-12 h-12 text-muted-foreground" />
+              <Search className="w-12 h-12 text-gray-600" />
             )}
           </div>
 
-          {/* 제목 - importance 배지 제거 */}
-          <div className="flex items-center gap-2 mb-2">
-            <h4 className="text-xl font-bold">{evidence.name}</h4>
+          {/* 정보 */}
+          <div className="text-sm space-y-2 text-gray-300">
+            <p>📍 발견장소: {locationText}</p>
+            <p className="whitespace-pre-line">{evidence.description || '설명이 없습니다.'}</p>
           </div>
-
-          <p className="text-sm text-primary mb-4">📍 {locationText}</p>
-
-          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">
-            {evidence.description || '설명이 없습니다.'}
-          </p>
 
           {/* 조수 코멘트 */}
           {(evidence.assistantComment || evidence.storyHint) && (
@@ -59,8 +57,8 @@ export default function EvidenceDetailModal({ evidence, onClose }) {
           )}
         </div>
 
-        <div className="p-4 border-t border-border flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onClose}>
+        <div className="p-4 border-t border-gray-700">
+          <Button variant="outline" className="w-full" onClick={onClose}>
             닫기
           </Button>
         </div>

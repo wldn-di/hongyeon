@@ -61,22 +61,34 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
       {selectedContact ? (
         // 채팅 화면
         <>
-          <div className="bg-gray-800 p-3 flex items-center gap-3">
-            <button onClick={() => setSelectedContact(null)} className="p-1 hover:bg-gray-700 rounded">
+          <div className="bg-gray-800 p-3 flex items-center gap-3 border-b border-gray-700">
+            <button onClick={() => setSelectedContact(null)} className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors">
               <ArrowLeft className="w-5 h-5" />
             </button>
-            <div className="w-10 h-10 rounded-full bg-muted overflow-hidden">
+            <div className="w-10 h-10 rounded-full bg-muted overflow-hidden border-2 border-gray-600">
               {selectedContact.image ? (
                 <img src={selectedContact.image} alt={selectedContact.name} className="w-full h-full object-cover" />
               ) : (
-                <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-gray-700">
                   <Users className="w-5 h-5" />
                 </div>
               )}
             </div>
-            <div>
-              <p className="font-bold text-sm">{selectedContact.name}</p>
-              <p className="text-xs text-muted-foreground">{selectedContact.isHelper ? '조력자' : '용의자'}</p>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2">
+                <p className="font-bold text-sm truncate">{selectedContact.name}</p>
+                {selectedContact.isHelper ? (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded">조력자</span>
+                ) : (
+                  <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded">용의자</span>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 truncate">
+                {selectedContact.isHelper
+                  ? '수사를 도와드립니다'
+                  : (selectedContact.role || selectedContact.occupation || '관련자')
+                }
+              </p>
             </div>
           </div>
 
@@ -133,9 +145,10 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
         <>
           <div className="bg-gray-800 p-4">
             <h3 className="font-bold">연락처</h3>
+            <p className="text-xs text-gray-400 mt-1">용의자와 대화하여 정보를 수집하세요</p>
           </div>
 
-          <div className="flex-1 bg-gray-950 overflow-hidden">
+          <div className="flex-1 bg-gray-950 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
             {allContacts.map(contact => {
               const unread = getUnreadCount(contact.id)
               const lastMessage = (chatHistories[contact.id] || []).slice(-1)[0]
@@ -147,34 +160,43 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                     setSelectedContact(contact)
                     onContactSelect?.(contact)
                   }}
-                  className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors border-b border-gray-800"
+                  className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors border-b border-gray-800 group"
                 >
                   <div className="relative">
-                    <div className="w-12 h-12 rounded-full bg-muted overflow-hidden">
+                    <div className="w-12 h-12 rounded-full bg-muted overflow-hidden border-2 border-gray-700 group-hover:border-amber-500/50 transition-colors">
                       {contact.image ? (
                         <img src={contact.image} alt={contact.name} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                        <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-gray-800">
                           <Users className="w-6 h-6" />
                         </div>
                       )}
                     </div>
                     {unread > 0 && (
-                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold">
+                      <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center text-xs font-bold animate-pulse">
                         {unread}
                       </div>
                     )}
                   </div>
-                  <div className="flex-1 text-left">
+                  <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="font-bold text-sm">{contact.name}</p>
-                      {contact.isHelper && (
-                        <span className="text-xs px-1.5 py-0.5 bg-primary/20 text-primary rounded">조력자</span>
+                      <p className="font-bold text-sm truncate">{contact.name}</p>
+                      {contact.isHelper ? (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded flex-shrink-0">조력자</span>
+                      ) : (
+                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded flex-shrink-0">용의자</span>
                       )}
                     </div>
-                    {lastMessage && (
-                      <p className="text-xs text-muted-foreground">{truncatePreview(lastMessage.text)}</p>
+                    {/* 역할 표시 */}
+                    {(contact.role || contact.occupation) && !contact.isHelper && (
+                      <p className="text-xs text-gray-500 truncate">{contact.role || contact.occupation}</p>
                     )}
+                    {/* 마지막 메시지 또는 한줄 소개 */}
+                    {lastMessage ? (
+                      <p className="text-xs text-gray-400 truncate mt-0.5">{truncatePreview(lastMessage.text)}</p>
+                    ) : contact.oneLiner && !contact.isHelper ? (
+                      <p className="text-xs text-gray-500 italic truncate mt-0.5">"{truncatePreview(contact.oneLiner)}"</p>
+                    ) : null}
                   </div>
                 </button>
               )

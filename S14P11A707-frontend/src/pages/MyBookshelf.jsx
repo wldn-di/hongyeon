@@ -4,7 +4,7 @@ import { Link, useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { ReportModal } from '@/features/game/modals'
 import { ReplayConfirmModal } from '@/components/ui/ReplayConfirmModal'
-import { fetchMyReport, restartGame } from '@/features/session/api/sessionApi'
+import { fetchMyReport } from '@/features/session/api/sessionApi'
 import { normalizeInvestigationReportResponse } from '@/features/session/api/sessionMappers'
 import { useBookshelf } from '@/features/user/hooks/useBookshelf'
 import {
@@ -45,8 +45,8 @@ function BookCard({ book, mode, isActive, onViewReport, onReplay }) {
 
   // 처음부터 하기 클릭 핸들러 (실패한 게임)
   const handleRestart = () => {
-    // scenarioId를 사용하여 새 게임 시작
-    setLocation(`/room/${book.scenarioId}/solo`)
+    // scenarioId를 사용하여 게임 페이지로 이동 (startGame API가 리셋 처리)
+    setLocation(`/game/${book.scenarioId}`)
   }
 
   // 재플레이 클릭 핸들러 (완료한 게임)
@@ -338,7 +338,6 @@ export default function MyBookshelf() {
   // 재플레이 모달 상태
   const [replayModalOpen, setReplayModalOpen] = useState(false)
   const [selectedReplayBook, setSelectedReplayBook] = useState(null)
-  const [replayLoading, setReplayLoading] = useState(false)
 
   // API 기반 데이터 조회
   const {
@@ -377,27 +376,11 @@ export default function MyBookshelf() {
     setReplayModalOpen(true)
   }, [])
 
-  // 재플레이 확정
-  const handleReplayConfirm = useCallback(async () => {
+  // 재플레이 확정 - 단순히 게임 페이지로 이동 (백엔드가 알아서 처리)
+  const handleReplayConfirm = useCallback(() => {
     if (!selectedReplayBook?.scenarioId) return
-
-    try {
-      setReplayLoading(true)
-      const response = await restartGame(selectedReplayBook.scenarioId)
-      setReplayModalOpen(false)
-
-      // 새 세션으로 이동
-      if (response?.sessionId) {
-        setLocation(`/room/${response.sessionId}/resume`)
-      } else {
-        setLocation(`/game/${selectedReplayBook.scenarioId}`)
-      }
-    } catch (err) {
-      console.error('Replay error:', err)
-      toast.error(err.message || '재플레이 시작에 실패했습니다.')
-    } finally {
-      setReplayLoading(false)
-    }
+    setReplayModalOpen(false)
+    setLocation(`/game/${selectedReplayBook.scenarioId}`)
   }, [selectedReplayBook, setLocation])
 
   return (
@@ -427,11 +410,10 @@ export default function MyBookshelf() {
             </div>
           ) : (
             <>
-              {/* 통계 */}
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-12">
-                <StatCard label="해결" value={totalClears} tone="gold" />
-                <StatCard label="진행중" value={playingSessions.length} tone="red" />
-                <StatCard label="미제" value={failedSessions.length} tone="red" />
+              {/* 통계 - API 기반 (totalAttempts, totalClears, clearRate, sRankCount) */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
+                <StatCard label="담당한 사건 수" value={totalAttempts} tone="gold" />
+                <StatCard label="해결한 사건 수" value={totalClears} tone="gold" />
                 <StatCard label="S등급" value={sRankCount} tone="gold" />
                 <StatCard label="사건 해결률" value={`${clearRatePercent}%`} tone="gold" />
               </div>
@@ -482,13 +464,12 @@ export default function MyBookshelf() {
         onConfirm={handleReplayConfirm}
         status={selectedReplayBook?.status}
         scenarioTitle={selectedReplayBook?.title}
-        loading={replayLoading}
       />
 
       <footer className="border-t border-border py-8 bg-card/30">
         <div className="container text-center">
           <p className="error-code">
-            [SYSTEM_STATUS: OPERATIONAL] | DETECTIVE v2.0 | [COPYRIGHT_2024]
+            [SYSTEM_STATUS: OPERATIONAL] | HONG-YEON v2.0 | [COPYRIGHT_2024]
           </p>
         </div>
       </footer>

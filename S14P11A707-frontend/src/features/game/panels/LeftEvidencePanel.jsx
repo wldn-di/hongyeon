@@ -1,6 +1,58 @@
-import React, { useMemo, useState } from "react"
+import React, { useMemo, useState, useRef } from "react"
 import { Search, Plus, Users, MapPin, X } from "lucide-react"
 import { cn } from "@/lib/utils"
+
+// 호버 툴팁 컴포넌트 (튜토리얼 스타일 그대로)
+function HoverTooltip({ item, type, position = "right" }) {
+  if (!item) return null
+
+  const typeConfig = {
+    evidence: { label: "증거", color: "bg-blue-500" },
+    suspect: { label: "용의자", color: "bg-amber-500" },
+    location: { label: "장소", color: "bg-green-500" },
+  }
+  const config = typeConfig[type] || typeConfig.evidence
+
+  return (
+    <div
+      className={cn(
+        "absolute w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 pointer-events-none animate-in fade-in duration-150",
+        position === "right" ? "left-full ml-3 top-0" : "right-full mr-3 top-0"
+      )}
+      style={{ zIndex: 100 }}
+    >
+      <div className="flex items-center gap-2 mb-2">
+        <span className={cn("px-2 py-0.5 text-xs font-bold text-white rounded", config.color)}>
+          {config.label}
+        </span>
+        <span className="font-bold text-sm text-white">{item.name}</span>
+      </div>
+
+      {type === "evidence" && (
+        <div className="text-xs text-gray-300">
+          <p className="mb-1">발견장소: {item.floorNumber ? `${item.floorNumber}층` : item.location}</p>
+          {item.description && <p className="whitespace-pre-line">{item.description}</p>}
+        </div>
+      )}
+
+      {type === "suspect" && (
+        <div className="text-xs space-y-1 text-gray-300">
+          <p>역할: {item.role || item.occupation}</p>
+          {item.age && <p>나이: {item.age}세</p>}
+          {item.oneLiner && <p className="italic">"{item.oneLiner}"</p>}
+        </div>
+      )}
+
+      {type === "location" && (
+        <div className="text-xs text-gray-300">
+          <p>층: {item.floorNumber || item.floor}층</p>
+          <p>장소명: {item.name}</p>
+          {item.description && <p className="mt-1">{item.description}</p>}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // 왼쪽 패널 (증거 목록)
 export default function LeftEvidencePanel({
@@ -14,6 +66,8 @@ export default function LeftEvidencePanel({
   onAddToBoard,
 }) {
   const [activeTab, setActiveTab] = useState("evidence") // 'evidence' | 'suspect' | 'location'
+  const [hoveredItem, setHoveredItem] = useState(null) // 호버된 아이템 ID
+  const hoverTimeoutRef = useRef(null)
 
   const tabs = useMemo(() => ([
     { key: "evidence", label: "증거", icon: Search },
@@ -97,8 +151,23 @@ export default function LeftEvidencePanel({
                 key={item.id}
                 draggable
                 onDragStart={(e) => onDragStart?.(e, item, activeTab)}
-                className="bg-muted/30 border border-border rounded-lg p-3 transition-all relative cursor-grab active:cursor-grabbing"
+                className="bg-muted/30 border border-border rounded-lg p-3 transition-all relative cursor-grab active:cursor-grabbing group"
+                onMouseEnter={() => {
+                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                  hoverTimeoutRef.current = setTimeout(() => {
+                    setHoveredItem(item.id)
+                  }, 1000) // 1초 딜레이
+                }}
+                onMouseLeave={() => {
+                  if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                  setHoveredItem(null)
+                }}
               >
+                {/* 호버 툴팁 (1초 딜레이 후 표시) */}
+                {hoveredItem === item.id && (
+                  <HoverTooltip item={item} type={activeTab} position="right" />
+                )}
+
                 <div
                   onClick={() => handleItemClick(item, activeTab)}
                   className="flex items-start gap-3 cursor-pointer hover:opacity-80"
@@ -106,6 +175,10 @@ export default function LeftEvidencePanel({
                   <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0 overflow-hidden">
                     {item.image ? (
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                    ) : activeTab === "suspect" ? (
+                      <Users className="w-5 h-5 text-muted-foreground" />
+                    ) : activeTab === "location" ? (
+                      <MapPin className="w-5 h-5 text-muted-foreground" />
                     ) : (
                       <Search className="w-5 h-5 text-muted-foreground" />
                     )}
@@ -113,16 +186,23 @@ export default function LeftEvidencePanel({
                   <div className="flex-1 min-w-0">
                     <p className="font-bold text-sm">{item.name}</p>
                     {activeTab === "evidence" && (
-                      <p className="text-xs text-muted-foreground">{item.location}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.floorNumber ? `${item.floorNumber}층` : item.location}
+                      </p>
                     )}
-                    {activeTab === "suspect" && item.role && (
-                      <p className="text-xs text-muted-foreground">{item.role}</p>
+                    {activeTab === "suspect" && (item.role || item.occupation) && (
+                      <p className="text-xs text-muted-foreground">{item.role || item.occupation}</p>
                     )}
                     {activeTab === "location" && (
-                      <p className="text-xs text-muted-foreground">사건 장소</p>
+                      <p className="text-xs text-muted-foreground">
+                        {item.floorNumber ? `${item.floorNumber}층` : "사건 장소"}
+                      </p>
                     )}
                     {activeTab === "evidence" && item.storyHint && (
-                      <p className="text-xs text-primary mt-1 italic">💡 {item.storyHint}</p>
+                      <p className="text-xs text-primary mt-1 italic line-clamp-1">💡 {item.storyHint}</p>
+                    )}
+                    {activeTab === "suspect" && item.oneLiner && (
+                      <p className="text-xs text-amber-400/80 mt-1 italic line-clamp-1">"{item.oneLiner}"</p>
                     )}
                   </div>
                 </div>

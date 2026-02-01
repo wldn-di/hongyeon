@@ -204,27 +204,33 @@ export function InvestigationBoard({
   // ========================================
   // API: 보드 불러오기 (GET /api/sessions/{sessionId}/board)
   // ========================================
-  console.log("[loadBoardFromApi]", sessionId, typeof sessionId, Date.now());
-
   const loadBoardFromApi = useCallback(async () => {
-    if (!sessionId) return false
-    
+    console.log('[InvestigationBoard] loadBoardFromApi 호출됨 - sessionId:', sessionId, 'isLoadedRef:', isLoadedRef.current)
+
+    if (!sessionId) {
+      console.log('[InvestigationBoard] sessionId 없음 - 스킵')
+      return false
+    }
+
     // 이미 로드 중이면 스킵
     if (isLoadedRef.current) {
       console.log('[InvestigationBoard] 이미 로드됨 - 스킵')
       return false
     }
-    
+
     isLoadedRef.current = true
     setIsLoading(true)
+    console.log('[InvestigationBoard] API 호출 시작 - sessionId:', sessionId)
+
     try {
       const response = await fetchBoard(sessionId)
+      console.log('[InvestigationBoard] API 응답:', response)
 
       if (!response?.nodes?.length) {
-        // API에 데이터 없으면 localStorage에서 로드
-        const local = loadFromLocalStorage()
-        setBoardItems(local.items)
-        setConnections(local.connections)
+        // API에 데이터 없으면 빈 보드로 시작 (localStorage 폴백 제거 - 깨진 데이터 방지)
+        console.log('[InvestigationBoard] API 데이터 없음 - 빈 보드로 시작')
+        setBoardItems([])
+        setConnections([])
         return false
       }
 
@@ -293,10 +299,10 @@ export function InvestigationBoard({
       return true
     } catch (err) {
       console.error('보드 불러오기 실패:', err)
-      // 실패 시 localStorage에서 로드
-      const local = loadFromLocalStorage()
-      setBoardItems(local.items)
-      setConnections(local.connections)
+      // 실패 시 빈 보드로 시작 (localStorage 폴백 제거 - 깨진 데이터 방지)
+      console.log('[InvestigationBoard] API 실패 - 빈 보드로 시작')
+      setBoardItems([])
+      setConnections([])
       return false
     } finally {
       setIsLoading(false)
@@ -307,6 +313,9 @@ export function InvestigationBoard({
   // 초기 데이터 로드
   // ========================================
   useEffect(() => {
+    // ✅ sessionId 변경 시 플래그 먼저 리셋 (API 호출 전에!)
+    isLoadedRef.current = false
+
     if (Array.isArray(initialBoardItems) || Array.isArray(initialConnections)) {
       setBoardItems(Array.isArray(initialBoardItems) ? initialBoardItems : [])
       setConnections(Array.isArray(initialConnections) ? initialConnections : [])
@@ -314,19 +323,15 @@ export function InvestigationBoard({
     }
 
     if (sessionId) {
+      console.log('[InvestigationBoard] sessionId 변경 감지 - API 로드 시작:', sessionId)
       loadBoardFromApi()
     } else {
-      const local = loadFromLocalStorage()
-      setBoardItems(local.items)
-      setConnections(local.connections)
+      // sessionId 없을 때는 빈 보드로 시작
+      setBoardItems([])
+      setConnections([])
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, initialBoardItems, initialConnections])
-
-  // sessionId 변경 시 플래그 리셋
-  useEffect(() => {
-    isLoadedRef.current = false
-  }, [sessionId])
 
   // ========================================
   // 보드 상태 변경 콜백
@@ -1068,76 +1073,42 @@ export function InvestigationBoard({
                 setHoveredItem(null)
               }}
             >
-              {/* 호버 툴팁 - 상세정보 (1초 딜레이, 튜토리얼 스타일) */}
+              {/* 호버 툴팁 - 상세정보 (1초 딜레이, 튜토리얼 스타일 그대로) */}
               {hoveredItem === item.id && item.type !== 'note' && (
                 <div
-                  className="absolute left-full ml-4 top-0 w-72 bg-gray-900/95 backdrop-blur border-2 border-gray-600 rounded-xl shadow-2xl pointer-events-none animate-in fade-in slide-in-from-left-2 duration-200"
-                  style={{ zIndex: 200 }}
+                  className="absolute left-full ml-3 top-0 w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 pointer-events-none animate-in fade-in duration-150"
+                  style={{ zIndex: 100 }}
                 >
-                  {/* 헤더 */}
-                  <div className={cn("px-4 py-3 rounded-t-xl border-b border-gray-700",
-                    item.type === 'victim' && "bg-red-500/20",
-                    item.type === 'suspect' && "bg-amber-500/20",
-                    item.type === 'evidence' && "bg-blue-500/20",
-                    item.type === 'location' && "bg-green-500/20"
-                  )}>
-                    <div className="flex items-center gap-3">
-                      <span className={cn("px-2.5 py-1 text-xs font-bold text-white rounded-md shadow", config.color)}>
-                        {config.label}
-                      </span>
-                      <span className="font-bold text-base text-white">{item.name}</span>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className={cn("px-2 py-0.5 text-xs font-bold text-white rounded", config.color)}>
+                      {config.label}
+                    </span>
+                    <span className="font-bold text-sm text-white">{item.name}</span>
+                  </div>
+                  {item.type === 'victim' && (
+                    <div className="text-xs space-y-1 text-gray-300">
+                      {item.occupation && <p>직업: {item.occupation}</p>}
+                      {item.note && <p>배경: {item.note}</p>}
                     </div>
-                  </div>
-
-                  {/* 내용 */}
-                  <div className="p-4 space-y-3">
-                    {item.type === 'victim' && (
-                      <>
-                        {item.occupation && (
-                          <div className="flex justify-between items-center py-1.5 border-b border-gray-700/50">
-                            <span className="text-gray-400 text-sm">직업</span>
-                            <span className="text-white font-medium text-sm">{item.occupation}</span>
-                          </div>
-                        )}
-                        {item.note && (
-                          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line bg-black/30 rounded-lg p-3">{item.note}</p>
-                        )}
-                      </>
-                    )}
-                    {item.type === 'suspect' && (
-                      <>
-                        {item.role && (
-                          <div className="flex justify-between items-center py-1.5 border-b border-gray-700/50">
-                            <span className="text-gray-400 text-sm">역할</span>
-                            <span className="text-white font-medium text-sm">{item.role}</span>
-                          </div>
-                        )}
-                        {item.note && (
-                          <p className="text-gray-300 text-sm leading-relaxed bg-black/30 rounded-lg p-3 italic">"{item.note}"</p>
-                        )}
-                      </>
-                    )}
-                    {item.type === 'evidence' && (
-                      <>
-                        {item.note && (
-                          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line bg-black/30 rounded-lg p-3">{item.note}</p>
-                        )}
-                      </>
-                    )}
-                    {item.type === 'location' && (
-                      <>
-                        {item.floorNumber && (
-                          <div className="flex justify-between items-center py-1.5 border-b border-gray-700/50">
-                            <span className="text-gray-400 text-sm">위치</span>
-                            <span className="text-green-400 font-bold text-sm">{item.floorNumber}층</span>
-                          </div>
-                        )}
-                        {item.note && (
-                          <p className="text-gray-300 text-sm leading-relaxed whitespace-pre-line bg-black/30 rounded-lg p-3">{item.note}</p>
-                        )}
-                      </>
-                    )}
-                  </div>
+                  )}
+                  {item.type === 'suspect' && (
+                    <div className="text-xs space-y-1 text-gray-300">
+                      {item.role && <p>역할: {item.role}</p>}
+                      {item.note && <p className="italic">"{item.note}"</p>}
+                    </div>
+                  )}
+                  {item.type === 'evidence' && (
+                    <div className="text-xs text-gray-300">
+                      {item.note && <p className="whitespace-pre-line">{item.note}</p>}
+                    </div>
+                  )}
+                  {item.type === 'location' && (
+                    <div className="text-xs text-gray-300">
+                      {item.floorNumber && <p>층: {item.floorNumber}층</p>}
+                      <p>장소명: {item.name}</p>
+                      {item.note && <p className="mt-1">{item.note}</p>}
+                    </div>
+                  )}
                 </div>
               )}
 

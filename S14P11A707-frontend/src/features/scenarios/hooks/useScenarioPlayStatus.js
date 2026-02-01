@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { fetchBookshelfSessions } from '@/features/user/api/userApi'
-import { mapBookshelfSessionResponse, mapBookshelfItem } from '@/features/session/api/sessionMappers'
+import { mapBookshelfSessionResponse } from '@/features/session/api/sessionMappers'
 
 /**
  * 특정 시나리오의 플레이 상태를 확인하는 Hook
@@ -25,10 +25,11 @@ export function useScenarioPlayStatus(scenarioId) {
 
       const response = await fetchBookshelfSessions()
       const mappedSessions = mapBookshelfSessionResponse(response)
-      const items = mappedSessions.content.map(mapBookshelfItem).filter(Boolean)
+      // mapBookshelfSessionResponse 내부에서 이미 mapBookshelfItem을 호출하므로 중복 호출 제거
+      const items = mappedSessions.content.filter(Boolean)
 
-      // 해당 시나리오의 세션 찾기
-      const matchedSession = items.find(item => item.scenarioId === scenarioId)
+      // 해당 시나리오의 세션 찾기 (타입 안전한 비교)
+      const matchedSession = items.find(item => Number(item.scenarioId) === Number(scenarioId))
 
       if (matchedSession) {
         setStatus(matchedSession.status)

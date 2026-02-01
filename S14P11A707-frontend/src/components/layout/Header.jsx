@@ -17,7 +17,7 @@ export function Header() {
           <Link href="/">
             <div className="flex items-center gap-2 cursor-pointer group">
               <div className="text-2xl font-bold gold-glow" style={{ color: 'var(--primary)' }}>
-                DETECTIVE
+                HONG-YEON
               </div>
               <div className="error-code opacity-70 group-hover:opacity-100 transition-opacity">
                 [SYS_v2.0]
@@ -28,23 +28,23 @@ export function Header() {
           {/* 네비게이션 */}
           <nav className="hidden md:flex items-center gap-6">
             <Link href="/">
-              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer bracket-left">
+              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer">
                 홈
               </span>
             </Link>
             <Link href="/scenarios">
-              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer bracket-left">
+              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer">
                 시나리오
               </span>
             </Link>
             <Link href="/my-bookshelf">
-              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer bracket-left flex items-center gap-1">
+              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer flex items-center gap-1">
                 <BookOpen className="w-4 h-4" />
                 내 수사록
               </span>
             </Link>
             <Link href="/ranking">
-              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer bracket-left">
+              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer">
                 랭킹
               </span>
             </Link>

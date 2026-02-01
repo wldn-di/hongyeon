@@ -4,12 +4,14 @@ import { ApiError } from '@/api/errors/ApiError'
 
 /**
  * 전체 랭킹 조회
+ * @param {string} type - 랭킹 타입 ('score' | 'clears' | 'time')
  * @returns {Promise<GlobalRankingResponse>}
  * @throws {ApiError}
  */
-export const fetchGlobalRankings = async () => {
+export const fetchGlobalRankings = async (type = 'score') => {
   try {
     const response = await apiClient.get(ENDPOINTS.rankings, {
+      params: { type },
       headers: {
         'Content-Type': 'application/json',
       },

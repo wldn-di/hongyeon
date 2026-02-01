@@ -4,8 +4,6 @@ import { useScenarioById } from '@/features/scenarios/hooks/useScenarioById'
 import { useScenarioPlayStatus } from '@/features/scenarios/hooks/useScenarioPlayStatus'
 import ScenarioDetailCard from '@/features/scenarios/components/ScenarioDetailCard'
 import { ReplayConfirmModal } from '@/components/ui/ReplayConfirmModal'
-import { restartGame } from '@/features/session/api/sessionApi'
-import { toast } from 'sonner'
 
 export default function ScenarioDetail() {
   const [, params] = useRoute('/scenario/:id')
@@ -13,53 +11,27 @@ export default function ScenarioDetail() {
   const scenarioId = params?.id ? parseInt(params.id, 10) : 0
 
   const { scenario, loading, error } = useScenarioById(scenarioId)
-  const { status, hasPlayed, isPlaying, session, loading: statusLoading } = useScenarioPlayStatus(scenarioId)
+  const { status, hasPlayed, isPlaying, loading: statusLoading } = useScenarioPlayStatus(scenarioId)
 
   // 재플레이 확인 모달 상태
   const [replayModalOpen, setReplayModalOpen] = useState(false)
-  const [replayLoading, setReplayLoading] = useState(false)
 
   // 게임하기 버튼 클릭 핸들러
   const handlePlayClick = useCallback(() => {
-    // 이미 플레이 중인 세션이 있으면 이어하기로 이동
-    if (isPlaying && session?.sessionId) {
-      setLocation(`/room/${session.sessionId}/resume`)
-      return
-    }
-
     // 완료/실패한 시나리오면 확인 모달 표시
     if (hasPlayed) {
       setReplayModalOpen(true)
       return
     }
 
-    // 새 게임 시작
+    // 나머지(NONE, PLAYING) → 백엔드 startGame이 알아서 처리
     setLocation(`/game/${scenarioId}`)
-  }, [scenarioId, hasPlayed, isPlaying, session, setLocation])
+  }, [scenarioId, hasPlayed, setLocation])
 
-  // 재플레이 확인 핸들러
-  const handleReplayConfirm = useCallback(async () => {
-    try {
-      setReplayLoading(true)
-
-      // 재시작 API 호출
-      const response = await restartGame(scenarioId)
-
-      setReplayModalOpen(false)
-
-      // 새 세션으로 이동
-      if (response?.sessionId) {
-        setLocation(`/room/${response.sessionId}/resume`)
-      } else {
-        // sessionId가 없으면 기본 게임 경로로
-        setLocation(`/game/${scenarioId}`)
-      }
-    } catch (err) {
-      console.error('Restart game error:', err)
-      toast.error(err.message || '재플레이 시작에 실패했습니다.')
-    } finally {
-      setReplayLoading(false)
-    }
+  // 재플레이 확인 핸들러 - 단순히 게임 페이지로 이동 (백엔드가 알아서 처리)
+  const handleReplayConfirm = useCallback(() => {
+    setReplayModalOpen(false)
+    setLocation(`/game/${scenarioId}`)
   }, [scenarioId, setLocation])
 
   if (loading || statusLoading) {
@@ -102,7 +74,6 @@ export default function ScenarioDetail() {
         onConfirm={handleReplayConfirm}
         status={status}
         scenarioTitle={scenario?.title}
-        loading={replayLoading}
       />
     </div>
   )
