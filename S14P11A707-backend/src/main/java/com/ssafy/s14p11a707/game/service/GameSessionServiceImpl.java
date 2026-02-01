@@ -38,7 +38,6 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.dao.DataIntegrityViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -67,11 +66,10 @@ public class GameSessionServiceImpl implements GameSessionService {
     private final ScenarioRankingRepository scenarioRankingRepository;
     private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
-    private final VectorStore vectorStore;
     private final EmbeddingModel embeddingModel;
     private final ChatMemory chatMemory;
 
-    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, VectorStore vectorStore, EmbeddingModel embeddingModel, ChatMemoryRepository chatMemoryRepository) {
+    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, EmbeddingModel embeddingModel, ChatMemoryRepository chatMemoryRepository) {
         this.gameSessionRepository = gameSessionRepository;
         this.scenarioRepository = scenarioRepository;
         this.userRepository = userRepository;
@@ -87,7 +85,6 @@ public class GameSessionServiceImpl implements GameSessionService {
         this.scenarioRankingRepository = scenarioRankingRepository;
         this.objectMapper = objectMapper;
         this.chatClient = chatClient;
-        this.vectorStore = vectorStore;
         this.embeddingModel = embeddingModel;
         this.chatMemory = MessageWindowChatMemory.builder()
                 .maxMessages(20) // 최근 20개 대화 기억
@@ -374,11 +371,16 @@ public class GameSessionServiceImpl implements GameSessionService {
         // 용의자 심문을 위한 프롬프트 구성
         String commonClueRule = """
                 ## 단서(아이템/클루) 대응 및 대화 전략
-                
+                0. 답변의 집중 (가장 중요):
+                   - **현재 질문의 주제에만 집중하세요.** 현재 질문에서 묻는 내용에만 답변하세요.
+                   - 이전 대화 맥락을 참고하되, **현재 질문의 주제와 직접적으로 관련된 내용만** 사용하세요.
+                   - 이전 대화에서 논의된 다른 주제(예: 현재 질문이 "직업"인데 이전에 "사건 시간"이 논의된 경우)는 완전히 무시하세요.
+                   - 예시: 현재 질문 "직업이 뭐라고 하셨죠?" → 이전 맥락("프리랜서 기사") 참고 OK. 현재 질문 "직업이 뭐죠?" → 이전 맥락("사건 시간")
+                   - 현재 질문이 새로운 주제에 관한 것이면 이전 대화의 다른 주제를 섞지 마세요.
                 1. 소유권 인정과 기만:
                    - 본인 소유가 확실한 물건이 제시되면 부인하지 마세요. "제 것이 맞네요"라고 인정하되, 그것이 왜 의심스러운 곳에 있는지 '사건과 무관한 가짜 서사'를 즉흥적으로 만드세요.
                 2. 중립적 표현 유지 (중요):
-                   - 답변 중 특정인을 범인으로 단정 짓거나(예: "A가 범인이에요"), 특정 물건을 살해 도구로 확정(예: "이건 살인 흉기네요")하지 마세요.\s
+                   - 답변 중 특정인을 범인으로 단정 짓거나(예: "A가 범인이에요"), 특정 물건을 살해 도구로 확정(예: "이건 살인 흉기네요")하지 마세요.
                    - 대신 "누군가의 흔적 같다", "날카로운 물체다" 등 객관적인 현상 위주로 말하며 플레이어의 판단을 유도하세요.
                 3. 질문에 대한 방어:
                    - 단서 자체로 결론을 내리지 말고 "이게 왜 거기 있죠?"라며 당황하거나 "그게 제가 범인이라는 증거는 아니지 않습니까?"라며 논리적으로 방어하세요.
@@ -387,7 +389,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                    - 너무 완강하게 버티기보다는, 유저의 추론이 핵심에 근접하면 "사실은..."이라며 조금씩 진실(Secret)을 흘려 게임의 흐름을 이어가세요.
                 5. 아이템 제시 상황
                    - 제시한 "usedClueId" 가 "weakness_clue" 의 "id" 와 일치하면 "alibi_progression" 의 state를 "level1_lie" 에서 "level2_weak" 로 변경하십시오.
-                
+
                 """;
 
 // 범인 여부에 따른 행동 지침 수정
@@ -470,19 +472,32 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         String userMessage = request.message() == null ? "" : request.message().trim();
 
-        // 여러 질문 감지 (물음표 개수로 체크)
-        int questionMarkCount = userMessage.replaceAll("[^?]", "").length();
-        boolean hasMultipleQuestions = questionMarkCount >= 2;
+        // 1단계: 질문 분석 (다중 질문 감지 및 첫 번째 질문 추출)
+        QuestionAnalysisResult analysis = analyzeQuestion(userMessage);
 
-        // 여러 질문에 대한 응답 제어 지침 추가
+        // 디버깅 로그
+        log.info("=== 질문 분석 결과 ===");
+        log.info("Original message: {}", userMessage);
+        log.info("FirstQuestion: {}", analysis.firstQuestion());
+        log.info("HasMultipleQuestions: {}", analysis.hasMultipleQuestions());
+        log.info("====================");
+
+        // 다중 질문인 경우 첫 번째 질문만 사용, 단일 질문이면 원본 사용
+        boolean hasMultipleQuestions = false;
+        if (analysis.hasMultipleQuestions() && analysis.firstQuestion() != null) {
+            userMessage = analysis.firstQuestion();
+            hasMultipleQuestions = true;
+            log.info("다중 질문 감지됨, 첫 번째 질문로 변경: {}", userMessage);
+        }
+
+        // 다중 질문일 경우 시스템 프롬프트에 응답 끝 안내 지침 추가
         if (hasMultipleQuestions) {
             systemMessage += """
 
-                ## 다중 질문 응답 규칙 (긴급)
-                - 사용자가 메시지 안에 여러 질문(물음표 2개 이상)을 포함했습니다.
-                - **절대로 가장 먼저 나온 질문(맨 앞 질문)에만 답변하세요.** 뒤에 나오는 질문은 완전히 무시하세요.
-                - 예시: "직업이 뭔가요? 그리고 사건 시간에 뭘 했죠?" → "직업이 뭔가요?"에만 답변하고, "사건 시간" 질문은 언급조차 하지 마세요.
-                - 답변 끝에는 당신의 성격과 태도에 맞게 "다른 질문은 다시 물어봐주세요"와 같은 말을 변형하여 덧붙이세요.
+                ## 다중 질문 응답 지침
+                - 사용자가 한 번에 여러 질문을 했습니다. 현재 첫 번째 질문에만 답변하고 있습니다.
+                - 응답의 마지막에 용의자인 당신의 성격과 태도에 맞게 "질문을 한 번에 하나씩만 해주세요"라는 뉘앙스의 멘트를 자연스럽게 덧붙이세요.
+                - 예시: "그게 제 직업이에요. 그건 그렇고, 한 번에 한 질문씩만 해주실 수 있나요? 머리가 복잡해지네요."
                 """;
         }
 
@@ -528,7 +543,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .session(session)
                 .suspect(suspect)
                 .role("user")
-                .content(request.message())
+                .content(userMessage)
                 .usedClueId(usedClueId)
                 .responseLevel(null)
                 .keyTalk(false)
@@ -655,7 +670,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                     // timeline_alibi 추가 (현재 심문 중인 용의자만)
                     if (aiConfig.has("timeline_alibi")) {
                         JsonNode timelineAlibi = aiConfig.get("timeline_alibi");
-                        if (timelineAlibi.isArray() && timelineAlibi.size() > 0) {
+                        if (timelineAlibi.isArray() && !timelineAlibi.isEmpty()) {
                             contextBuilder.append("  알리바이 타임라인 (당신이 실제로 했던 행동 - 내부 참고용, 유저에게 직접 노출 금지):\n");
                             for (JsonNode alibi : timelineAlibi) {
                                 String time = alibi.has("time") ? alibi.get("time").asText() : "";
@@ -679,14 +694,16 @@ public class GameSessionServiceImpl implements GameSessionService {
         if (victim != null) {
             contextBuilder.append("\n## 피해자 정보\n");
             contextBuilder.append(String.format(
-                    "- 이름: %s\n" +
-                            "- 나이: %d\n" +
-                            "- 성별: %s\n" +
-                            "- 직업: %s\n" +
-                            "- 배경: %s\n" +
-                            "- 발견 장소: %s\n" +
-                            "- 추정 사망 시각: %s\n" +
-                            "- 사인: %s\n",
+                    """
+                            - 이름: %s
+                            - 나이: %d
+                            - 성별: %s
+                            - 직업: %s
+                            - 배경: %s
+                            - 발견 장소: %s
+                            - 추정 사망 시각: %s
+                            - 사인: %s
+                            """,
                     victim.getName(),
                     victim.getAge() != null ? victim.getAge() : 0,
                     victim.getGender() != null ? victim.getGender() : "알 수 없음",
@@ -1311,6 +1328,99 @@ public class GameSessionServiceImpl implements GameSessionService {
         }
 
         return (float) (dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2)));
+    }
+
+    /**
+     * 질문 분석 결과 (다중 질문 감지용)
+     */
+    private record QuestionAnalysisResult(
+        boolean hasMultipleQuestions,
+        String firstQuestion
+    ) {}
+
+    /**
+     * 사용자 메시지를 분석하여 다중 질문 여부와 첫 번째 질문을 추출
+     *
+     * @param userMessage 사용자 메시지
+     * @return 질문 분석 결과
+     */
+    private QuestionAnalysisResult analyzeQuestion(String userMessage) {
+        String analysisPrompt = """
+            당신은 질문 분석 전문가입니다. 사용자의 메시지를 분석하여 다음 정보를 JSON 형식으로 반환하세요.
+
+            ## 핵심 원칙: 의도 기반 분석
+            - 사용자가 "실제로 몇 개의 주제에 대해 답변을 원하는지"를 파악하세요.
+            - 질문이 서로 다른 주제에 관한 것이면 별도 질문으로 간주하세요.
+            - 문법적 구조보다는 의도와 맥락을 우선하세요.
+
+            ## 분석 기준
+            1. 주제 분리: 서로 다른 주제에 대해 물어보면 별도 질문으로 간주
+               - 예: "직업이 뭐냐 어디에 있었냐" → 2개 질문 (직업 + 알리바이)
+               - 예: "직업이 뭐냐 그리고 회사 이름은 뭐냐" → 2개 질문 (서로 다른 정보 요구)
+
+            2. 의문문 패턴 (한국어 종결어미 기반)
+               - ~냐, ~니, ~야, ~인가, ~습니까, ~입니까, ~세요
+               - ~뭡니까, ~인지, ~야 (~냐의 변형)
+               - 문장 끝이 올림표 intonation으로 읽히는 의문형
+
+            3. 구분자 기반 분리
+               - 문장 부호: . ? !
+               - 연결어: 그리고, 또한, 그런데, 또
+               - 공백: 질문 사이에 의미 있는 공백이 있으면 분리
+
+            ## 첫 번째 질문 추출
+            - 가장 먼저 나오는 의문문 주제만 정확히 추출하세요.
+            - 불필요한 수식어는 제거하고 핵심 질문만 남기세요.
+
+            ## 예시
+            입력: "당신의 직업이 뭐냐 당신은 사건이 일어날 당시 어디에서 뭘하고 있었냐"
+            출력: {"questionCount": 2, "firstQuestion": "당신의 직업이 뭐냐"}
+
+            입력: "직업이 뭡니까? 그리고 짱구랑 어떤 사이죠?"
+            출력: {"questionCount": 2, "firstQuestion": "직업이 뭡니까?"}
+
+            입력: "직업이 뭐예요"
+            출력: {"questionCount": 1, "firstQuestion": "직업이 뭐예요"}
+
+            ## 중요: 반환 형식
+            - 절대 Markdown 코드 블록(백틱 3개)을 사용하지 마세요.
+            - JSON 객체만 출력하세요. 설명 없이 순수 JSON만 반환하세요.
+
+            ## 분석할 메시지
+            %s
+            """.formatted(userMessage);
+
+        try {
+            String response = chatClient.prompt()
+                    .user(analysisPrompt)
+                    .call()
+                    .content();
+
+            // Markdown 코드 블록 제거 (LLM이 ```json ... ``` 반환할 경우 대비)
+            String cleanedResponse = response.trim();
+            if (cleanedResponse.startsWith("```")) {
+                cleanedResponse = cleanedResponse.replaceAll("(?i)^```json\\s*", "");
+                cleanedResponse = cleanedResponse.replaceAll("^```\\s*", "");
+                cleanedResponse = cleanedResponse.replaceAll("```\\s*$", "");
+                cleanedResponse = cleanedResponse.trim();
+            }
+
+            // JSON 파싱
+            JsonNode json = objectMapper.readTree(cleanedResponse);
+            int questionCount = json.has("questionCount") ? json.get("questionCount").asInt() : 1;
+            String firstQuestion = json.has("firstQuestion") ? json.get("firstQuestion").asText() : userMessage;
+
+            log.info("LLM 원본 응답: {}", response);
+            log.info("정제된 응답: {}", cleanedResponse);
+            log.info("파싱 결과 - questionCount: {}, firstQuestion: {}", questionCount, firstQuestion);
+
+            return new QuestionAnalysisResult(questionCount >= 2, firstQuestion);
+
+        } catch (Exception e) {
+            // 분석 실패 시 원본 메시지 사용 (fallback)
+            log.warn("질문 분석 실패, 원본 메시지 사용: {}", e.getMessage());
+            return new QuestionAnalysisResult(false, userMessage);
+        }
     }
 
 }
