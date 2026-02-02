@@ -11,6 +11,23 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
   // 용의자만 표시 (조수 왓슨 제외)
   const allContacts = suspects.filter(Boolean)
 
+  const getLastMessageSortKey = (contactId) => {
+    const history = chatHistories[contactId] || []
+    const last = history[history.length - 1]
+    if (!last) return -Infinity
+    if (typeof last.createdAt === 'number') return last.createdAt
+    if (typeof last.id === 'number') return last.id
+    const parsedId = Number(last.id)
+    if (Number.isFinite(parsedId)) return parsedId
+    const parsedTime = Date.parse(last.createdAt || last.time)
+    if (Number.isFinite(parsedTime)) return parsedTime
+    return history.length
+  }
+
+  const sortedContacts = [...allContacts].sort((a, b) => (
+    getLastMessageSortKey(b.id) - getLastMessageSortKey(a.id)
+  ))
+
   useEffect(() => {
     if (chatEndRef.current) {
       chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
@@ -149,7 +166,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
           </div>
 
           <div className="flex-1 bg-gray-950 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            {allContacts.map(contact => {
+            {sortedContacts.map(contact => {
               const unread = getUnreadCount(contact.id)
               const lastMessage = (chatHistories[contact.id] || []).slice(-1)[0]
 
