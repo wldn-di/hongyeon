@@ -21,10 +21,10 @@ export const updateMethods = {
     update(time, delta) {
         if (!this.player) return;
 
-        // 1. 배터리 변수 안전 초기화 (없으면 100%로 설정)
+        // 1. 배터리 변수 안전 초기화
         if (typeof this.flashBattery === 'undefined') this.flashBattery = 1.0;
 
-        // 2. 랜덤 시드 변수 안전 초기화 (없으면 0으로 설정 -> NaN 방지)
+        // 2. 랜덤 시드 변수 안전 초기화
         const seed1 = this.flashJitterSeed || 0;
         const seed2 = this.flashJitterSeed2 || 0;
         const seed3 = this.flashJitterSeed3 || 0;
@@ -81,7 +81,6 @@ export const updateMethods = {
         const dtSecRaw = (Number(delta) || 0) / 1000;
         const dtSec = Phaser.Math.Clamp(dtSecRaw, 0, 0.25);
         if (dtSec > 0) {
-            // [설정] 배터리 소모 속도 (0.02 = 천천히)
             const drain = Number(this.FLASHLIGHT_BATTERY_DRAIN_PER_SEC) || 0.02;
             const recharge = Number(this.FLASHLIGHT_BATTERY_RECHARGE_PER_SEC) || 0.15;
 
@@ -168,38 +167,22 @@ export const updateMethods = {
             }
         }
 
-        // 손전등 위치 및 크기 업데이트 (핵심 수정 부분)
-
+        // 손전등 위치 및 크기 업데이트 (원형 빛 제거 & 깊이 수정됨)
         if (this.flashlight) {
             this.flashAlpha = Phaser.Math.Linear(this.flashAlpha, this.flashAlphaIntent, 0.18);
 
-            // 1. 플레이어 주변을 밝히는 원형 빛(Halo) 생성
-            if (!this.playerHalo) {
-                // [밝기 버프] 투명도 0.4 -> 0.8로 대폭 상향 (아주 밝음)
-                // 반지름 35 (아담하게)
-                this.playerHalo = this.add.circle(0, 0, 25, 0xffffff, 0.8);
+            // [수정] 원형 빛(Halo) 생성 코드 삭제됨
 
-                // 빛이 겹칠수록 더 밝아지는 효과 (ADD)
-                this.playerHalo.setBlendMode(Phaser.BlendModes.ADD);
-            }
-
-            // 2. 깊이(Depth) 정렬: 꼭짓점을 가리기 위해 순서 중요!
-            // 순서: 플레이어(바닥) < 손전등(중간) < 원형 빛(맨 위)
-            // 이렇게 하면 원형 빛이 손전등의 뾰족한 시작 부분을 덮어버립니다.
-            if (this.playerHalo) this.playerHalo.setDepth(this.player.depth -2);
-            this.flashlight.setDepth(this.player.depth + 10);
+            // [수정] 깊이(Depth) 설정: 캐릭터보다 뒤(-1)로 보냄
+            // 이렇게 하면 위를 볼 때 빛의 시작점이 캐릭터 몸에 가려져서 자연스럽습니다.
+            this.flashlight.setDepth(this.player.depth - 1);
 
             // 꺼지는 조건
             if (this.flashAlphaIntent === 0 && this.flashAlpha < 0.02) {
                 this.flashlight.setAlpha(0);
                 this.flashlight.setVisible(false);
-                if (this.playerHalo) {
-                    this.playerHalo.setAlpha(0);
-                    this.playerHalo.setVisible(false);
-                }
             } else {
                 this.flashlight.setVisible(true);
-                if (this.playerHalo) this.playerHalo.setVisible(true);
 
                 const battery = Phaser.Math.Clamp(Number(this.flashBattery) || 0, 0, 1);
                 const seed1 = this.flashJitterSeed || 0;
@@ -209,18 +192,11 @@ export const updateMethods = {
                 // 최종 투명도 계산
                 const finalAlpha = Phaser.Math.Clamp(this.flashAlpha * flicker, 0, 1);
 
-                // 손전등 투명도 적용
-                this.flashlight.setAlpha(finalAlpha*1.5);
-
-                // [밝기 버프] 아까 있던 '* 0.5'를 제거했습니다. 이제 100% 밝기로 나옵니다.
-                if (this.playerHalo) {
-
-                    this.playerHalo.setPosition(this.player.x, this.player.y );
-                    this.playerHalo.setAlpha(finalAlpha * 0.5);
-                }
+                // 손전등 투명도 적용 (1.5배 밝기 유지)
+                this.flashlight.setAlpha(finalAlpha * 1.5);
 
                 if (this.isFlashlightOn) {
-                    // 원형 빛이 덮어주므로, 시작점을 조금 더 안쪽(몸 쪽)으로 당겨도 됩니다.
+                    // 빛이 캐릭터 뒤로 갔으므로 시작점 오프셋 조정
                     const forwardOffset = 5;
                     const verticalOffset = 10;
 
@@ -255,6 +231,7 @@ export const updateMethods = {
                     const targetRad = Phaser.Math.DegToRad(angleDeg) + jitterRot;
                     this.flashlight.rotation = Phaser.Math.Angle.RotateTo(this.flashlight.rotation, targetRad, 0.17);
 
+                    // 크기 (필요하다면 숫자를 키우세요)
                     const s = 1.0 + 0.018 * Math.sin(time * 0.03 + seed1);
                     this.flashlight.setScale(s);
                 }
@@ -275,7 +252,7 @@ export const updateMethods = {
         this.updateElevatorGlows(time, nearPortal);
 
         if (this.isElevatorMenuOpen) {
-            // (엘리베이터 메뉴 로직 생략 - 기존과 동일하게 두시면 됩니다)
+            // ... (엘리베이터 로직 생략) ...
             if (!nearPortal || !this.canUseElevatorRef?.current) {
                 this.closeElevatorMenu();
             } else {
