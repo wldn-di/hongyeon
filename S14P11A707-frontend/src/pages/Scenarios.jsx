@@ -119,26 +119,6 @@ export default function Scenarios() {
           {/* 전체시나리오/나만의 시나리오 탭 props 전달 */}
           <ScenarioHeader activeTab={tab} onChangeTab={setTab} />
 
-          {/* TOP 10 */}
-          {tab === 'all' && (topByRating !== null || topByPlayCount !== null) && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-              {topByRating !== null && (
-                <TopScenarioSection
-                  title="평점 TOP 10"
-                  scenarios={topByRating}
-                  emptyText="아직 집계된 평점이 없습니다."
-                />
-              )}
-              {topByPlayCount !== null && (
-                <TopScenarioSection
-                  title="플레이 TOP 10"
-                  scenarios={topByPlayCount}
-                  emptyText="아직 집계된 플레이 기록이 없습니다."
-                />
-              )}
-            </div>
-          )}
-
           {/* 키워드 검색 */}
           <form
             className="mb-6 flex flex-col sm:flex-row gap-2"

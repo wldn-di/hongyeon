@@ -8,24 +8,29 @@ export const ENDPOINTS = {
   // Auth API
   // ========================================
   auth: {
-    me: '/api/auth/me',
-    login: '/api/auth/login',
-    logout: '/api/auth/logout',
-    refresh: '/api/auth/refresh',
+    me: "/api/auth/me",
+    login: "/api/auth/login",
+    logout: "/api/auth/logout",
+    refresh: "/api/auth/refresh",
   },
 
   // ========================================
   // Ranking API
   // ========================================
-  rankings: '/api/rankings',
-  myRankings: '/api/rankings/me',
+  rankings: {
+    top10: "/api/rankings", // 공개 (Top10)
+    me: "/api/rankings/me", // 로그인 (내 랭킹)
+    // TODO: 아래는 아직 백엔드에 api 없음
+    all: "/api/rankings/all", // (예상) 전체 랭킹
+    search: "/api/rankings/search", // (예상) 닉네임 검색
+  },
 
   // ========================================
   // Scenario API
   // ========================================
   scenarios: {
-    list: '/api/scenarios',
-    create: '/api/scenarios',
+    list: "/api/scenarios",
+    create: "/api/scenarios",
     detail: (scenarioId) => `/api/scenarios/${scenarioId}`,
     delete: (scenarioId) => `/api/scenarios/${scenarioId}`,
     suspects: (scenarioId) => `/api/scenarios/${scenarioId}/suspects`,
@@ -33,17 +38,17 @@ export const ENDPOINTS = {
     rooms: (scenarioId) => `/api/scenarios/${scenarioId}/rooms`,
     rankings: (scenarioId) => `/api/scenarios/${scenarioId}/rankings`,
     status: (scenarioId) => `/api/scenarios/${scenarioId}/status`,
-    search: '/api/scenarios/search',
-    topByRating: '/api/scenarios/top/rating',
-    topByPlayCount: '/api/scenarios/top/play-count',
+    search: "/api/scenarios/search",
+    topByRating: "/api/scenarios/top/rating",
+    topByPlayCount: "/api/scenarios/top/play-count",
   },
 
   // ========================================
   // Scenario v2 API (Async + SSE)
   // ========================================
   scenariosV2: {
-    create: '/api/v2/scenarios',
-    stream: '/api/v2/scenarios/stream',
+    create: "/api/v2/scenarios",
+    stream: "/api/v2/scenarios/stream",
   },
 
   // ========================================
@@ -66,7 +71,8 @@ export const ENDPOINTS = {
 
     // Clue operations
     clues: (sessionId) => `/api/sessions/${sessionId}/clues`,
-    clueDetail: (sessionId, clueId) => `/api/sessions/${sessionId}/clues/${clueId}`,
+    clueDetail: (sessionId, clueId) =>
+      `/api/sessions/${sessionId}/clues/${clueId}`,
 
     // Logs
     logs: (sessionId) => `/api/sessions/${sessionId}/logs`,
@@ -79,8 +85,10 @@ export const ENDPOINTS = {
     submit: (sessionId) => `/api/sessions/${sessionId}/submit`,
 
     // Chat (용의자 심문)
-    suspectChat: (sessionId, suspectId) => `/api/sessions/${sessionId}/suspects/${suspectId}/chat`,
-    suspectChatHistory: (sessionId, suspectId) => `/api/sessions/${sessionId}/suspects/${suspectId}/chats`,
+    suspectChat: (sessionId, suspectId) =>
+      `/api/sessions/${sessionId}/suspects/${suspectId}/chat`,
+    suspectChatHistory: (sessionId, suspectId) =>
+      `/api/sessions/${sessionId}/suspects/${suspectId}/chats`,
   },
 
   // ========================================
@@ -99,12 +107,12 @@ export const ENDPOINTS = {
   // ========================================
   users: {
     me: {
-      scenarios: '/api/users/me/scenarios',
-      bookshelfStats: '/api/users/me/bookshelf/stats',
-      bookshelfSessions: '/api/users/me/bookshelf/sessions',
-      nickname: '/api/users/me/nickname',
+      scenarios: "/api/users/me/scenarios",
+      bookshelfStats: "/api/users/me/bookshelf/stats",
+      bookshelfSessions: "/api/users/me/bookshelf/sessions",
+      nickname: "/api/users/me/nickname",
     },
   },
-}
+};
 
-export default ENDPOINTS
+export default ENDPOINTS;
