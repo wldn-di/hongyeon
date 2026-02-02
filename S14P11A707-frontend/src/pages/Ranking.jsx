@@ -61,11 +61,11 @@ export default function Ranking() {
     setSearchResult(null)
   }
 
+  // 로그아웃 시 검색 결과 초기화
+  // (로그인/로그아웃 시 랭킹 데이터 refetch는 useRanking 훅에서 자동 처리)
   useEffect(() => {
     if (!currentUserId) {
       setSearchResult(null)
-    } else {
-      refetch()
     }
   }, [currentUserId])
 

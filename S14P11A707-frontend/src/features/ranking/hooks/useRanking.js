@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchGlobalRankings } from '../api/rankingApi'
-import { normalizeRankingResponse } from '../api/rankingMappers'
+import { fetchGlobalRankings, fetchMyRankings } from '../api/rankingApi'
+import { normalizeRankingResponse, normalizeRankingEntry } from '../api/rankingMappers'
 import { getErrorMessage } from '@/api/errors/errorHandler'
+import { useAuth } from '@/contexts/AuthContext'
 
 /**
  * 랭킹 타입 옵션
@@ -18,6 +19,9 @@ export const RANKING_TYPES = {
  * @returns {UseRankingReturn}
  */
 export const useRanking = (initialType = 'score') => {
+  const { state } = useAuth()
+  const isLoggedIn = !!state.user
+
   const [rankingType, setRankingType] = useState(initialType)
   const [rankingData, setRankingData] = useState([])
   const [myRanking, setMyRanking] = useState(null)
@@ -26,17 +30,36 @@ export const useRanking = (initialType = 'score') => {
 
   /**
    * 랭킹 데이터 가져오기
+   * - 비로그인: 전체 랭킹(Top 10)만 조회
+   * - 로그인: 전체 랭킹(Top 10) + 내 랭킹 조회
    */
   const fetchRankings = useCallback(async (type = rankingType) => {
     setIsLoading(true)
     setError(null)
 
     try {
-      const response = await fetchGlobalRankings(type)
-      const { rankingData: data, myRanking: myRank } = normalizeRankingResponse(response, type)
-
+      // 1. 전체 랭킹 (Top 10) 조회 - 모든 사용자
+      const globalResponse = await fetchGlobalRankings(type)
+      const { rankingData: data } = normalizeRankingResponse(globalResponse, type)
       setRankingData(data)
-      setMyRanking(myRank)
+
+      // 2. 내 랭킹 조회 - 로그인한 사용자만
+      if (isLoggedIn) {
+        try {
+          const myRankResponse = await fetchMyRankings(type)
+          if (myRankResponse) {
+            const normalizedMyRank = normalizeRankingEntry(myRankResponse, data.length, type)
+            setMyRanking(normalizedMyRank)
+          } else {
+            setMyRanking(null)
+          }
+        } catch (myRankErr) {
+          console.warn('내 랭킹 조회 실패 (플레이 기록이 없을 수 있음):', myRankErr)
+          setMyRanking(null)
+        }
+      } else {
+        setMyRanking(null)
+      }
     } catch (err) {
       console.error('랭킹 데이터 로드 실패:', err)
       const errorMessage = getErrorMessage(err)
@@ -46,7 +69,7 @@ export const useRanking = (initialType = 'score') => {
     } finally {
       setIsLoading(false)
     }
-  }, [rankingType])
+  }, [rankingType, isLoggedIn])
 
   /**
    * 랭킹 타입 변경
@@ -62,7 +85,7 @@ export const useRanking = (initialType = 'score') => {
    */
   useEffect(() => {
     fetchRankings(rankingType)
-  }, [rankingType])
+  }, [rankingType, isLoggedIn])
 
   return {
     rankingType,
