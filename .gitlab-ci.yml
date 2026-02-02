@@ -1,5 +1,5 @@
 # 간단한 CI/CD - Docker Compose(서버) 기반
-# main/master/test-build 푸시 시 → 프론트 빌드 → 백엔드 bootBuildImage → 서버에 이미지 로드 → compose up
+# main/master/test-build 푸시 시 → 프론트(nginx 정적) 이미지 빌드 → 백엔드 bootBuildImage → 서버 docker-compose.yml 교체 → 이미지 로드 → compose up
 
 stages:
   - deploy
@@ -37,33 +37,29 @@ deploy:
       set -euo pipefail
       export IMAGE_TAG="prod"
       export PROJECT_PATH_LOWER="$(printf '%s' "$CI_PROJECT_PATH" | tr '[:upper:]' '[:lower:]')"
-      export IMAGE_REPO="$REGISTRY_HOST/$PROJECT_PATH_LOWER/backend"
-      export IMAGE_NAME="$IMAGE_REPO:$IMAGE_TAG"
-      echo "IMAGE_NAME=$IMAGE_NAME"
+      export BACKEND_IMAGE_NAME="$REGISTRY_HOST/$PROJECT_PATH_LOWER/backend:$IMAGE_TAG"
+      export FRONTEND_IMAGE_NAME="$REGISTRY_HOST/$PROJECT_PATH_LOWER/frontend:$IMAGE_TAG"
+      export VITE_API_BASE_URL="${VITE_API_BASE_URL:-https://hongyeon.cloud-ip.cc}"
+      echo "BACKEND_IMAGE_NAME=$BACKEND_IMAGE_NAME"
+      echo "FRONTEND_IMAGE_NAME=$FRONTEND_IMAGE_NAME"
+      echo "VITE_API_BASE_URL=$VITE_API_BASE_URL"
 
-      # Node.js 설치 (프론트 빌드용)
-      curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-      apt-get install -y nodejs
-
-      # 프론트엔드 빌드
-      cd "$FRONTEND_DIR"
-      npm ci
-      npm run build
-
-      # 스프링부트 resources/static 폴더 생성 및 dist 복사
-      cd "$CI_PROJECT_DIR"
-      mkdir -p "$BACKEND_DIR/src/main/resources/static"
-      rm -rf "$BACKEND_DIR/src/main/resources/static/"*
-      cp -r "$FRONTEND_DIR/dist/"* "$BACKEND_DIR/src/main/resources/static/"
+      # 프론트: nginx 정적 이미지 빌드 (Dockerfile에서 Vite build 포함)
+      docker build --build-arg VITE_API_BASE_URL="$VITE_API_BASE_URL" -t "$FRONTEND_IMAGE_NAME" "$FRONTEND_DIR"
 
       # 스프링부트 이미지 빌드
       cd "$BACKEND_DIR"
       chmod +x gradlew
-      ./gradlew --no-daemon bootBuildImage --imageName="$IMAGE_NAME"
+      ./gradlew --no-daemon bootBuildImage --imageName="$BACKEND_IMAGE_NAME"
+
+      # 서버 docker-compose.yml 교체
+      cd "$CI_PROJECT_DIR"
+      ssh ubuntu@i14a707.p.ssafy.io "mkdir -p \"$REMOTE_COMPOSE_DIR\""
+      scp infra/docker-compose.yml ubuntu@i14a707.p.ssafy.io:"$REMOTE_COMPOSE_DIR/docker-compose.yml"
 
       # 서버로 이미지 전송/로드 후 compose 재기동
-      docker save "$IMAGE_NAME" | gzip -1 | ssh ubuntu@i14a707.p.ssafy.io "gunzip | docker load"
-      ssh ubuntu@i14a707.p.ssafy.io "cd \"$REMOTE_COMPOSE_DIR\" && (docker compose up -d --pull never --remove-orphans backend || docker compose up -d --remove-orphans backend) && docker compose ps"
+      docker save "$BACKEND_IMAGE_NAME" "$FRONTEND_IMAGE_NAME" | gzip -1 | ssh ubuntu@i14a707.p.ssafy.io "gunzip | docker load"
+      ssh ubuntu@i14a707.p.ssafy.io "cd \"$REMOTE_COMPOSE_DIR\" && docker compose --env-file .env.dev up -d --pull never --remove-orphans && docker compose ps"
 
   environment:
     name: production
