@@ -11,10 +11,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
 import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -61,6 +58,7 @@ public class Victim {
     @Column(columnDefinition = "jsonb")
     private JsonNode victimDetailJson;
 
+    @Setter
     @Column(length = 500)
     private String portraitUrl;
 
@@ -90,4 +88,5 @@ public class Victim {
         this.victimDetailJson = victimDetailJson;
         this.portraitUrl = portraitUrl;
     }
+
 }
