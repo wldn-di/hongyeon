@@ -104,7 +104,6 @@ public class GameSessionServiceImpl implements GameSessionService {
 
     /**
      * 게임 시작 및 관리 섹션
-     *
      * 세션 없음 : createSession()
      * Playing : resumeGame API 호출
      * Completed/Failed : 세션 데이터 삭제 후 해당 세션 재사용(세션 연관 테이블은 sumbit()에서 세션 실패/성공 시점에 이미 삭제됨)
@@ -164,7 +163,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             session = existingSession.get();
             if(session.getStatus() == PLAYING) {
                 resetSession(session);
-                session = getSession(session.getId());;
+                session = getSession(session.getId());
             }
             session.reset(objectMapper.valueToTree(List.of(1)));
 
@@ -219,7 +218,6 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      *
      * PLAYING 세션 이어하기 : 현 세션 정보
-     *
      * 프론트 추가 API 호출 필요
      * - getClues API : 발견한 단서 정보
      * - getBoard API : 추리보드 정보
@@ -406,7 +404,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                    - 예외 없이 질문의 범위를 벗어나는 정보를 제공하지 마세요.
                    - 잘못된 예시: 질문 "직업이 뭐죠?" → 답변 "케빈과의 관계는 고용주입니다. 제 직업은 클럽 운영자입니다." (X)
                    - 올바른 예시: 질문 "직업이 뭐죠?" → 답변 "제 직업은 댄스 클럽 운영자입니다." (O)
-                   - 질문에 특정 인물의 이름이 없으면, 그 인물에 대한 언급을 하지 마세요.
                 1. 소유권 인정과 기만:
                    - 본인 소유가 확실한 물건이 제시되면 부인하지 마세요. "제 것이 맞네요"라고 인정하되, 그것이 왜 의심스러운 곳에 있는지 '사건과 무관한 가짜 서사'를 즉흥적으로 만드세요.
                 2. 중립적 표현 유지 (중요):
@@ -642,31 +639,15 @@ public class GameSessionServiceImpl implements GameSessionService {
     private String buildScenarioContext(Scenario scenario, Suspect currentSuspect) {
         StringBuilder contextBuilder = new StringBuilder();
 
-        // 1. 줄거리, 상세 줄거리
-        contextBuilder.append("## 줄거리\n");
-        if (scenario.getSynopsis() != null && !scenario.getSynopsis().isBlank()) {
-            contextBuilder.append(scenario.getSynopsis()).append("\n");
-        }
+        // 1. 상세 줄거리
+        contextBuilder.append("## 상세 줄거리\n");
         if (scenario.getSynopsisDetail() != null && !scenario.getSynopsisDetail().isBlank()) {
-            contextBuilder.append("\n### 상세 줄거리\n").append(scenario.getSynopsisDetail()).append("\n");
+            contextBuilder.append(scenario.getSynopsisDetail()).append("\n");
         }
 
-        // 2. 타임라인
-        JsonNode storyConfig = scenario.getStoryConfigJson();
-        if (storyConfig != null && storyConfig.has("timeline")) {
-            JsonNode timeline = storyConfig.get("timeline");
-            contextBuilder.append("\n## 사건 타임라인\n");
-            for (JsonNode event : timeline) {
-                String time = event.has("time") ? event.get("time").asText() : "";
-                String eventText = event.has("event") ? event.get("event").asText() : "";
-                String witness = event.has("witness") ? event.get("witness").asText() : "";
-                contextBuilder.append(String.format("- %s: %s (목격자: %s)\n", time, eventText, witness));
-            }
-        }
-
-        // 3. 용의자 정보 (모든 용의자의 기본 정보, 현재 심문 중인 용의자의 상세 정보)
+        // 2. 용의자 정보 (모든 용의자의 기본 정보, 현재 심문 중인 용의자의 상세 정보)
         List<Suspect> suspects = suspectRepository.findByScenarioIdOrderByDisplayOrderAsc(scenario.getId());
-        contextBuilder.append("\n## 용의자 정보\n");
+        contextBuilder.append("## 용의자 정보\n");
         for (Suspect suspect : suspects) {
             boolean isCurrentSuspect = suspect.getId() == currentSuspect.getId();
 
@@ -678,9 +659,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                     suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
                     suspect.getOccupation() != null ? suspect.getOccupation() : "알 수 없음"
             ));
-            if (suspect.getMotive() != null && !suspect.getMotive().isBlank()) {
-                contextBuilder.append("  동기: ").append(suspect.getMotive()).append("\n");
-            }
             if (suspect.getOneLiner() != null && !suspect.getOneLiner().isBlank()) {
                 contextBuilder.append("  성격: ").append(suspect.getOneLiner()).append("\n");
             }
@@ -688,8 +666,8 @@ public class GameSessionServiceImpl implements GameSessionService {
             // aiConfigJson에서 추가 정보 추출
             JsonNode aiConfig = suspect.getAiConfigJson();
             if (aiConfig != null) {
-                // relationship은 모든 용의자에게 포함
-                if (aiConfig.has("relationship")) {
+                // relationship은 현재 심문 중인 용의자에게만 포함
+                if (isCurrentSuspect && aiConfig.has("relationship")) {
                     String relationship = aiConfig.get("relationship").asText();
                     if (!relationship.isBlank()) {
                         contextBuilder.append("  관계: ").append(relationship).append("\n");
@@ -1051,7 +1029,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                     entityManager.flush();
 
                     resetSession(session);
-                    session = getSession(sessionId);;
+                    session = getSession(sessionId);
 
                     // storyConfigJson에서 unsolved_monologue 추출
                     String unsolvedMonologue = extractNarration(scenario, "unsolved_monologue");
@@ -1065,7 +1043,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             }
 
         // 4. 범인 맞음 - motive 임베딩
-        float[] motiveEmbedding = null;
+        float[] motiveEmbedding=null;
         float motiveSimilarity = 0.0f;
 
         if (request.motive() != null && !request.motive().isBlank()) {
@@ -1147,7 +1125,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         );
     }
 
-    /**
+    /*
      * private 헬프 메서드 섹션
      */
 

@@ -57,7 +57,7 @@ public class CustomChatMemoryRepository implements ChatMemoryRepository {
         ConversationKey key = parseConversationId(conversationId);
 
         List<ChatMessage> chatMessages = chatMessageRepository
-                .findBySessionIdAndSuspectIdOrderByCreatedAtDesc(key.sessionId, key.suspectId);
+                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(key.sessionId, key.suspectId);
 
         List<Message> messages = new ArrayList<>();
         for (ChatMessage chatMessage : chatMessages) {
