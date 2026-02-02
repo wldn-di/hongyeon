@@ -39,6 +39,14 @@ export const ENDPOINTS = {
   },
 
   // ========================================
+  // Scenario v2 API (Async + SSE)
+  // ========================================
+  scenariosV2: {
+    create: '/api/v2/scenarios',
+    stream: '/api/v2/scenarios/stream',
+  },
+
+  // ========================================
   // Session API
   // ========================================
   sessions: {

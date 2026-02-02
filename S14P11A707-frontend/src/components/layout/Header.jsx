@@ -3,6 +3,7 @@ import { Link, useLocation  } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { BookOpen, User, LogOut } from 'lucide-react'
 import { useAuth } from "@/contexts/AuthContext"
+import NotificationBell from '@/components/ui/NotificationBell'
 
 export function Header() {
   const { state, actions } = useAuth()
@@ -66,6 +67,8 @@ export function Header() {
                         <div className="hidden sm:block text-sm text-muted-foreground">
                           <span className="text-foreground font-semibold">{user.nickname}</span> 님 반갑습니다
                         </div>
+
+                        <NotificationBell />
         
                         <button
                           onClick={() => setLocation("/me")}

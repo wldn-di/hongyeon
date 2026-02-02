@@ -238,6 +238,25 @@ export const createScenario = async (data) => {
 }
 
 /**
+ * 시나리오 생성 v2 (POST /api/v2/scenarios)
+ * - v2는 진행 상황을 SSE(/api/v2/scenarios/stream)로 전달
+ * @param {Object} data
+ * @returns {Promise<any>}
+ * @throws {ApiError}
+ */
+export const createScenarioV2 = async (data) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.scenariosV2.create, data)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('시나리오 생성(v2)에 실패했습니다.')
+  }
+}
+
+/**
  * 시나리오 삭제 (DELETE /api/scenarios/{scenarioId})
  * @param {number} scenarioId
  * @returns {Promise<ScenarioDeleteResponse>}
@@ -267,5 +286,6 @@ export default {
   fetchScenarioRankings,
   fetchScenarioStatus,
   createScenario,
+  createScenarioV2,
   deleteScenario,
 }
