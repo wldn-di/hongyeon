@@ -19,13 +19,14 @@ export function GameEndModal({
   const [stage, setStage] = useState('initial')
   const [typingDone, setTypingDone] = useState(false)
 
-  // 모달 열릴 때 초기화
+  // 모달 열릴 때 초기화 - 성공 시 바로 에필로그, 실패(게임오버) 시 initial
   useEffect(() => {
     if (isOpen) {
-      setStage('initial')
+      // 성공이면 바로 에필로그, 실패면 GAME OVER 화면부터
+      setStage(type === 'success' ? 'epilogue' : 'initial')
       setTypingDone(false)
     }
-  }, [isOpen])
+  }, [isOpen, type])
 
   if (!isOpen) return null
 
@@ -105,7 +106,7 @@ export function GameEndModal({
             <div className="animate-in fade-in duration-700">
               <p className="text-sm text-red-500 tracking-widest mb-4">CULPRIT'S MONOLOGUE</p>
               <h2 className="text-2xl font-bold text-red-400 mb-6">범인의 독백</h2>
-              <div className="text-lg text-gray-300 leading-relaxed whitespace-pre-line mb-8 max-h-[50vh] overflow-y-auto">
+              <div className="text-lg text-gray-300 whitespace-pre-line mb-8 max-h-[50vh] overflow-y-auto" style={{ letterSpacing: '0.05em', lineHeight: '2.2' }}>
                 <TypingText
                   text={unsolvedMonologue}
                   speed={25}
@@ -190,7 +191,7 @@ export function GameEndModal({
           <div className="animate-in fade-in duration-700">
             <p className="text-sm text-primary tracking-widest mb-4">EPILOGUE</p>
             <h2 className="text-2xl font-bold gold-glow mb-6">에필로그</h2>
-            <div className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line mb-8 max-h-[50vh] overflow-y-auto">
+            <div className="text-lg text-amber-100/80 whitespace-pre-line mb-8 max-h-[50vh] overflow-y-auto" style={{ letterSpacing: '0.05em', lineHeight: '2.2' }}>
               <TypingText
                 text={epilogueText}
                 speed={25}
@@ -217,7 +218,7 @@ export function GameEndModal({
           <div className="animate-in fade-in duration-700">
             <p className="text-sm text-amber-500 tracking-widest mb-4">CULPRIT'S CONFESSION</p>
             <h2 className="text-2xl font-bold text-amber-400 mb-6">범인의 자백</h2>
-            <div className="text-lg text-gray-300 leading-relaxed whitespace-pre-line mb-8 max-h-[50vh] overflow-y-auto">
+            <div className="text-lg text-gray-300 whitespace-pre-line mb-8 max-h-[50vh] overflow-y-auto" style={{ letterSpacing: '0.05em', lineHeight: '2.2' }}>
               <TypingText
                 text={culpritMonologue}
                 speed={25}

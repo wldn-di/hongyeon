@@ -189,10 +189,12 @@ export default function Scenarios() {
           {tab === 'mine' && !user && !state.loading && (
             <div className="bg-card/40 border border-border rounded-xl p-10 text-center mb-6">
               <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
-              <p className="text-muted-foreground mb-6">내 시나리오를 보려면 Google 로그인이 필요해요.</p>
-              <Button variant="neon" onClick={() => actions.login()}>
-                구글 로그인
-              </Button>
+              <p className="text-muted-foreground mb-6">내 시나리오를 보려면 로그인이 필요해요.</p>
+              <Link href="/profile">
+                <Button variant="neon">
+                  로그인하러 가기
+                </Button>
+              </Link>
             </div>
           )}
 

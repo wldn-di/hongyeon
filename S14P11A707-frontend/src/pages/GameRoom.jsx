@@ -90,7 +90,7 @@ function OpeningPhase({ scenario, openingNarration, onComplete, onSkip }) {
           <div className="animate-in fade-in duration-700">
             <p className="text-sm text-primary tracking-widest mb-4">CASE FILE</p>
             <h1 className="text-3xl font-bold gold-glow mb-6">{scenario.title}</h1>
-            <p className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line">
+            <p className="text-lg text-amber-100/80 leading-loose whitespace-pre-line" style={{ letterSpacing: '0.05em', lineHeight: '2' }}>
               <TypingText
                 text={openingText}
                 speed={30}
@@ -104,7 +104,7 @@ function OpeningPhase({ scenario, openingNarration, onComplete, onSkip }) {
           <div className="animate-in fade-in duration-700">
             <p className="text-sm text-primary tracking-widest mb-4">CASE FILE</p>
             <h1 className="text-3xl font-bold gold-glow mb-6">{scenario.title}</h1>
-            <p className="text-lg text-amber-100/80 leading-relaxed whitespace-pre-line mb-8">
+            <p className="text-lg text-amber-100/80 leading-loose whitespace-pre-line mb-8" style={{ letterSpacing: '0.05em', lineHeight: '2' }}>
               {openingText}
             </p>
             <Button variant="neon" size="lg" onClick={onComplete}>
@@ -346,6 +346,16 @@ export default function GameRoom() {
   const [gameEndModalOpen, setGameEndModalOpen] = useState(false)
   const [gameEndType, setGameEndType] = useState('fail') // 'success' | 'fail'
   const [gameEndResult, setGameEndResult] = useState(null)
+
+  // 제출 결과 알림 모달 (광클 방지)
+  const [submitResultModal, setSubmitResultModal] = useState({ open: false, message: '', type: 'error' })
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
+  // 채점 중 모달 상태
+  const [gradingModal, setGradingModal] = useState({ open: false })
+
+  // 채점 결과 발표 모달 상태 (정답/오답)
+  const [resultAnnounceModal, setResultAnnounceModal] = useState({ open: false, isCorrect: false })
 
   // 방문한 층 (첫 방문 여부 체크용)
   const [visitedFloors, setVisitedFloors] = useState(new Set([1]))
@@ -1108,8 +1118,24 @@ export default function GameRoom() {
     setSubmitAnswerOpen(true)
   }
 
+  // 제출 결과 모달 표시 헬퍼 (0.8초 후 자동 닫힘)
+  const showSubmitResultModal = useCallback((message, type = 'error') => {
+    setSubmitResultModal({ open: true, message, type })
+    setTimeout(() => {
+      setSubmitResultModal({ open: false, message: '', type: 'error' })
+    }, 800)
+  }, [])
+
   const handleAnswerSubmit = async ({ submissionItems, confirmedConnections, motive }) => {
     if (!sessionId) return
+    if (isSubmitting) return // 광클 방지
+
+    setIsSubmitting(true)
+    setSubmitAnswerOpen(false)
+    setGradingModal({ open: true }) // 채점 중 모달 표시
+
+    const minWaitTime = 3000 // 최소 3초 대기
+    const startTime = Date.now()
 
     try {
       const suspects = submissionItems.filter(item => item.type === 'suspect')
@@ -1158,36 +1184,56 @@ export default function GameRoom() {
 
       const result = await submitAnswer(sessionId, submitData)
 
+      // 최소 3초 대기 (API가 빨리 응답해도 채점 중 화면 유지)
+      const elapsed = Date.now() - startTime
+      if (elapsed < minWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minWaitTime - elapsed))
+      }
+
+      setGradingModal({ open: false }) // 채점 중 모달 닫기
+
       if (result.status === 'COMPLETED') {
-        setSubmitAnswerOpen(false)
-        // 성공 - 에필로그 모달 표시
+        // 성공 - 정답 발표 후 에필로그로 이동
+        setResultAnnounceModal({ open: true, isCorrect: true })
         setGameEndResult(result)
         setGameEndType('success')
+        // 2초 후 결과 발표 닫고 에필로그로
+        await new Promise(resolve => setTimeout(resolve, 2000))
+        setResultAnnounceModal({ open: false, isCorrect: false })
         setGameEndModalOpen(true)
       } else if (result.status === 'WRONG_ANSWER') {
         setRemainingAttempts(result.remainingAttempts)
-        // 남은 기회가 0이면 게임오버
+        // 남은 기회가 0이면 게임오버 (바로 GAME OVER 화면으로)
         if (result.remainingAttempts <= 0) {
-          setSubmitAnswerOpen(false)
           setGameEndResult(result)
           setGameEndType('fail')
           setGameEndModalOpen(true)
         } else {
-          alertError(`틀렸습니다. 남은 기회: ${result.remainingAttempts}회`)
+          // 오답 모달 표시 (1.5초) - 남은 기회 있음
+          setResultAnnounceModal({ open: true, isCorrect: false, remainingAttempts: result.remainingAttempts })
+          await new Promise(resolve => setTimeout(resolve, 1500))
+          setResultAnnounceModal({ open: false, isCorrect: false })
         }
       } else if (result.status === 'FAILED') {
-        setSubmitAnswerOpen(false)
         setRemainingAttempts(0)
-        // 게임오버 모달 표시
+        // 바로 게임오버 화면으로
         setGameEndResult(result)
         setGameEndType('fail')
         setGameEndModalOpen(true)
       } else if (result.status === 'BOARD_INVALID') {
-        alertError(result.errorMessage || '추리보드가 유효하지 않습니다.')
+        showSubmitResultModal(result.errorMessage || '추리보드가 유효하지 않습니다.', 'error')
       }
     } catch (err) {
       console.error('[Submit] 제출 실패:', err)
-      toast.error(err.message || '제출에 실패했습니다.')
+      // 에러 시에도 최소 대기 시간 후 닫기
+      const elapsed = Date.now() - startTime
+      if (elapsed < minWaitTime) {
+        await new Promise(resolve => setTimeout(resolve, minWaitTime - elapsed))
+      }
+      setGradingModal({ open: false })
+      showSubmitResultModal(err.message || '제출에 실패했습니다.', 'error')
+    } finally {
+      setIsSubmitting(false)
     }
   }
   const handleReviewSubmit = async (difficulty, rating, review) => {
@@ -1494,6 +1540,87 @@ export default function GameRoom() {
         onGoHome={handleGameEndGoHome}
         onProceedToReview={handleGameEndProceedToReview}
       />
+
+      {/* 채점 중 모달 */}
+      {gradingModal.open && (
+        <div className="fixed inset-0 bg-black/80 z-[70] flex items-center justify-center">
+          <div className="bg-card border border-border rounded-2xl px-12 py-10 shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+            <div className="flex flex-col items-center gap-6">
+              <div className="relative">
+                <div className="w-20 h-20 rounded-full border-4 border-primary/30 border-t-primary animate-spin" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <span className="text-3xl">🔍</span>
+                </div>
+              </div>
+              <div className="text-center">
+                <p className="text-xl font-bold gold-glow mb-2">채점 중입니다</p>
+                <p className="text-sm text-muted-foreground">잠시만 기다려주세요...</p>
+              </div>
+              <div className="flex gap-1">
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                <span className="w-2 h-2 bg-primary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 채점 결과 발표 모달 (정답/오답) */}
+      {resultAnnounceModal.open && (
+        <div className="fixed inset-0 bg-black/85 z-[70] flex items-center justify-center">
+          <div className="animate-in fade-in zoom-in-95 duration-500 text-center">
+            {resultAnnounceModal.isCorrect ? (
+              <>
+                <div className="text-8xl mb-6 animate-bounce">🎉</div>
+                <p className="text-4xl font-bold gold-glow tracking-wider">정답입니다!</p>
+                <p className="text-lg text-primary/80 mt-4">사건의 진실을 밝혀냈습니다</p>
+              </>
+            ) : (
+              <>
+                <div className="text-8xl mb-6">❌</div>
+                <p className="text-4xl font-bold text-red-500 tracking-wider">오답입니다</p>
+                {resultAnnounceModal.remainingAttempts > 0 ? (
+                  <p className="text-lg text-red-400/80 mt-4">
+                    남은 기회: <span className="font-bold">{resultAnnounceModal.remainingAttempts}회</span>
+                  </p>
+                ) : (
+                  <p className="text-lg text-red-400/80 mt-4">더 이상 기회가 없습니다...</p>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* 제출 결과 알림 모달 (광클 방지, 0.8초 표시) */}
+      {submitResultModal.open && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center">
+          <div className={cn(
+            "bg-card border-2 rounded-xl px-8 py-6 shadow-2xl animate-in zoom-in-95 duration-200",
+            submitResultModal.type === 'error' ? "border-red-500/50" : "border-primary/50"
+          )}>
+            <div className="flex items-center gap-3">
+              <div className={cn(
+                "w-10 h-10 rounded-full flex items-center justify-center",
+                submitResultModal.type === 'error' ? "bg-red-500/20" : "bg-primary/20"
+              )}>
+                {submitResultModal.type === 'error' ? (
+                  <span className="text-2xl">❌</span>
+                ) : (
+                  <span className="text-2xl">✓</span>
+                )}
+              </div>
+              <p className={cn(
+                "text-lg font-bold",
+                submitResultModal.type === 'error' ? "text-red-400" : "text-primary"
+              )}>
+                {submitResultModal.message}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 조수 왓슨 다이얼로그 (단서 발견, 층 첫 방문 시) */}
       {assistantDialog && (

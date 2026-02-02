@@ -3,14 +3,14 @@ import { ENDPOINTS } from '@/api/endpoints'
 import { ApiError } from '@/api/errors/ApiError'
 
 /**
- * 전체 랭킹 조회
+ * 전체 랭킹 조회 (Top 10)
  * @param {string} type - 랭킹 타입 ('score' | 'clears' | 'time')
  * @returns {Promise<GlobalRankingResponse>}
  * @throws {ApiError}
  */
 export const fetchGlobalRankings = async (type = 'score') => {
   try {
-    const response = await apiClient.get(ENDPOINTS.rankings, {
+    const response = await apiClient.get(ENDPOINTS.rankings.top10, {
       params: { type },
       headers: {
         'Content-Type': 'application/json',
@@ -26,13 +26,15 @@ export const fetchGlobalRankings = async (type = 'score') => {
 }
 
 /**
- * 내 랭킹 조회
- * @returns {Promise<GlobalRankingResponse>}
+ * 내 랭킹 조회 (로그인 필수)
+ * @param {string} type - 랭킹 타입 ('score' | 'clears' | 'time')
+ * @returns {Promise<MyRankingResponse>}
  * @throws {ApiError}
  */
-export const fetchMyRankings = async () => {
+export const fetchMyRankings = async (type = 'score') => {
   try {
-    const response = await apiClient.get(ENDPOINTS.myRankings, {
+    const response = await apiClient.get(ENDPOINTS.rankings.me, {
+      params: { type },
       headers: {
         'Content-Type': 'application/json',
       },
