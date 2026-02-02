@@ -18,7 +18,8 @@ services:
     image: redis:7-alpine
     container_name: detective-redis
     restart: always
-    command: ["redis-server", "--appendonly", "yes", "--requirepass", "${REDIS_PASSWORD:-ssafy1031}"]
+    # NOTE: 비밀번호 없이 사용 (로컬/배포 동일 정책)
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
       - "127.0.0.1:6379:6379"
     volumes:
@@ -58,8 +59,8 @@ services:
       until mc alias set local http://minio:9000 \"$$MINIO_ROOT_USER\" \"$$MINIO_ROOT_PASSWORD\" 2>/dev/null; do
         sleep 2;
       done;
-      mc mb -p \"local/$$MINIO_BUCKET\" || true;
-      mc anonymous set none \"local/$$MINIO_BUCKET\" || true;
+      mc ls \"local/$$MINIO_BUCKET\" >/dev/null 2>&1 || mc mb -p \"local/$$MINIO_BUCKET\";
+      mc anonymous set download \"local/$$MINIO_BUCKET\" || true;
       echo 'minio init done';
       "
     networks:

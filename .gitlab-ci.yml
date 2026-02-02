@@ -1,5 +1,5 @@
 # 간단한 CI/CD - Docker Compose(서버) 기반
-# main/master/test-build 푸시 시 → 프론트(nginx 정적) 이미지 빌드 → 백엔드 bootBuildImage → 서버 docker-compose.yml 교체 → 이미지 로드 → compose up
+# main/master/test-build/test/* 푸시 시 → 프론트(nginx 정적) 이미지 빌드 → 백엔드 bootBuildImage → 서버에 이미지 로드 → compose up
 
 stages:
   - deploy
@@ -22,7 +22,7 @@ deploy:
     - name: docker:27.0.3-dind
       command: ["--tls=false"]
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master|test-build)$/'
+    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master|test-build|test\\/.*)$/'
   before_script:
     - apt-get update && apt-get install -y openssh-client docker.io
     # SSH 키 설정 (GitLab CI Variables에 EC2_SSH_KEY 등록 필요 - File 타입)
@@ -52,10 +52,9 @@ deploy:
       chmod +x gradlew
       ./gradlew --no-daemon bootBuildImage --imageName="$BACKEND_IMAGE_NAME"
 
-      # 서버 docker-compose.yml 교체
+      # 서버의 docker-compose.yml 은 수동으로 관리(교체/배포는 사람이 수행)
       cd "$CI_PROJECT_DIR"
       ssh ubuntu@i14a707.p.ssafy.io "mkdir -p \"$REMOTE_COMPOSE_DIR\""
-      scp infra/docker-compose.yml ubuntu@i14a707.p.ssafy.io:"$REMOTE_COMPOSE_DIR/docker-compose.yml"
 
       # 서버로 이미지 전송/로드 후 compose 재기동
       docker save "$BACKEND_IMAGE_NAME" "$FRONTEND_IMAGE_NAME" | gzip -1 | ssh ubuntu@i14a707.p.ssafy.io "gunzip | docker load"
