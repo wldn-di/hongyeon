@@ -12,7 +12,6 @@ package com.ssafy.s14p11a707.scenario.v2.image;
  * @param targetId 대상 엔티티 식별자(id)
  * @param objectKey 객체 스토리지에 저장할 경로/키
  * @param prompt 이미지 생성 프롬프트(텍스트)
- * @see ScenarioV2ImageGenerator
  * @see ScenarioV2ObjectStorageService
  * @see ScenarioV2ImageUrlUpdater
  */

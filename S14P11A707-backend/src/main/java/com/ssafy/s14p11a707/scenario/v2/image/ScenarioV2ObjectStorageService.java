@@ -8,7 +8,6 @@ package com.ssafy.s14p11a707.scenario.v2.image;
  * </p>
  *
  * @see MinioScenarioV2ObjectStorageService
- * @see ScenarioV2ImageGenerator
  */
 public interface ScenarioV2ObjectStorageService {
 

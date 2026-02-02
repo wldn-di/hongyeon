@@ -225,6 +225,7 @@ public final class ScenarioV2JsonUtils {
     public static String normalizeJsonText(String text) {
         String noFence = stripCodeFences(text);
         String extracted = extractJsonObject(noFence);
-        return sanitizeControlChars(extracted).trim();
+        String sanitized = sanitizeControlChars(extracted).trim();
+        return autoCloseJson(sanitized);
     }
 }

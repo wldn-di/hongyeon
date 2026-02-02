@@ -109,9 +109,6 @@ app:
   scenario:
     v2:
       image:
-        # google(기본): Google GenAI Imagen 기반 실제 이미지 생성
-        # placeholder: 더미 단색 PNG 생성(비용/속도/테스트용)
-        generator: ${APP_SCENARIO_V2_IMAGE_GENERATOR:google}
         # 예) imagen-4.0-fast-generate-001 / imagen-4.0-generate-001 / imagen-4.0-ultra-generate-001
         model: ${APP_SCENARIO_V2_IMAGE_MODEL:imagen-4.0-fast-generate-001}
         # Gemini API(Imagen) 모델 요청 쿼터(RPM) 대비 쓰로틀링 값(0 이하로 설정 시 비활성화)

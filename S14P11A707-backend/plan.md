@@ -232,7 +232,6 @@ MinIO objectKey(권장):
 
 구현 메모(v2):
 - 기본은 `GoogleGenAiImagenImageGenerator`(Google GenAI Imagen)로 실제 이미지를 생성한다.
-- 비용/테스트 목적이면 `app.scenario.v2.image.generator=placeholder`로 전환해 `PlaceholderPngImageGenerator`를 사용한다.
 - 이미지 모델은 `app.scenario.v2.image.model`로 교체 가능(예: `imagen-4.0-fast-generate-001`).
 
 ---
