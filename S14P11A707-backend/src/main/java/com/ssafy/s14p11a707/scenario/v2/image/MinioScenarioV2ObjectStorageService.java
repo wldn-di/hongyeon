@@ -65,7 +65,10 @@ public class MinioScenarioV2ObjectStorageService implements ScenarioV2ObjectStor
     }
 
     private String buildUrl(String objectKey) {
-        String endpoint = properties.endpoint();
+        String endpoint = properties.publicEndpoint();
+        if (endpoint == null || endpoint.isBlank()) {
+            endpoint = properties.endpoint();
+        }
         if (endpoint.endsWith("/")) {
             endpoint = endpoint.substring(0, endpoint.length() - 1);
         }

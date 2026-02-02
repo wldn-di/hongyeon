@@ -117,6 +117,7 @@ public class TimelineNode implements ScenarioV2Node {
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
         state.setTimelineJson(cleaned);
+        state.setDraftJson(null);
         log.info("[v2] TimelineNode completed. scenarioId={}, rawLen={}, jsonLen={}", state.getScenarioId(), content == null ? 0 : content.length(), cleaned.length());
         return state;
     }

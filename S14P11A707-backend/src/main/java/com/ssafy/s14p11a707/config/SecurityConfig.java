@@ -70,8 +70,9 @@ public class SecurityConfig {
     };
 
     private static final String[] PUBLIC_GET_WHITELIST = {
-            // Scenarios: list/search/detail/victim/suspects/rankings (read-only)
-            "/api/scenarios/**",
+            // Scenarios: list (read-only)
+            "/api/scenarios",
+            "/api/scenarios/",
             // Reviews: list by scenario (read-only)
             "/api/reviews/*/reviews",
             // Global rankings (read-only)

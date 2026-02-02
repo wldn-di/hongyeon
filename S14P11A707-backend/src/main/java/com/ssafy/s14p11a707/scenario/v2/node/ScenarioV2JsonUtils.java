@@ -36,24 +36,34 @@ public final class ScenarioV2JsonUtils {
     }
 
     /**
-     * LLM 출력에서 JSON 오브젝트 구간만 추출
+     * LLM 출력에서 JSON 값(오브젝트/배열) 구간만 추출
      * <p>
      * 모델이 JSON 외의 안내 문구를 앞뒤에 덧붙이는 경우를 대비해,
-     * 문자열에서 첫 번째 {@code \{}와 마지막 {@code \}} 사이 구간을 잘라 반환한다.
+     * 문자열에서 첫 번째 JSON 시작 토큰({@code \{} 또는 {@code [})부터
+     * 괄호 짝이 맞는 지점까지의 구간을 잘라 반환한다.
      * </p>
      *
      * @param text 원본 문자열
-     * @return 추출된 JSON 오브젝트 문자열(추출 불가 시 원본을 trim하여 반환)
+     * @return 추출된 JSON 값 문자열(추출 불가 시 원본을 trim하여 반환)
      */
-    public static String extractJsonObject(String text) {
+    public static String extractJsonValue(String text) {
         if (text == null) {
             return "";
         }
 
         String trimmed = text.trim();
-        int start = trimmed.indexOf('{');
-        if (start < 0) {
+        int objectStart = trimmed.indexOf('{');
+        int arrayStart = trimmed.indexOf('[');
+        int start;
+        if (objectStart < 0 && arrayStart < 0) {
             return trimmed;
+        }
+        if (objectStart < 0) {
+            start = arrayStart;
+        } else if (arrayStart < 0) {
+            start = objectStart;
+        } else {
+            start = Math.min(objectStart, arrayStart);
         }
 
         Deque<Character> stack = new ArrayDeque<>();
@@ -106,7 +116,8 @@ public final class ScenarioV2JsonUtils {
             }
         }
 
-        int end = trimmed.lastIndexOf('}');
+        char open = trimmed.charAt(start);
+        int end = open == '[' ? trimmed.lastIndexOf(']') : trimmed.lastIndexOf('}');
         if (end < 0 || end <= start) {
             return trimmed;
         }
@@ -215,7 +226,7 @@ public final class ScenarioV2JsonUtils {
      * </p>
      * <ul>
      *   <li>마크다운 코드 펜스 제거({@link #stripCodeFences(String)})</li>
-     *   <li>JSON 오브젝트 구간 추출({@link #extractJsonObject(String)})</li>
+     *   <li>JSON 값 구간 추출({@link #extractJsonValue(String)})</li>
      *   <li>제어 문자 치환({@link #sanitizeControlChars(String)})</li>
      * </ul>
      *
@@ -224,7 +235,7 @@ public final class ScenarioV2JsonUtils {
      */
     public static String normalizeJsonText(String text) {
         String noFence = stripCodeFences(text);
-        String extracted = extractJsonObject(noFence);
+        String extracted = extractJsonValue(noFence);
         String sanitized = sanitizeControlChars(extracted).trim();
         return autoCloseJson(sanitized);
     }

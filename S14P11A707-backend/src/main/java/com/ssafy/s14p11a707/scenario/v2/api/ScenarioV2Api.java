@@ -21,13 +21,14 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RestController
 @RequiredArgsConstructor
 @RequestMapping("/api/v2/scenarios")
-public class ScenarioV2Api {
+public class ScenarioV2Api implements ScenarioV2ApiDoc {
 
     private final ScenarioV2Service scenarioV2Service;
     private final ScenarioV2StreamService scenarioV2StreamService;
     private final CurrentUserIdResolver currentUserIdResolver;
 
     @PostMapping
+    @Override
     public ResponseEntity<ScenarioV2CreateResponse> createScenario(
             @Valid @RequestBody ScenarioV2CreateRequest request,
             @AuthenticationPrincipal OidcUser oidcUser
@@ -37,6 +38,7 @@ public class ScenarioV2Api {
     }
 
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    @Override
     public SseEmitter connect(@AuthenticationPrincipal OidcUser oidcUser) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
         return scenarioV2StreamService.connect(userId);

@@ -3,11 +3,15 @@ package com.ssafy.s14p11a707.scenario.v2.node;
 import com.fasterxml.jackson.core.json.JsonReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -52,6 +56,7 @@ public class RefineNode implements ScenarioV2Node {
     @Override
     public ScenarioV2State execute(ScenarioV2State state) {
         int nextRetry = state.getRetryCount() + 1;
+        JsonNode baseDraft = state.getDraftJson();
 
         eventPublisher.publish(new ScenarioV2EventMessage(
                 state.getUserId(),
@@ -72,6 +77,8 @@ public class RefineNode implements ScenarioV2Node {
                 - suspects length must be exactly %d
                 - clues length must be between 8 and 12
                 - rooms length must be exactly 6 with floor_number 1..6
+                - Do NOT change the structure of rooms (keep rooms array exactly as provided)
+                - Do NOT change clue names or suspect weakness_clue names (keep them to match existing clues)
                 - Keep the story coherent with the timeline and truth_config_json
                 """.formatted(state.getRequest().suspectCount());
 
@@ -101,7 +108,7 @@ public class RefineNode implements ScenarioV2Node {
                     .with(JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature())
                     .with(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature())
                     .readTree(cleaned);
-            state.setDraftJson(refined);
+            state.setDraftJson(stabilizeRefinedDraft(baseDraft, refined));
             log.info(
                     "[v2] RefineNode parsed refined json. scenarioId={}, retry={}, rawLen={}, cleanedLen={}",
                     state.getScenarioId(),
@@ -119,7 +126,7 @@ public class RefineNode implements ScenarioV2Node {
                             .with(JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature())
                             .with(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature())
                             .readTree(autoClosed);
-                    state.setDraftJson(repaired);
+                    state.setDraftJson(stabilizeRefinedDraft(baseDraft, repaired));
                     log.warn(
                             "[v2] RefineNode auto-closed json and recovered. scenarioId={}, retry={}, cleanedLen={}, autoClosedLen={}",
                             state.getScenarioId(),
@@ -147,6 +154,7 @@ public class RefineNode implements ScenarioV2Node {
             String cleaned,
             Exception original
     ) {
+        JsonNode baseDraft = state.getDraftJson();
         String preview = cleaned.length() <= 600 ? cleaned : cleaned.substring(0, 600) + "...";
         log.warn("[v2] failed to parse refined json. scenarioId={}, retry={}, preview={}", state.getScenarioId(), nextRetry, preview, original);
 
@@ -174,7 +182,7 @@ public class RefineNode implements ScenarioV2Node {
                     .with(JsonReadFeature.ALLOW_TRAILING_COMMA.mappedFeature())
                     .with(JsonReadFeature.ALLOW_UNESCAPED_CONTROL_CHARS.mappedFeature())
                     .readTree(retryAutoClosed);
-            state.setDraftJson(refined);
+            state.setDraftJson(stabilizeRefinedDraft(baseDraft, refined));
             log.warn(
                     "[v2] RefineNode retry succeeded. scenarioId={}, retry={}, rawLen={}, cleanedLen={}, autoClosedLen={}",
                     state.getScenarioId(),
@@ -194,6 +202,192 @@ public class RefineNode implements ScenarioV2Node {
             );
             throw new IllegalStateException("failed to parse refined json", original);
         }
+    }
+
+    private JsonNode stabilizeRefinedDraft(JsonNode baseDraft, JsonNode refinedDraft) {
+        if (baseDraft == null || !baseDraft.isObject() || refinedDraft == null || !refinedDraft.isObject()) {
+            return refinedDraft;
+        }
+
+        ObjectNode base = (ObjectNode) baseDraft;
+        ObjectNode refined = (ObjectNode) refinedDraft;
+
+        ObjectNode out = objectMapper.createObjectNode();
+
+        JsonNode baseRooms = base.path("rooms");
+        JsonNode baseSuspects = base.path("suspects");
+        JsonNode baseClues = base.path("clues");
+        JsonNode baseScenario = base.path("scenario");
+        JsonNode baseVictim = base.path("victim");
+
+        ArrayNode clues = selectClues(refined.path("clues"), baseClues);
+        Set<String> clueNames = clueNameSet(clues);
+
+        ObjectNode scenario = selectObject(refined.path("scenario"), baseScenario);
+        out.set("scenario", stabilizeScenarioTruthConfig(scenario, baseScenario, clueNames));
+        out.set("victim", selectObject(refined.path("victim"), baseVictim));
+
+        ArrayNode suspects = selectSuspects(refined.path("suspects"), baseSuspects);
+        out.set("suspects", stabilizeSuspectWeaknessNames(suspects, baseSuspects, clueNames));
+
+        out.set("clues", clues);
+
+        if (baseRooms.isArray()) {
+            out.set("rooms", baseRooms.deepCopy());
+        } else {
+            out.set("rooms", refined.path("rooms"));
+        }
+
+        return out;
+    }
+
+    private ObjectNode stabilizeScenarioTruthConfig(ObjectNode scenario, JsonNode baseScenario, Set<String> clueNames) {
+        ObjectNode result = scenario.deepCopy();
+        JsonNode baseTruth = baseScenario.path("truth_config_json");
+        ObjectNode truth = result.path("truth_config_json").isObject()
+                ? (ObjectNode) result.path("truth_config_json").deepCopy()
+                : (baseTruth.isObject() ? (ObjectNode) baseTruth.deepCopy() : objectMapper.createObjectNode());
+
+        String weaponName = truth.path("weapon_clue_name").asText("").trim();
+        if (weaponName.isEmpty() || (!clueNames.isEmpty() && !clueNames.contains(weaponName))) {
+            String baseWeaponName = baseTruth.path("weapon_clue_name").asText("").trim();
+            if (!baseWeaponName.isEmpty()) {
+                truth.put("weapon_clue_name", baseWeaponName);
+            }
+        }
+
+        // IDs are resolved after persistence; keep them as-is or default to 0 when missing.
+        if (!truth.has("culprit_id")) {
+            truth.put("culprit_id", 0);
+        }
+        if (!truth.has("weapon_clue_id")) {
+            truth.put("weapon_clue_id", 0);
+        }
+
+        result.set("truth_config_json", truth);
+        return result;
+    }
+
+    private ArrayNode stabilizeSuspectWeaknessNames(ArrayNode suspects, JsonNode baseSuspects, Set<String> clueNames) {
+        if (suspects == null || !suspects.isArray()) {
+            return suspects;
+        }
+
+        Map<String, String> baseWeaknessNameBySuspectName = new HashMap<>();
+        if (baseSuspects != null && baseSuspects.isArray()) {
+            for (JsonNode baseSuspect : baseSuspects) {
+                String name = baseSuspect.path("name").asText("").trim();
+                String weaknessName = baseSuspect.path("ai_config_json").path("secret").path("weakness_clue").path("name").asText("").trim();
+                if (!name.isEmpty() && !weaknessName.isEmpty()) {
+                    baseWeaknessNameBySuspectName.put(name, weaknessName);
+                }
+            }
+        }
+
+        ArrayNode stabilized = objectMapper.createArrayNode();
+        for (JsonNode suspectNode : suspects) {
+            if (!suspectNode.isObject()) {
+                continue;
+            }
+            ObjectNode suspect = (ObjectNode) suspectNode.deepCopy();
+            String suspectName = suspect.path("name").asText("").trim();
+
+            ObjectNode ai = suspect.path("ai_config_json").isObject()
+                    ? (ObjectNode) suspect.path("ai_config_json").deepCopy()
+                    : objectMapper.createObjectNode();
+            ObjectNode secret = ai.path("secret").isObject()
+                    ? (ObjectNode) ai.path("secret").deepCopy()
+                    : objectMapper.createObjectNode();
+            ObjectNode weakness = secret.path("weakness_clue").isObject()
+                    ? (ObjectNode) secret.path("weakness_clue").deepCopy()
+                    : objectMapper.createObjectNode();
+
+            String weaknessName = weakness.path("name").asText("").trim();
+            String baseWeakness = baseWeaknessNameBySuspectName.get(suspectName);
+            if (baseWeakness != null && !baseWeakness.isBlank()) {
+                weaknessName = baseWeakness;
+            }
+            if (!weaknessName.isEmpty()) {
+                weakness.put("name", weaknessName);
+            }
+            if (!clueNames.isEmpty() && (weaknessName.isEmpty() || !clueNames.contains(weaknessName))) {
+                // As a last resort, leave base value if present; otherwise keep as-is (validation will catch).
+                if (baseWeakness != null && clueNames.contains(baseWeakness)) {
+                    weakness.put("name", baseWeakness);
+                }
+            }
+
+            if (!weakness.has("id")) {
+                weakness.put("id", 0);
+            }
+
+            secret.set("weakness_clue", weakness);
+            ai.set("secret", secret);
+            suspect.set("ai_config_json", ai);
+            stabilized.add(suspect);
+        }
+        return stabilized;
+    }
+
+    private ArrayNode selectClues(JsonNode refinedClues, JsonNode baseClues) {
+        if (refinedClues != null && refinedClues.isArray() && refinedClues.size() >= 8 && refinedClues.size() <= 12 && clueNamesCompatible(refinedClues, baseClues)) {
+            return (ArrayNode) refinedClues.deepCopy();
+        }
+        if (baseClues != null && baseClues.isArray()) {
+            return (ArrayNode) baseClues.deepCopy();
+        }
+        return refinedClues != null && refinedClues.isArray() ? (ArrayNode) refinedClues.deepCopy() : objectMapper.createArrayNode();
+    }
+
+    private ArrayNode selectSuspects(JsonNode refinedSuspects, JsonNode baseSuspects) {
+        int required = 0;
+        if (baseSuspects != null && baseSuspects.isArray()) {
+            required = baseSuspects.size();
+        }
+
+        if (refinedSuspects != null && refinedSuspects.isArray() && (required == 0 || refinedSuspects.size() == required)) {
+            return (ArrayNode) refinedSuspects.deepCopy();
+        }
+        if (baseSuspects != null && baseSuspects.isArray()) {
+            return (ArrayNode) baseSuspects.deepCopy();
+        }
+        return refinedSuspects != null && refinedSuspects.isArray() ? (ArrayNode) refinedSuspects.deepCopy() : objectMapper.createArrayNode();
+    }
+
+    private ObjectNode selectObject(JsonNode refinedNode, JsonNode baseNode) {
+        if (refinedNode != null && refinedNode.isObject()) {
+            return (ObjectNode) refinedNode.deepCopy();
+        }
+        if (baseNode != null && baseNode.isObject()) {
+            return (ObjectNode) baseNode.deepCopy();
+        }
+        return objectMapper.createObjectNode();
+    }
+
+    private boolean clueNamesCompatible(JsonNode refinedClues, JsonNode baseClues) {
+        if (baseClues == null || !baseClues.isArray()) {
+            return true;
+        }
+        Set<String> baseNames = clueNameSet(baseClues);
+        if (baseNames.isEmpty()) {
+            return true;
+        }
+        Set<String> refinedNames = clueNameSet(refinedClues);
+        return refinedNames.containsAll(baseNames) && baseNames.containsAll(refinedNames);
+    }
+
+    private Set<String> clueNameSet(JsonNode clues) {
+        java.util.Set<String> names = new java.util.HashSet<>();
+        if (clues == null || !clues.isArray()) {
+            return names;
+        }
+        for (JsonNode clue : clues) {
+            String name = clue.path("name").asText("").trim();
+            if (!name.isEmpty()) {
+                names.add(name);
+            }
+        }
+        return names;
     }
 
     private String toJson(JsonNode node) {
