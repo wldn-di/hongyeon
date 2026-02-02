@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react'
+import { useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
-import { LogIn } from 'lucide-react'
+import { LogIn, User } from 'lucide-react'
 
 /**
  * 로그인 필요 안내 모달
@@ -12,6 +13,7 @@ let setModalVisible = null
 
 export function LoginRequiredModal() {
   const [isOpen, setIsOpen] = useState(false)
+  const [, setLocation] = useLocation()
 
   useEffect(() => {
     setModalVisible = (visible) => {
@@ -26,12 +28,17 @@ export function LoginRequiredModal() {
     setIsOpen(false)
   }
 
+  const handleGoToProfile = () => {
+    setIsOpen(false)
+    setLocation('/profile')
+  }
+
   if (!isOpen) return null
 
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       {/* 오버레이 - 클릭 차단 */}
-      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" />
+      <div className="absolute inset-0 bg-black/80 backdrop-blur-sm" onClick={handleClose} />
 
       {/* 모달 내용 */}
       <div className="relative z-10 bg-card border-2 border-primary/50 rounded-xl shadow-2xl p-8 max-w-sm mx-4 text-center animate-in fade-in zoom-in duration-200">
@@ -42,17 +49,28 @@ export function LoginRequiredModal() {
         <h3 className="text-xl font-bold mb-2">로그인이 필요합니다</h3>
         <p className="text-muted-foreground mb-6">
           이 기능을 사용하려면 로그인이 필요합니다.<br />
-          <span className="text-sm">우측 상단에서 로그인해 주세요.</span>
+          <span className="text-sm">내 페이지에서 간편하게 로그인하세요.</span>
         </p>
 
-        <Button
-          variant="neon"
-          size="lg"
-          className="w-full"
-          onClick={handleClose}
-        >
-          알겠습니다
-        </Button>
+        <div className="flex flex-col gap-3">
+          <Button
+            variant="neon"
+            size="lg"
+            className="w-full"
+            onClick={handleGoToProfile}
+          >
+            <User className="w-4 h-4 mr-2" />
+            로그인하러 가기
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="w-full text-muted-foreground"
+            onClick={handleClose}
+          >
+            닫기
+          </Button>
+        </div>
       </div>
     </div>
   )

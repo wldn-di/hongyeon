@@ -18,7 +18,23 @@ function AppShellInner() {
 
     return (
         <div className="dark">
-            <Toaster richColors position="top-right" />
+            <Toaster
+                position="top-center"
+                toastOptions={{
+                    style: {
+                        background: 'rgb(17, 24, 39)',
+                        border: '1px solid rgb(55, 65, 81)',
+                        color: '#f5f5f5',
+                        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
+                        padding: '12px 16px',
+                        borderRadius: '8px',
+                        fontSize: '13px',
+                        fontWeight: '400',
+                        gap: '12px',
+                    },
+                }}
+                offset="80px"
+            />
             <Atmosphere />
             {!hideHeader && <Header />}
             <AppRoutes />
