@@ -370,6 +370,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         // aiConfigJson에서 alibi_progression 및 weakness_clue.id 추출
         String level1_lie = "알리바이: 사건 시간에 다른 장소에 있었습니다.";
         String level2_weak = "알리바이가 깨지며 당황하는 상태입니다.";
+        String weaknessClueName = null;
         Long weaknessClueId = null;  // weakness_clue의 id
         if (aiConfig != null && aiConfig.has("secret")) {
             JsonNode secret = aiConfig.get("secret");
@@ -382,14 +383,18 @@ public class GameSessionServiceImpl implements GameSessionService {
                     level2_weak = alibiProgression.get("level2_partial").asText();
                 }
             }
-            if (secret.has("weakness_clue") && secret.get("weakness_clue").has("id")) {
-                weaknessClueId = secret.get("weakness_clue").get("id").asLong();
+            if (secret.has("weakness_clue") && secret.get("weakness_clue").has("name")) {
+                weaknessClueName = secret.get("weakness_clue").get("name").asText();
             }
         }
 
-        // usedClueId와 weakness_clue.id 비교
+        // usedClueId로 Clue를 찾아 weakness_clue.name과 비교
         Long usedClueId = request.usedClueId();
-        boolean isWeaknessClueUsed = usedClueId != null && usedClueId.equals(weaknessClueId);
+        boolean isWeaknessClueUsed = false;
+        if (usedClueId != null && weaknessClueName != null) {
+            var usedClue = clueRepository.findById(usedClueId);
+            isWeaknessClueUsed = usedClue.isPresent() && weaknessClueName.equals(usedClue.get().getName());
+        }
 
         // 용의자 심문을 위한 프롬프트 구성
         String commonClueRule = """
@@ -597,7 +602,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .build();
         chatMessageRepository.save(userMessageEntity);
 
-        int responseLevel = usedClueId == null ? 1 : 2;
+        int responseLevel = isWeaknessClueUsed ? 2 : 1;
         ChatMessage assistantMessageEntity = ChatMessage.builder()
                 .session(session)
                 .suspect(suspect)
