@@ -40,6 +40,7 @@ S14P11A707-backend/**/.vscode/
 ### Env files ###
 S14P11A707-backend/.env
 S14P11A707-backend/.env.*
+S14P11A707-backend/.gcp/
 !S14P11A707-backend/.env.example
 
 ### Deploy-only compose (do not commit secrets) ###

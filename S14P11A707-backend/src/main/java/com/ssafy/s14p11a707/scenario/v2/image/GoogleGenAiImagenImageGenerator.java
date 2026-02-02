@@ -9,7 +9,6 @@ import jakarta.annotation.PostConstruct;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 
 /**
@@ -20,22 +19,17 @@ import org.springframework.stereotype.Component;
  * </p>
  * <p><b>프로퍼티</b></p>
  * <ul>
- *   <li>{@code app.scenario.v2.image.generator}: {@code google}일 때 활성화(미설정 시 기본 활성)</li>
  *   <li>{@code app.scenario.v2.image.model}: 사용할 이미지 모델명(기본값 {@code imagen-4.0-fast-generate-001})</li>
  * </ul>
  * <p><b>예외</b></p>
  * <ul>
  *   <li>API 호출 실패 또는 응답에 이미지 바이트가 없으면 {@link IllegalStateException}을 발생</li>
  * </ul>
- *
- * @see ScenarioV2ImageGenerator
- * @see PlaceholderPngImageGenerator
  */
 @Component
 @Slf4j
 @RequiredArgsConstructor
-@ConditionalOnProperty(name = "app.scenario.v2.image.generator", havingValue = "google", matchIfMissing = true)
-public class GoogleGenAiImagenImageGenerator implements ScenarioV2ImageGenerator {
+public class GoogleGenAiImagenImageGenerator {
 
     private final Client googleGenAiClient;
 
@@ -75,7 +69,6 @@ public class GoogleGenAiImagenImageGenerator implements ScenarioV2ImageGenerator
      * @return PNG 이미지 바이트 배열
      * @throws IllegalStateException 이미지 생성 실패 또는 유효한 이미지 바이트가 없을 때
      */
-    @Override
     public byte[] generatePng(String prompt) {
         String safePrompt = prompt == null ? "" : prompt;
         double waitedSeconds = 0.0;

@@ -4,13 +4,11 @@ import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
-import com.ssafy.s14p11a707.scenario.v2.image.PlaceholderPngImageGenerator;
-import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageGenerator;
+import com.ssafy.s14p11a707.scenario.v2.image.GoogleGenAiImagenImageGenerator;
 import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageJob;
 import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ObjectStorageService;
 import com.ssafy.s14p11a707.scenario.v2.image.ScenarioV2ImageUrlUpdater;
 import java.util.Map;
-import java.util.Locale;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
@@ -27,7 +25,7 @@ import org.springframework.stereotype.Component;
  * 이미지 병렬 생성/업로드 및 URL 반영 노드
  * <p>
  * {@link ImagePromptNode}가 구성한 {@link ScenarioV2ImageJob} 목록을 병렬로 처리하여,
- * 이미지 생성({@link ScenarioV2ImageGenerator}) → 업로드({@link ScenarioV2ObjectStorageService})를 수행한다.
+ * 이미지 생성({@link GoogleGenAiImagenImageGenerator}) → 업로드({@link ScenarioV2ObjectStorageService})를 수행한다.
  * 모든 작업이 완료되면 {@link ScenarioV2ImageUrlUpdater}로 URL을 엔티티에 반영한다.
  * </p>
  * <p><b>병렬 처리</b></p>
@@ -52,9 +50,7 @@ public class ImageBatchNode implements ScenarioV2Node {
     private static final Pattern RETRY_IN_SECONDS_PATTERN =
             Pattern.compile("retry\\s+in\\s+([0-9]+(?:\\.[0-9]+)?)s", Pattern.CASE_INSENSITIVE);
 
-    private static final PlaceholderPngImageGenerator PLACEHOLDER_GENERATOR = new PlaceholderPngImageGenerator();
-
-    private final ScenarioV2ImageGenerator imageGenerator;
+    private final GoogleGenAiImagenImageGenerator imageGenerator;
     private final ScenarioV2ObjectStorageService objectStorageService;
     private final ScenarioV2ImageUrlUpdater imageUrlUpdater;
     private final ScenarioV2EventPublisher eventPublisher;
@@ -132,37 +128,11 @@ public class ImageBatchNode implements ScenarioV2Node {
         int maxAttempts = 6;
         long[] backoffMillis = {0L, 300L, 1000L, 2000L, 5000L};
 
-        boolean usePlaceholder = false;
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             try {
-                byte[] png = usePlaceholder
-                        ? PLACEHOLDER_GENERATOR.generatePng(job.prompt())
-                        : imageGenerator.generatePng(job.prompt());
+                byte[] png = imageGenerator.generatePng(job.prompt());
                 return objectStorageService.uploadPng(job.objectKey(), png);
             } catch (Exception e) {
-                if (!usePlaceholder && isEmptyImagenResult(e)) {
-                    log.warn(
-                            "[v2] google imagen returned empty images/bytes. falling back to placeholder. target={}, targetId={}, objectKey={}, error={}",
-                            job.target(),
-                            job.targetId(),
-                            job.objectKey(),
-                            rootMessage(e)
-                    );
-                    usePlaceholder = true;
-                    continue;
-                }
-                if (!usePlaceholder && isDailyQuotaExceeded(e)) {
-                    log.warn(
-                            "[v2] google imagen daily quota exceeded. falling back to placeholder. target={}, targetId={}, objectKey={}, error={}",
-                            job.target(),
-                            job.targetId(),
-                            job.objectKey(),
-                            rootMessage(e)
-                    );
-                    usePlaceholder = true;
-                    continue;
-                }
-
                 if (attempt == maxAttempts - 1) {
                     log.error(
                             "[v2] Image job failed (final). target={}, targetId={}, objectKey={}",
@@ -195,51 +165,6 @@ public class ImageBatchNode implements ScenarioV2Node {
         }
 
         throw new IllegalStateException("unreachable");
-    }
-
-    private static boolean isEmptyImagenResult(Throwable throwable) {
-        for (Throwable t = throwable; t != null; t = t.getCause()) {
-            String message = t.getMessage();
-            if (message == null || message.isBlank()) {
-                continue;
-            }
-
-            String normalized = message.toLowerCase(Locale.ROOT);
-            if (normalized.contains("no images returned from google imagen")) {
-                return true;
-            }
-            if (normalized.contains("image bytes missing")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static boolean isDailyQuotaExceeded(Throwable throwable) {
-        for (Throwable t = throwable; t != null; t = t.getCause()) {
-            String message = t.getMessage();
-            if (message == null || message.isBlank()) {
-                continue;
-            }
-
-            String normalized = message.toLowerCase(Locale.ROOT);
-            if (normalized.contains("predict_requests_per_model_per_day")) {
-                return true;
-            }
-            if (normalized.contains("quota exceeded") && normalized.contains("per_day")) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private static String rootMessage(Throwable throwable) {
-        Throwable root = throwable;
-        while (root.getCause() != null) {
-            root = root.getCause();
-        }
-        String message = root.getMessage();
-        return (message == null || message.isBlank()) ? root.getClass().getSimpleName() : message;
     }
 
     private Long resolveRetryAfterMillis(Throwable throwable) {
