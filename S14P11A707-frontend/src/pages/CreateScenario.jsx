@@ -13,11 +13,8 @@ import { deleteScenario } from "@/features/scenarios/api/scenariosApi";
 // 장르 옵션
 const genreOptions = [
   { value: "crime", label: "범죄/수사", icon: "🔍" },
-  { value: "mystery", label: "미스터리", icon: "❓" },
-  { value: "horror", label: "공포/스릴러", icon: "👻" },
-  { value: "historical", label: "시대극", icon: "📜" },
-  { value: "romance", label: "로맨스", icon: "💕" },
-  { value: "sf", label: "SF/판타지", icon: "🚀" },
+  { value: "mystery", label: "미스터리", icon: "🔍" },
+  { value: "horror", label: "공포/스릴러", icon: "🔍" }
 ];
 
 // 용의자 수 옵션

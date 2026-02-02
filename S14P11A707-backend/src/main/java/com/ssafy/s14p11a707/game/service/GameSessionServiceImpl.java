@@ -1085,17 +1085,17 @@ public class GameSessionServiceImpl implements GameSessionService {
         float[] motiveEmbedding = null;
         float motiveSimilarity = 0.0f;
 
-//        if (request.motive() != null && !request.motive().isBlank()) {
-//            // EmbeddingModel로 텍스트 임베딩
-//            motiveEmbedding = embeddingModel.embed(request.motive());
-//
-//            // Scenario의 correctMotiveEmbedding과 유사도 계산
-//            String correctMotiveEmbeddingStr = scenario.getCorrectMotiveEmbedding();
-//            if (correctMotiveEmbeddingStr != null) {
-//                float[] correctMotiveEmbedding = parseVectorString(correctMotiveEmbeddingStr);
-//                motiveSimilarity = cosineSimilarity(motiveEmbedding, correctMotiveEmbedding);
-//            }
-//        }
+        if (request.motive() != null && !request.motive().isBlank()) {
+            // EmbeddingModel로 텍스트 임베딩
+            motiveEmbedding = embeddingModel.embed(request.motive());
+
+            // Scenario의 correctMotiveEmbedding과 유사도 계산
+            String correctMotiveEmbeddingStr = scenario.getCorrectMotiveEmbedding();
+            if (correctMotiveEmbeddingStr != null) {
+                float[] correctMotiveEmbedding = parseVectorString(correctMotiveEmbeddingStr);
+                motiveSimilarity = cosineSimilarity(motiveEmbedding, correctMotiveEmbedding);
+            }
+        }
 
         // GameSession에 제출한 동기 임베딩 저장
         //session.setSubmittedMotiveEmbedding(vectorToString(motiveEmbedding));}
