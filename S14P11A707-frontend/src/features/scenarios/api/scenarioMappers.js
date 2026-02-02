@@ -27,11 +27,29 @@ export const mapScenarioListResponseFull = (response) => {
       currentPage: 0,
     }
   }
+
+  // 배열 형태 응답도 허용 (예: /api/users/me/scenarios 가 배열을 반환하는 경우)
+  if (Array.isArray(response)) {
+    return {
+      content: response.map(mapScenarioItem),
+      totalPages: 1,
+      totalElements: response.length,
+      currentPage: 0,
+    }
+  }
+
+  const currentPage =
+    Number.isFinite(Number(response.currentPage))
+      ? Number(response.currentPage)
+      : Number.isFinite(Number(response.number))
+        ? Number(response.number)
+        : 0
+
   return {
     content: response.content?.map(mapScenarioItem) || [],
     totalPages: response.totalPages || 0,
     totalElements: response.totalElements || 0,
-    currentPage: response.currentPage || 0,
+    currentPage,
   }
 }
 
@@ -42,7 +60,7 @@ export const mapScenarioListResponseFull = (response) => {
  */
 export const mapScenarioItem = (item) => {
   return {
-    id: item.id || item.reviewId, // ScenarioListResponse uses Item type which has reviewId
+    id: item.id || item.scenarioId || item.reviewId, // fallback (일부 응답은 scenarioId 사용)
     title: item.title,
     synopsis: item.synopsis || item.description || '',
     genre: item.genre || '미정',
@@ -52,6 +70,8 @@ export const mapScenarioItem = (item) => {
     difficulty: mapDifficulty(item.avgDifficulty),
     avgRating: item.avgRating || 0,
     avgDifficulty: item.avgDifficulty || 0,
+    estimatedTime: item.estimatedTime || 30,
+    status: item.status || null,
   }
 }
 
@@ -61,8 +81,10 @@ export const mapScenarioItem = (item) => {
  * @returns {string} 'easy' | 'medium' | 'hard'
  */
 export const mapDifficulty = (difficulty) => {
-  if (difficulty <= 2) return 'easy'
-  if (difficulty <= 4) return 'medium'
+  const num = Number(difficulty)
+  if (!Number.isFinite(num)) return 'medium'
+  if (num <= 2) return 'easy'
+  if (num <= 4) return 'medium'
   return 'hard'
 }
 
@@ -95,6 +117,7 @@ export const mapScenarioDetailResponse = (response) => {
     narration_epilogue: response.narration_epilogue || narration.epilogue || null,
     culprit_monologue: response.culprit_monologue || narration.culprit_monologue || null,
     unsolved_monologue: response.unsolved_monologue || narration.unsolved_monologue || null,
+    status: response.status || null,
     // 중첩 데이터 매핑
     victim: response.victim ? mapVictim(response.victim) : null,
     suspects: response.suspects?.map(mapSuspect) || [],

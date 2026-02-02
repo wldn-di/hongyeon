@@ -9,12 +9,15 @@ import { ApiError } from '@/api/errors/ApiError'
 
 /**
  * 내 시나리오 조회 (GET /api/users/me/scenarios)
+ * @param {Object} [params]
+ * @param {number} [params.page]
+ * @param {number} [params.size]
  * @returns {Promise<ScenarioListResponse>}
  * @throws {ApiError}
  */
-export const fetchMyScenarios = async () => {
+export const fetchMyScenarios = async (params = {}) => {
   try {
-    const response = await apiClient.get(ENDPOINTS.users.me.scenarios)
+    const response = await apiClient.get(ENDPOINTS.users.me.scenarios, { params })
     return response.data
   } catch (error) {
     if (error.response?.data) {
