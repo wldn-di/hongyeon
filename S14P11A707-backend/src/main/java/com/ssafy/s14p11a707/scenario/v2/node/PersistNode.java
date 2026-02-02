@@ -2,6 +2,7 @@ package com.ssafy.s14p11a707.scenario.v2.node;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.ssafy.s14p11a707.exception.BaseException;
 import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.scenario.entity.Clue;
@@ -105,6 +106,13 @@ public class PersistNode implements ScenarioV2Node {
                 arraySize(draft == null ? null : draft.path("rooms")),
                 arraySize(draft == null ? null : draft.path("clues"))
         );
+
+        if (draft == null) {
+            throw new IllegalStateException("draftJson is null");
+        }
+        if (!"OK".equals(state.getValidationReport())) {
+            throw new IllegalStateException("validationReport not OK: " + state.getValidationReport());
+        }
 
         eventPublisher.publish(new ScenarioV2EventMessage(
                 state.getUserId(),
@@ -237,6 +245,9 @@ public class PersistNode implements ScenarioV2Node {
         }
         List<Clue> savedClues = clueRepository.saveClues(clues);
 
+        normalizeScenarioTruthConfig(scenario, savedSuspects, savedClues);
+        normalizeSuspectWeaknessClues(savedSuspects, savedClues);
+
         state.setVictimId(victim.getId());
         state.setSuspectIds(savedSuspects.stream().map(Suspect::getId).toList());
         state.setClueIds(savedClues.stream().map(Clue::getId).toList());
@@ -251,6 +262,123 @@ public class PersistNode implements ScenarioV2Node {
         );
 
         return state;
+    }
+
+    private void normalizeScenarioTruthConfig(Scenario scenario, List<Suspect> savedSuspects, List<Clue> savedClues) {
+        Long culpritId = savedSuspects.stream()
+                .filter(Suspect::isCulprit)
+                .findFirst()
+                .map(Suspect::getId)
+                .orElse(null);
+        if (culpritId == null) {
+            throw new IllegalStateException("culprit suspect not found");
+        }
+
+        Map<String, Long> clueIdByName = clueIdByName(savedClues);
+
+        JsonNode truthConfigJson = scenario.getTruthConfigJson();
+        ObjectNode truth = truthConfigJson != null && truthConfigJson.isObject()
+                ? (ObjectNode) truthConfigJson.deepCopy()
+                : objectMapper.createObjectNode();
+
+        truth.put("culprit_id", culpritId);
+
+        Long weaponClueId = resolveWeaponClueId(truth, clueIdByName);
+        truth.put("weapon_clue_id", weaponClueId);
+
+        scenario.setTruthConfigJson(truth);
+        scenarioRepository.saveScenario(scenario);
+        log.info("[v2] PersistNode normalized truth_config_json. scenarioId={}, culpritId={}, weaponClueId={}", scenario.getId(), culpritId, weaponClueId);
+    }
+
+    private void normalizeSuspectWeaknessClues(List<Suspect> savedSuspects, List<Clue> savedClues) {
+        Map<String, Long> clueIdByName = clueIdByName(savedClues);
+
+        for (Suspect suspect : savedSuspects) {
+            JsonNode aiConfigJson = suspect.getAiConfigJson();
+            if (aiConfigJson == null || !aiConfigJson.isObject()) {
+                throw new IllegalStateException("ai_config_json must be an object. suspectId=" + suspect.getId());
+            }
+
+            ObjectNode ai = (ObjectNode) aiConfigJson.deepCopy();
+            ObjectNode secret = ai.path("secret").isObject()
+                    ? (ObjectNode) ai.path("secret").deepCopy()
+                    : objectMapper.createObjectNode();
+
+            JsonNode weaknessNode = secret.path("weakness_clue");
+            if (!weaknessNode.isObject()) {
+                throw new IllegalStateException("secret.weakness_clue must be an object. suspectId=" + suspect.getId());
+            }
+
+            ObjectNode weakness = (ObjectNode) weaknessNode.deepCopy();
+            String weaknessName = weakness.path("name").asText("").trim();
+            if (weaknessName.isEmpty()) {
+                throw new IllegalStateException("weakness_clue.name is missing. suspectId=" + suspect.getId());
+            }
+
+            Long clueId = clueIdByName.get(weaknessName);
+            if (clueId == null) {
+                throw new IllegalStateException("weakness_clue.name not found in clues: " + weaknessName + " (suspectId=" + suspect.getId() + ")");
+            }
+
+            weakness.put("id", clueId);
+            secret.set("weakness_clue", weakness);
+            ai.set("secret", secret);
+
+            suspect.setAiConfigJson(ai);
+        }
+
+        suspectRepository.saveSuspects(savedSuspects);
+        log.info("[v2] PersistNode normalized suspect weakness_clue ids. suspects={}", savedSuspects.size());
+    }
+
+    private Long resolveWeaponClueId(ObjectNode truthConfig, Map<String, Long> clueIdByName) {
+        String weaponName = truthConfig.path("weapon_clue_name").asText("").trim();
+        if (!weaponName.isEmpty()) {
+            Long id = clueIdByName.get(weaponName);
+            if (id == null) {
+                throw new IllegalStateException("weapon_clue_name not found in clues: " + weaponName);
+            }
+            return id;
+        }
+
+        JsonNode weaponIdNode = truthConfig.get("weapon_clue_id");
+        Long weaponIdCandidate = coerceLong(weaponIdNode);
+        if (weaponIdCandidate != null && clueIdByName.containsValue(weaponIdCandidate)) {
+            return weaponIdCandidate;
+        }
+
+        throw new IllegalStateException("weapon clue unresolved: provide truth_config_json.weapon_clue_name matching clues[].name");
+    }
+
+    private static Long coerceLong(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+        if (node.canConvertToLong()) {
+            long value = node.asLong();
+            return value == 0L ? null : value;
+        }
+        if (node.isTextual()) {
+            String text = node.asText("").trim();
+            if (text.matches("^[0-9]+$")) {
+                long value = Long.parseLong(text);
+                return value == 0L ? null : value;
+            }
+        }
+        return null;
+    }
+
+    private static Map<String, Long> clueIdByName(List<Clue> savedClues) {
+        Map<String, Long> map = new HashMap<>();
+        for (Clue clue : savedClues) {
+            String name = clue.getName();
+            if (name == null || name.isBlank()) {
+                continue;
+            }
+            map.putIfAbsent(name, clue.getId());
+        }
+        return map;
     }
 
     private Clue.Importance toImportance(String raw) {

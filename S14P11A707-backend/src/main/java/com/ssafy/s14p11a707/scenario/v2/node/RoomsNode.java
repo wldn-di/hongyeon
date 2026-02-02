@@ -150,6 +150,7 @@ public class RoomsNode implements ScenarioV2Node {
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
         state.setRoomsJson(cleaned);
+        state.setDraftJson(null);
         log.info("[v2] RoomsNode completed. scenarioId={}, rawLen={}, jsonLen={}", state.getScenarioId(), content == null ? 0 : content.length(), cleaned.length());
         return state;
     }

@@ -134,18 +134,28 @@ public class ValidateNode implements ScenarioV2Node {
 
     private JsonNode assembleDraft(ScenarioV2State state) {
         try {
-            JsonNode scenarioRoot = objectMapper.readTree(ScenarioV2JsonUtils.normalizeJsonText(state.getScenarioJson()));
+            JsonNode scenarioRoot = unwrapSingleObjectArray(objectMapper.readTree(ScenarioV2JsonUtils.normalizeJsonText(state.getScenarioJson())));
             JsonNode scenarioNode = scenarioRoot.path("scenario");
+            if (!scenarioNode.isObject() && scenarioRoot.isObject() && scenarioRoot.has("title") && scenarioRoot.has("story_config_json")) {
+                scenarioNode = scenarioRoot;
+            }
 
-            JsonNode charsRoot = objectMapper.readTree(ScenarioV2JsonUtils.normalizeJsonText(state.getCharactersJson()));
+            JsonNode charsRoot = unwrapSingleObjectArray(objectMapper.readTree(ScenarioV2JsonUtils.normalizeJsonText(state.getCharactersJson())));
             JsonNode victimNode = charsRoot.path("victim");
             JsonNode suspectsNode = charsRoot.path("suspects");
             JsonNode cluesNode = charsRoot.path("clues");
             JsonNode truthConfig = charsRoot.path("truth_config_json");
 
-            JsonNode roomsRoot = objectMapper.readTree(ScenarioV2JsonUtils.normalizeJsonText(state.getRoomsJson()));
+            JsonNode roomsRoot = unwrapSingleObjectArray(objectMapper.readTree(ScenarioV2JsonUtils.normalizeJsonText(state.getRoomsJson())));
             JsonNode roomsNode = roomsRoot.path("rooms");
+            if (!roomsNode.isArray() && roomsRoot.isArray()) {
+                roomsNode = roomsRoot;
+            }
+
             JsonNode narrationNode = roomsRoot.path("scenario").path("story_config_json").path("narration");
+            if (!narrationNode.isObject()) {
+                narrationNode = roomsRoot.path("story_config_json").path("narration");
+            }
 
             ObjectNode scenarioMerged = scenarioNode != null && scenarioNode.isObject()
                     ? (ObjectNode) scenarioNode.deepCopy()
@@ -225,13 +235,59 @@ public class ValidateNode implements ScenarioV2Node {
         }
 
         JsonNode clues = draft.path("clues");
+        Set<String> clueNames = new HashSet<>();
         if (!clues.isArray()) {
             issues.add("clues must be an array");
         } else if (clues.size() < 8 || clues.size() > 12) {
             issues.add("clues size must be between 8 and 12");
+        } else {
+            for (JsonNode clue : clues) {
+                String name = clue.path("name").asText("").trim();
+                if (!name.isEmpty()) {
+                    clueNames.add(name);
+                }
+            }
+        }
+
+        JsonNode truthConfigJson = scenario.path("truth_config_json");
+        if (!truthConfigJson.isObject()) {
+            issues.add("scenario.truth_config_json is missing");
+        } else {
+            String weaponClueName = truthConfigJson.path("weapon_clue_name").asText("").trim();
+            if (weaponClueName.isEmpty()) {
+                issues.add("scenario.truth_config_json.weapon_clue_name is missing");
+            } else if (!clueNames.isEmpty() && !clueNames.contains(weaponClueName)) {
+                issues.add("scenario.truth_config_json.weapon_clue_name must match one of clues[].name");
+            }
+        }
+
+        if (suspects.isArray()) {
+            for (JsonNode suspect : suspects) {
+                JsonNode weakness = suspect.path("ai_config_json").path("secret").path("weakness_clue");
+                if (!weakness.isObject()) {
+                    issues.add("suspect.ai_config_json.secret.weakness_clue is missing");
+                    continue;
+                }
+                String weaknessName = weakness.path("name").asText("").trim();
+                if (weaknessName.isEmpty()) {
+                    issues.add("suspect.ai_config_json.secret.weakness_clue.name is missing");
+                } else if (!clueNames.isEmpty() && !clueNames.contains(weaknessName)) {
+                    issues.add("suspect.ai_config_json.secret.weakness_clue.name must match one of clues[].name");
+                }
+            }
         }
 
         return issues;
+    }
+
+    private static JsonNode unwrapSingleObjectArray(JsonNode root) {
+        if (root != null && root.isArray() && root.size() == 1) {
+            JsonNode first = root.get(0);
+            if (first != null && first.isObject()) {
+                return first;
+            }
+        }
+        return root;
     }
 
     private static int len(String value) {

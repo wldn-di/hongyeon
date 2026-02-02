@@ -1,9 +1,13 @@
 package com.ssafy.s14p11a707.scenario.v2.node;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
+import java.util.ArrayList;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -31,6 +35,7 @@ import org.springframework.stereotype.Component;
 public class CharactersCluesTruthNode implements ScenarioV2Node {
 
     private final ChatClient chatClient;
+    private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
 
     /**
@@ -63,125 +68,260 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
 
         int suspectCount = state.getRequest().suspectCount();
 
-        String scenarioSystemMessage = String.format("""
+        String context = """
+                [Timeline JSON (cast + timeline)]
+                %s
 
-                                               Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
-                                               당신은 이전 호출에서 생성한 [scenario 객체(Timeline, title, synopsis, synopsisDetail, story_config_json) 를 포함한 이전 시나리오 설정]을 바탕으로 피해자, 용의자(요청된 수만큼), 증거(8~12개)를 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+                [Scenario JSON]
+                %s
+                """.formatted(state.getTimelineJson(), state.getScenarioJson());
 
-                                                [핵심 요청 사항]
-                                                        - 유저가 요청한 용의자 수: %d명
+        String system = """
+                Persona: 당신은 전문 추리 게임 시나리오 작가입니다.
 
-                                                   [작성 규칙]
-                                                   1. 데이터 연동: 1단계의 이름과 성별 그리고 직업은 절대 변경하지 마십시오.
-                                                   2. 정합성: 모든 용의자의 weakness_clue는 반드시 하단의 clues 배열에 동일한 정보로 존재해야 합니다.
-                                                   3. 레드 헤링: 단서 중 최소 2개는 사건과 무관한 용의자의 개인적 비밀(도박, 불륜 등)을 담으십시오.
-                                                   4. 익명화: revealed_truth에서 "A의 지문" 대신 "누군가의 지문"과 같이 서술하여 유저의 대조 추리를 유도하십시오.
-                                                   5. 실명 금지: 메모나 일기 단서에서 용의자 이름을 직접 쓰지 말고 이니셜이나 지칭어를 사용하십시오.
-                                                   6. 증거 개수: clues 배열은 반드시 8개 이상 12개 이하로 구성하십시오.
-                                                   7. 나이 설정: 각 인물의 직업, 피해자와의 관계, 범행 동기의 깊이를 고려하여 가장 개연성 있는 '나이(age)'를 숫자로 부여하십시오. (예: 피해자와 20년 전 원한 관계라면 나이는 최소 30대 후반 이상이어야 함)
-                                                   8. 증거 정합성: 생성된 '나이'나 '성격'이 증거(clues)의 설명과 모순되지 않아야 합니다. (예: 근력이 필요한 증거인데 나이가 너무 많지 않은지 확인)
-                                                   9. 알리바이: 타임라인에 맞춰 각 용의자가 숨기고 있는 비밀과 거짓말을 설계하십시오.
+                출력 규칙(STRICT):
+                - 응답은 반드시 단 하나의 JSON 오브젝트만 출력한다(사담/설명/마크다운/코드펜스 금지).
+                - 첫 글자는 '{', 마지막 글자는 '}' 여야 한다.
+                - 최상위 키는 정확히 다음 4개만 허용: truth_config_json, victim, suspects, clues
 
-                                                   위 설정을 바탕으로 victim, suspects 배열, clues 배열, truth_config_json을 생성하십시오. 용의자 수는 반드시 유저가 요청한 수와 일치해야 합니다.
+                핵심 제약(HARD):
+                - suspects는 반드시 배열이며 길이는 정확히 %d
+                - suspects에서 is_culprit=true 인 용의자는 정확히 1명
+                - clues는 반드시 배열이며 길이는 8~12
 
-                                                   [이전 단계 시나리오 정보]:
-                                                   %s
+                중요: DB ID를 절대 추측하지 마라.
+                - truth_config_json.culprit_id / weapon_clue_id, ai_config_json.secret.weakness_clue.id 는 0으로 둔다(서버가 DB 저장 후 실제 ID로 치환).
+                - 대신 weapon_clue_name / weakness_clue.name 으로 단서를 지정한다.
+                - weapon_clue_name, weakness_clue.name 은 반드시 clues[].name 중 하나를 그대로 복사해 사용한다(오타/추가 생성 금지).
 
-                                                   시나리오 작성 형식:
-                                                   {
-                                                     "truth_config_json": {
-                                                       "culprit_id": 0,
-                                                       "motive": "[상세 동기(유저가 설정한 동기가 있다면 핵심 내용을 포함하여 확장하고, 없다면 개연성 있는 동기를 창작)]",
-                                                       "weapon_clue_id": 0,
-                                                       "method": "[상세 수법(유저가 설계한 트릭과 수법을 무조건 반영하되, 묘사가 부족한 부분만 논리적으로 보완)]",
-                                                       "location_floor": 0,
-                                                       "cause_of_death": "[사인 상세(유저가 설정한 사인(예: 독살, 자상 등)이 있다면 그 사인을 포함하여 확장하고, 없다면 개연성 있는 사인을 창작)]"
-                                                     },
-                                                     "victim": {
-                                                       "name": "[이름]",
-                                                       "age": 0,
-                                                       "gender": "[남성/여성]",
-                                                       "occupation": "[직업]",
-                                                       "background": "[배경 설명]",
-                                                       "discovery_location": "[장소]",
-                                                       "estimated_death_time": "[시각]",
-                                                       "cause_of_death": "[사인]",
-                                                       "victim_detail_json": {
-                                                         "secret": "[비밀]",
-                                                         "hidden_info": "[정보]"
-                                                       }
-                                                     },
-                                                     "suspects": [
-                                                       { "name": "[이름]",
-                                                         "age": 0,
-                                                         "gender": "[성별]",
-                                                         "occupation": "[직업]",
-                                                         "one_liner": "[성격 요약]",
-                                                         "is_culprit": false,
-                                                         "motive": "[동기]",
-                                                         "ai_config_json": {
-                                                           "personality": "[성격]",
-                                                           "relationship": "[관계]",
-                                                           "knowledge_scope": {
-                                                             "knows_about": "[아는 정보 목록 문자열]",
-                                                             "doesnt_know": "[모르는 정보 목록 문자열]"
-                                                           },
-                                                           "secret": {
-                                                             "title": "[비밀 제목]",
-                                                             "content": "[비밀 내용]",
-                                                             "weakness_clue": {
-                                                               "id": 0,
-                                                               "name": "[단서명]",
-                                                               "description": "[설명]"
-                                                             },
-                                                             "alibi_progression": {
-                                                               "level1_lie": "[거짓말 확고 태도 (범행이 일어날 당시 하고 있었다고 주장할 장소 기반 주장)]",
-                                                               "level2_weak": "[거짓말 붕괴 태도(범행이 일어날 당시 실제로 있었던 장소 기반 주장)]"
-                                                             }
-                                                           },
-                                                           "deflection_strategy": {
-                                                             "target_name": "[타겟 이름]",
-                                                             "suspicion_point": "[의심 포인트]",
-                                                             "dialogue_hint": "[대화 힌트]"
-                                                           },
-                                                           "timeline_alibi": [
-                                                             {
-                                                               "time": "HH:MM",
-                                                               "location": "장소",
-                                                               "activity": "활동",
-                                                               "is_verified": false
-                                                             }
-                                                           ]
-                                                         }
-                                                       }
-                                                     ],
-                                                     "clues": [
-                                                       {
-                                                         "name": "[단서명]",
-                                                         "description": "[설명]",
-                                                         "importance": "[CRITICAL/RED_HERRING/SUPPORTING]",
-                                                         "assistant_comment": "[조수 코멘트]",
-                                                         "clue_detail_json": {
-                                                           "revealed_truth": "[밝혀지는 사실]",
-                                                           "related_suspect_ids": [0, 1],
-                                                           "discovery_script": "[발견 대사]",
-                                                           "is_weakness_clue_for": 0
-                                                         }
-                                                       }
-                                                     ]
-                                                   }
-                               Response strictly in JSON format.
-                """, suspectCount, state.getScenarioJson());
+                필수 필드 스키마(요약):
+                truth_config_json: {
+                  "culprit_id": 0,
+                  "motive": string,
+                  "weapon_clue_id": 0,
+                  "weapon_clue_name": string,
+                  "method": string,
+                  "location_floor": 1..6,
+                  "cause_of_death": string
+                }
 
-        String content = chatClient.prompt()
-                .system(scenarioSystemMessage)
-                .user("Generate victim, suspects, and clues based on the scenario above.")
-                .call()
-                .content();
+                victim: {
+                  "name": string,
+                  "age": number,
+                  "gender": string,
+                  "occupation": string,
+                  "background": string,
+                  "discovery_location": string,
+                  "estimated_death_time": string,
+                  "cause_of_death": string,
+                  "victim_detail_json": object
+                }
 
-        String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
-        state.setCharactersJson(cleaned);
-        log.info("[v2] CharactersCluesTruthNode completed. scenarioId={}, rawLen={}, jsonLen={}", state.getScenarioId(), content == null ? 0 : content.length(), cleaned.length());
-        return state;
+                suspects[] item: {
+                  "name": string,
+                  "age": number,
+                  "gender": string,
+                  "occupation": string,
+                  "one_liner": string,
+                  "is_culprit": boolean,
+                  "motive": string,
+                  "ai_config_json": {
+                    "personality": string,
+                    "relationship": string,
+                    "knowledge_scope": { "knows_about": string, "doesnt_know": string },
+                    "secret": {
+                      "title": string,
+                      "content": string,
+                      "weakness_clue": { "id": 0, "name": string, "description": string },
+                      "alibi_progression": { "level1_lie": string, "level2_weak": string }
+                    },
+                    "deflection_strategy": { "target_name": string, "suspicion_point": string, "dialogue_hint": string },
+                    "timeline_alibi": [ { "time": "HH:MM", "location": string, "activity": string, "is_verified": false } ]
+                  }
+                }
+
+                clues[] item: {
+                  "name": string,
+                  "description": string,
+                  "importance": "CRITICAL"|"RED_HERRING"|"SUPPORTING",
+                  "assistant_comment": string,
+                  "clue_detail_json": {
+                    "revealed_truth": string,
+                    "related_suspect_ids": array,
+                    "discovery_script": string,
+                    "is_weakness_clue_for": number
+                  }
+                }
+                """.formatted(suspectCount);
+
+        String user = """
+                Use the input JSON below. Keep cast names/gender/occupation from Timeline. Output ONLY the JSON object.
+
+                %s
+                """.formatted(context);
+
+        String lastCleaned = null;
+        List<String> lastIssues = List.of();
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            String attemptSystem = system;
+            if (attempt > 1) {
+                attemptSystem = system + """
+
+                        IMPORTANT:
+                        - Your previous output failed structural validation.
+                        - Fix the issues listed and output a single JSON object again.
+                        - Do not output multiple JSON blocks.
+
+                        Issues:
+                        %s
+
+                        Previous output (to repair):
+                        %s
+                        """.formatted(String.join("\n", lastIssues), safe(lastCleaned));
+            }
+
+            String content = chatClient.prompt()
+                    .system(attemptSystem)
+                    .user(user)
+                    .call()
+                    .content();
+
+            String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
+            List<String> issues = validateCharactersJson(cleaned, suspectCount);
+            if (issues.isEmpty()) {
+                state.setCharactersJson(cleaned);
+                state.setDraftJson(null);
+                log.info(
+                        "[v2] CharactersCluesTruthNode completed. scenarioId={}, attempt={}, rawLen={}, jsonLen={}, suspects={}, clues={}",
+                        state.getScenarioId(),
+                        attempt,
+                        content == null ? 0 : content.length(),
+                        cleaned.length(),
+                        countArray(cleaned, "suspects"),
+                        countArray(cleaned, "clues")
+                );
+                return state;
+            }
+
+            lastCleaned = cleaned;
+            lastIssues = issues;
+            log.warn(
+                    "[v2] CharactersCluesTruthNode output invalid. scenarioId={}, attempt={}, issues={}, preview={}",
+                    state.getScenarioId(),
+                    attempt,
+                    String.join("; ", issues),
+                    preview(cleaned, 400)
+            );
+        }
+
+        throw new IllegalStateException("failed to generate valid characters/clues json: " + String.join("; ", lastIssues));
+    }
+
+    private List<String> validateCharactersJson(String json, int suspectCount) {
+        List<String> issues = new ArrayList<>();
+        JsonNode root;
+        try {
+            root = objectMapper.readTree(json);
+        } catch (Exception e) {
+            issues.add("output is not valid JSON");
+            return issues;
+        }
+
+        if (!root.isObject()) {
+            issues.add("root must be a JSON object");
+            return issues;
+        }
+
+        JsonNode victim = root.path("victim");
+        if (!victim.isObject()) {
+            issues.add("victim must be an object");
+        }
+
+        JsonNode clues = root.path("clues");
+        List<String> clueNames = new ArrayList<>();
+        if (!clues.isArray()) {
+            issues.add("clues must be an array");
+        } else if (clues.size() < 8 || clues.size() > 12) {
+            issues.add("clues size must be between 8 and 12");
+        } else {
+            for (JsonNode clue : clues) {
+                String name = clue.path("name").asText("").trim();
+                if (name.isEmpty()) {
+                    issues.add("clue.name is missing");
+                    continue;
+                }
+                clueNames.add(name);
+            }
+            if (clueNames.stream().distinct().count() != clueNames.size()) {
+                issues.add("clue names must be unique");
+            }
+        }
+
+        JsonNode suspects = root.path("suspects");
+        if (!suspects.isArray()) {
+            issues.add("suspects must be an array");
+        } else if (suspects.size() != suspectCount) {
+            issues.add("suspects size must be " + suspectCount);
+        } else {
+            int culprits = 0;
+            for (JsonNode suspect : suspects) {
+                if (suspect.path("is_culprit").asBoolean(false)) {
+                    culprits++;
+                }
+
+                JsonNode weakness = suspect.path("ai_config_json").path("secret").path("weakness_clue");
+                if (!weakness.isObject()) {
+                    issues.add("suspect.ai_config_json.secret.weakness_clue must be an object");
+                    continue;
+                }
+                String weaknessName = weakness.path("name").asText("").trim();
+                if (weaknessName.isEmpty()) {
+                    issues.add("weakness_clue.name is missing");
+                    continue;
+                }
+                if (!clueNames.isEmpty() && !clueNames.contains(weaknessName)) {
+                    issues.add("weakness_clue.name must match one of clues[].name (" + weaknessName + ")");
+                }
+            }
+            if (culprits != 1) {
+                issues.add("exactly 1 suspect must have is_culprit=true");
+            }
+        }
+
+        JsonNode truthConfig = root.path("truth_config_json");
+        if (!truthConfig.isObject()) {
+            issues.add("truth_config_json must be an object");
+        } else {
+            String weaponName = truthConfig.path("weapon_clue_name").asText("").trim();
+            if (weaponName.isEmpty()) {
+                issues.add("truth_config_json.weapon_clue_name is missing");
+            } else if (!clueNames.isEmpty() && !clueNames.contains(weaponName)) {
+                issues.add("truth_config_json.weapon_clue_name must match one of clues[].name (" + weaponName + ")");
+            }
+        }
+
+        return issues;
+    }
+
+    private int countArray(String json, String field) {
+        try {
+            JsonNode root = objectMapper.readTree(json);
+            JsonNode node = root.path(field);
+            return node.isArray() ? node.size() : -1;
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
+    private String preview(String value, int maxLen) {
+        if (value == null) {
+            return "";
+        }
+        String trimmed = value.trim();
+        return trimmed.length() <= maxLen ? trimmed : trimmed.substring(0, maxLen) + "...";
     }
 }
