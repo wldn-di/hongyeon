@@ -199,6 +199,29 @@ v2 코드는 v1과 섞이지 않게 별도 패키지로 분리:
   - (초기) Mock 구현(더미 이미지 바이트)로 병렬/리트라이/업로드 검증
   - (추후) 실제 이미지 모델/외부 API 연동 구현
 
+### 8.1 트러블슈팅(이미지 URL/MinIO)
+
+- [ ] 증상: 프론트에서 이미지가 깨지거나(404), MinIO가 403(AccessDenied) 반환
+- [ ] 원인(핵심): 프론트는 `thumbnailUrl`/`portraitUrl`/`detailImageUrl`을 그대로 `<img src>`로 로드한다
+  - 따라서 백엔드가 내려주는 URL이 **브라우저에서 접근 가능한 주소**여야 한다
+- [ ] 원인(자주): 백엔드가 업로드 후 URL을 `MINIO_ENDPOINT` 기반으로 만들어 저장/응답함
+  - 로컬(SSH 터널 `http://localhost:19000`) / 배포(도커 내부 `http://minio:9000`) 값이 섞이면 브라우저에서 접근 불가
+- [ ] 원인(자주): 버킷이 비공개(`mc anonymous set none`)면 브라우저 direct GET이 403
+- [ ] 해결(권장): **환경을 확실히 분리**하고, 배포 환경의 `MINIO_ENDPOINT`는 “브라우저 접근 가능한 도메인(리버스 프록시)”로 맞춘다
+  - 예: `https://minio.hongyeon.cloud-ip.cc`
+- [ ] 해결(대안): DB에는 URL 대신 objectKey만 저장하고, API 응답에서 공개 base URL을 조합해 내려준다(내부 업로드 endpoint와 공개 endpoint 분리)
+- [ ] 해결(간단/주의): 버킷을 공개 다운로드로 열기 `mc anonymous set download local/<bucket>` (민감 이미지면 비권장)
+- [ ] 리버스 프록시(Nginx Proxy Manager) 체크
+  - [ ] upstream host는 `minio:9000`(서비스명) 사용
+  - [ ] SSL 강제 적용은 인증서 발급 성공 후 켜기
+  - [ ] DNS에 `minio` 서브도메인 A/CNAME 레코드 필요 + 서버 80/443 인바운드 오픈(HTTP-01 기준)
+- [ ] docker-compose 포트 바인딩(권장)
+  - [ ] 로컬: `minio`는 host-only로 포트 분리 바인딩(예: `127.0.0.1:19000->9000`, `127.0.0.1:19001->9001`)
+  - [ ] 배포: MinIO 포트를 외부에 직접 노출하지 말고(NPM 통해서만 접근), 필요하면 `127.0.0.1`로만 제한 바인딩
+- [ ] `.env` / `.env.dev`(환경별 엔드포인트) 정리
+  - [ ] 로컬(`.env`): `MINIO_ENDPOINT=http://localhost:19000`처럼 로컬 compose 포트와 1:1로 맞춘다
+  - [ ] 배포(`.env.dev`): `MINIO_ENDPOINT`를 브라우저가 접근 가능한 도메인(리버스 프록시)로 맞추거나, (대안) 코드에서 내부/공개 endpoint 분리 구현 후 내부(`http://minio:9000`)로 유지한다
+
 ---
 
 ## 9) 진행률/스토리텔링 메시지
