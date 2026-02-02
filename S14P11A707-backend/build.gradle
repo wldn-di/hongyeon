@@ -43,11 +43,8 @@ dependencies {
     implementation 'org.springframework.ai:spring-ai-starter-model-google-genai'
     implementation 'org.springframework.ai:spring-ai-starter-model-google-genai-embedding'
     implementation 'org.springframework.ai:spring-ai-google-genai-embedding'
-    implementation("org.springframework.ai:spring-ai-vector-store:1.1.2")
-    implementation("org.springframework.ai:spring-ai-advisors-vector-store:1.1.2")
 
     implementation 'org.springframework.ai:spring-ai-starter-model-chat-memory-repository-jdbc'
-    implementation 'org.springframework.ai:spring-ai-starter-vector-store-pgvector'
 
     // swagger
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.14'
