@@ -69,6 +69,15 @@ public class SecurityConfig {
             "/api/auth/login"
     };
 
+    private static final String[] PUBLIC_GET_WHITELIST = {
+            // Scenarios: list/search/detail/victim/suspects/rankings (read-only)
+            "/api/scenarios/**",
+            // Reviews: list by scenario (read-only)
+            "/api/reviews/*/reviews",
+            // Global rankings (read-only)
+            "/api/rankings"
+    };
+
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
     private final RestAccessDeniedHandler restAccessDeniedHandler;
     private final ClientRegistrationRepository clientRegistrationRepository;
@@ -119,6 +128,7 @@ public class SecurityConfig {
                         .requestMatchers(SWAGGER_WHITELIST).permitAll()
                         .requestMatchers(PUBLIC_WHITELIST).permitAll()
                         .requestMatchers("/api/v1/**").permitAll()
+                        .requestMatchers(HttpMethod.GET, PUBLIC_GET_WHITELIST).permitAll()
                         .anyRequest().authenticated()
                 )
                 .exceptionHandling(exceptionHandling -> exceptionHandling

@@ -11,10 +11,7 @@ import jakarta.persistence.JoinColumn;
 import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
-import lombok.AccessLevel;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
 
@@ -55,6 +52,7 @@ public class Suspect {
 
     private Integer displayOrder;
 
+    @Setter
     @Column(length = 500)
     private String portraitUrl;
 
@@ -88,4 +86,5 @@ public class Suspect {
         this.portraitUrl = portraitUrl;
         this.aiConfigJson = aiConfigJson;
     }
+
 }
