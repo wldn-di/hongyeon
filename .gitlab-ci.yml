@@ -22,7 +22,7 @@ deploy:
     - name: docker:27.0.3-dind
       command: ["--tls=false"]
   rules:
-    - if: '$CI_COMMIT_REF_NAME =~ /^(main|master|test-build|test\\/.*)$/'
+    - if: '$CI_COMMIT_REF_NAME =~ /^(fix|master|test-build|test\\/.*)$/'
   before_script:
     - apt-get update && apt-get install -y openssh-client docker.io
     # SSH 키 설정 (GitLab CI Variables에 EC2_SSH_KEY 등록 필요 - File 타입)
