@@ -5,10 +5,8 @@ import { ArrowLeft, Sparkles, Users, BookOpen, Layers, Loader2 } from "lucide-re
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { useCreateScenario } from "@/features/scenarios/hooks/useCreateScenario";
-
-import { getPendingScenarioId, clearPendingScenarioId } from "@/features/scenarios/polling/scenarioJobStore";
-import { useScenarioJob } from "@/features/scenarios/polling/ScenarioJobContext";
-import { deleteScenario } from "@/features/scenarios/api/scenariosApi";
+import { useScenarioGeneration } from "@/features/scenarios/generation/ScenarioGenerationContext";
+import ScenarioGenerationStatusPanel from "@/components/ui/ScenarioGenerationStatusPanel";
 
 // 장르 옵션
 const genreOptions = [
@@ -22,11 +20,8 @@ const suspectCountOptions = [4, 5];
 
 export default function CreateScenario() {
   const [, setLocation] = useLocation();
-  const { createScenario, isGenerating, progress, message } = useCreateScenario();
-  const { job, setJob } = useScenarioJob();
-
-  // pendingId를 state로 관리해서 생성 취소 즉시 UI 반영
-  const [pendingId, setPendingId] = useState(() => getPendingScenarioId());
+  const { generation } = useScenarioGeneration();
+  const { createScenario, isGenerating } = useCreateScenario();
 
   const [formData, setFormData] = useState({
     title: "",
@@ -35,34 +30,12 @@ export default function CreateScenario() {
     genre: "crime",
   });
 
-  // pending으로 로컬스토리지에 저장돼 있거나 생성 중(isGenerating)이면 폼 잠금
-  const locked = !!pendingId || isGenerating;
+  // 전역 생성 상태가 true이면 새 생성 UX 차단
+  const locked = generation.isScenarioGenerating || isGenerating;
 
   const handleChange = (field, value) => {
     if (locked) return;
     setFormData((prev) => ({ ...prev, [field]: value }));
-  };
-
-  const handleCancelPending = async () => {
-    if (!pendingId) return;
-
-    // UX: 즉시 버튼 잠금 느낌 주고 싶으면 toast.loading도 가능
-    toast.message("생성 취소를 요청했어요...");
-
-    try {
-      // best effort: 백이 delete를 취소로 처리해주면 실제로도 멈춤
-      await deleteScenario(pendingId);
-      toast.success("생성 작업을 취소했어요. 이제 새로 만들 수 있어요.");
-    } catch (e) {
-      console.warn("[cancel] deleteScenario failed", e);
-      // 서버가 취소 미지원이어도 UX는 풀어주되, 안내
-      toast.message("취소 요청은 처리하지 못했지만, 새로 만들 수 있도록 화면을 해제했어요.");
-    } finally {
-      // 중요: 로컬 pending 제거 + UI 즉시 해제
-      clearPendingScenarioId();
-      setPendingId(null);
-      setJob(null);
-    }
   };
 
   const handleSubmit = async (e) => {
@@ -85,16 +58,10 @@ export default function CreateScenario() {
     const result = await createScenario(formData);
     console.log("[createScenario result]", result);
 
-    // createScenario가 PENDING이면 success:true로 주고 목록으로 보내는 흐름
     if (result.success) {
-      // 생성 시작/완료 여부와 상관없이 목록으로 이동(전역 watcher가 완료/실패 토스트)
-      if (result.scenarioId) setPendingId(result.scenarioId);
       setLocation("/scenarios");
     }
   };
-
-  const uiProgress = job?.progress ?? progress ?? 0;
-  const uiMessage = job?.message ?? message ?? "";
 
   return (
     <div className="min-h-screen flex flex-col bg-background">
@@ -114,26 +81,12 @@ export default function CreateScenario() {
             <p className="text-muted-foreground">AI가 당신만의 추리 시나리오를 생성해드립니다</p>
           </div>
 
-          {/* pending이면 항상 생성 카드 표시 + 취소 버튼 */}
-          {pendingId && (
-            <div className="mb-6 bg-card border border-primary/30 rounded-lg p-6">
-              <div className="flex items-center justify-between gap-3 mb-4">
-                <div className="flex items-center gap-3">
-                  <Loader2 className="w-5 h-5 text-primary animate-spin" />
-                  <span className="font-bold text-primary">현재 AI가 시나리오 생성 중...</span>
-                </div>
-
-                <Button type="button" variant="outline" onClick={handleCancelPending}>
-                  생성 취소
-                </Button>
-              </div>
-
-              <div className="w-full bg-muted rounded-full h-2 overflow-hidden">
-                <div className="h-full bg-primary transition-all duration-300" style={{ width: `${uiProgress}%` }} />
-              </div>
-              <p className="text-sm text-muted-foreground mt-2">{uiMessage || "생성 중입니다. 완료되면 알림으로 알려드릴게요."}</p>
-            </div>
-          )}
+          <ScenarioGenerationStatusPanel />
+            {locked && (
+              <p className="mt-3 text-sm text-muted-foreground">
+                생성 중에는 새 시나리오 생성이 불가합니다. <span className="text-primary">🔔</span>에서 진행 상황을 확인하세요.
+              </p>
+            )}
 
           {/* 폼 */}
           <form onSubmit={handleSubmit} className="space-y-6">

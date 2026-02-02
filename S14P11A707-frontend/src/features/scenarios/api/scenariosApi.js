@@ -8,13 +8,46 @@ import { ApiError } from '@/api/errors/ApiError'
  */
 
 /**
+ * Spring 호환 배열 쿼리 직렬화
+ * genres=crime&genres=mystery 형태로 전송
+ */
+const paramsSerializer = (params) => {
+  const sp = new URLSearchParams()
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+    if (value === undefined || value === null) return
+
+    if (Array.isArray(value)) {
+      value.filter(Boolean).forEach((v) => sp.append(key, String(v)))
+      return
+    }
+
+    const str = String(value)
+    if (str.length === 0) return
+    sp.set(key, str)
+  })
+
+  return sp.toString()
+}
+
+/**
  * 시나리오 목록 조회 (GET /api/scenarios)
+ * @param {Object} [params]
+ * @param {string} [params.keyword]
+ * @param {string[]} [params.genres]
+ * @param {string[]} [params.difficulties]
+ * @param {string} [params.sortBy] - latest|popular|rating
+ * @param {number} [params.page] - 0-base
+ * @param {number} [params.size]
  * @returns {Promise<ScenarioListResponse>}
  * @throws {ApiError}
  */
-export const fetchScenarios = async () => {
+export const fetchScenarios = async (params = {}) => {
   try {
-    const response = await apiClient.get(ENDPOINTS.scenarios.list)
+    const response = await apiClient.get(ENDPOINTS.scenarios.list, {
+      params,
+      paramsSerializer,
+    })
     return response.data
   } catch (error) {
     if (error.response?.data) {
@@ -41,6 +74,40 @@ export const searchScenarios = async (keyword) => {
       throw ApiError.fromAxiosError(error)
     }
     throw new ApiError('시나리오 검색에 실패했습니다.')
+  }
+}
+
+/**
+ * 평점 TOP 10 (GET /api/scenarios/top/rating)
+ * @returns {Promise<any>}
+ * @throws {ApiError}
+ */
+export const fetchTopScenariosByRating = async () => {
+  try {
+    const response = await apiClient.get(ENDPOINTS.scenarios.topByRating)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('TOP 시나리오(평점) 조회에 실패했습니다.')
+  }
+}
+
+/**
+ * 플레이수 TOP 10 (GET /api/scenarios/top/play-count)
+ * @returns {Promise<any>}
+ * @throws {ApiError}
+ */
+export const fetchTopScenariosByPlayCount = async () => {
+  try {
+    const response = await apiClient.get(ENDPOINTS.scenarios.topByPlayCount)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('TOP 시나리오(플레이수) 조회에 실패했습니다.')
   }
 }
 
@@ -171,6 +238,25 @@ export const createScenario = async (data) => {
 }
 
 /**
+ * 시나리오 생성 v2 (POST /api/v2/scenarios)
+ * - v2는 진행 상황을 SSE(/api/v2/scenarios/stream)로 전달
+ * @param {Object} data
+ * @returns {Promise<any>}
+ * @throws {ApiError}
+ */
+export const createScenarioV2 = async (data) => {
+  try {
+    const response = await apiClient.post(ENDPOINTS.scenariosV2.create, data)
+    return response.data
+  } catch (error) {
+    if (error.response?.data) {
+      throw ApiError.fromAxiosError(error)
+    }
+    throw new ApiError('시나리오 생성(v2)에 실패했습니다.')
+  }
+}
+
+/**
  * 시나리오 삭제 (DELETE /api/scenarios/{scenarioId})
  * @param {number} scenarioId
  * @returns {Promise<ScenarioDeleteResponse>}
@@ -191,6 +277,8 @@ export const deleteScenario = async (scenarioId) => {
 export default {
   fetchScenarios,
   searchScenarios,
+  fetchTopScenariosByRating,
+  fetchTopScenariosByPlayCount,
   fetchScenarioDetail,
   fetchScenarioSuspects,
   fetchScenarioVictim,
@@ -198,5 +286,6 @@ export default {
   fetchScenarioRankings,
   fetchScenarioStatus,
   createScenario,
+  createScenarioV2,
   deleteScenario,
 }

@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { fetchMyScenarios } from "../../user/api/userApi";
 import { mapScenarioListResponseFull } from "../../scenarios/api/scenarioMappers";
-import { toast } from "sonner";
 
 /**
  * 내 시나리오 목록 조회 Hook
+ * @param {Object} [options]
+ * @param {boolean} [options.enabled=true]
  * @returns {Object} { scenarios, loading, error, refetch }
  */
-export function useMyScenarios() {
+export function useMyScenarios(options = {}) {
+  const { enabled = true } = options;
   const [data, setData] = useState({
     scenarios: [],
   });
@@ -15,6 +17,10 @@ export function useMyScenarios() {
   const [error, setError] = useState(null);
 
   const fetch = async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -29,11 +35,6 @@ export function useMyScenarios() {
       if (err.response?.status !== 401) {
         //toast.error("내 시나리오를 불러오는데 실패했습니다.");
       }
-      // useMyScenarios.js (개발 중 임시)
-      if (err.response?.status === 401) {
-        console.warn("내 시나리오 401: 로그인/토큰/쿠키 문제", err);
-        toast.error("내 시나리오 조회 401 (인증 필요)"); // 개발 중만
-      }
       console.error("useMyScenarios error:", err);
     } finally {
       setLoading(false);
@@ -42,7 +43,7 @@ export function useMyScenarios() {
 
   useEffect(() => {
     fetch();
-  }, []);
+  }, [enabled]);
 
   return {
     scenarios: data.scenarios,

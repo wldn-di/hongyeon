@@ -1,39 +1,63 @@
-import { useMemo } from 'react'
+import { useMemo } from "react";
 
 export function useFilteredScenarios(scenarios, filters) {
-    const { genreFilter, difficultyFilter, sortBy } = filters
+  const { keyword, genres, difficulties, sortBy } = filters;
 
-    return useMemo(() => {
-        let result = [...scenarios]
+  return useMemo(() => {
+    let result = [...scenarios];
 
-        // TODO: 장르 필터 이후 필요에 따라 구현
-        if (genreFilter !== 'all') {
-            // result = result.filter(s => s.genre === genreFilter)
-        }
+    const normalizedKeyword = String(keyword || "")
+      .trim()
+      .toLowerCase();
+    if (normalizedKeyword) {
+      result = result.filter((scenario) => {
+        const haystack =
+          `${scenario.title ?? ""} ${scenario.synopsis ?? ""} ${scenario.description ?? ""}`.toLowerCase();
+        return haystack.includes(normalizedKeyword);
+      });
+    }
 
-        // 난이도 필터 기능
-        if (difficultyFilter !== 'all') {
-            result = result.filter((s) => s.difficulty === difficultyFilter)
-        }
+    // 장르 필터 (중복 선택 가능)
+    if (Array.isArray(genres) && genres.length > 0) {
+      const set = new Set(genres.map(String));
+      result = result.filter((s) => set.has(String(s.genre)));
+    }
 
-        // 정렬 위치
-        result = sortScenarios(result, sortBy)
+    // 난이도 필터 (중복 선택 가능)
+    if (Array.isArray(difficulties) && difficulties.length > 0) {
+      const set = new Set(difficulties.map(String));
+      result = result.filter((s) => set.has(String(s.difficulty)));
+    }
 
-        return result
-    }, [scenarios, genreFilter, difficultyFilter, sortBy])    
+    // 정렬 위치
+    result = sortScenarios(result, sortBy);
+
+    return result;
+  }, [scenarios, keyword, genres, difficulties, sortBy]);
 }
 
 function sortScenarios(scenarios, sortBy) {
-    const sorted = [...scenarios]
+  const sorted = [...scenarios];
 
-    switch(sortBy) {
-        case 'popular' :
-            return sorted.sort((a, b) => b.playCount - a.playCount)
-        case 'views' :
-            return sorted.sort((a, b) => b.playCount - a.playCount)
-        case 'rating':
-            return sorted.sort((a, b) => b.rating - a.rating)
-        default:
-            return sorted
-    }
+  switch (sortBy) {
+    case "latest":
+      return sorted.sort((a, b) => {
+        const aTime = a.createdAt
+          ? new Date(a.createdAt).getTime()
+          : Number(a.id) || 0;
+        const bTime = b.createdAt
+          ? new Date(b.createdAt).getTime()
+          : Number(b.id) || 0;
+        return bTime - aTime;
+      });
+    case "popular":
+      return sorted.sort((a, b) => b.playCount - a.playCount);
+    case "rating":
+      return sorted.sort(
+        (a, b) =>
+          (b.avgRating ?? b.rating ?? 0) - (a.avgRating ?? a.rating ?? 0),
+      );
+    default:
+      return sorted;
+  }
 }

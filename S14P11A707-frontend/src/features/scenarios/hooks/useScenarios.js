@@ -1,13 +1,43 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchScenarios, searchScenarios } from "../api/scenariosApi";
 import { mapScenarioListResponseFull } from "../api/scenarioMappers";
-import { toast } from "sonner";
 
 /**
  * 시나리오 목록 조회 Hook
+ * 서버 사이드 필터/정렬/페이지네이션 지원
+ * @param {Object} params
+ * @param {string} [params.keyword]
+ * @param {string[]} [params.genres]
+ * @param {string[]} [params.difficulties]
+ * @param {string} [params.sortBy]
+ * @param {number} [params.page]
+ * @param {number} [params.size]
+ * @param {Object} [options]
+ * @param {boolean} [options.enabled=true]
  * @returns {Object} { scenarios, loading, error, refetch }
  */
-export function useScenarios() {
+export function useScenarios(params = {}, options = {}) {
+  const { enabled = true } = options;
+
+  const safeParams = useMemo(
+    () => ({
+      keyword: params.keyword || "",
+      genres: Array.isArray(params.genres) ? params.genres : [],
+      difficulties: Array.isArray(params.difficulties) ? params.difficulties : [],
+      sortBy: params.sortBy || "popular",
+      page: Number.isFinite(Number(params.page)) ? Number(params.page) : 0,
+      size: Number.isFinite(Number(params.size)) ? Number(params.size) : 20,
+    }),
+    [
+      params.keyword,
+      params.genres,
+      params.difficulties,
+      params.sortBy,
+      params.page,
+      params.size,
+    ],
+  );
+
   const [data, setData] = useState({
     scenarios: [],
     totalPages: 0,
@@ -17,11 +47,15 @@ export function useScenarios() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  const fetch = async () => {
+  const fetch = useCallback(async () => {
+    if (!enabled) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
-      const response = await fetchScenarios();
+      const response = await fetchScenarios(safeParams);
       const mapped = mapScenarioListResponseFull(response);
       setData({
         scenarios: mapped.content,
@@ -31,16 +65,15 @@ export function useScenarios() {
       });
     } catch (err) {
       setError(err);
-      //toast.error('시나리오 목록을 불러오는데 실패했습니다.')
       console.error("useScenarios error:", err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [enabled, safeParams]);
 
   useEffect(() => {
     fetch();
-  }, []);
+  }, [fetch]);
 
   return {
     scenarios: data.scenarios,
