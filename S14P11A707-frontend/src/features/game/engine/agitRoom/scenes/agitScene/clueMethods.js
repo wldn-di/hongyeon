@@ -3,11 +3,13 @@ import Phaser from "phaser";
 export const clueMethods = {
     isFlashlightRevealingClues() {
         const minAlpha = this.FLASHLIGHT_CLUE_REVEAL_MIN_ALPHA ?? 0.15;
-        return Boolean(this.flashlight && this.isFlashlightOn && this.flashAlpha > minAlpha);
+        // 안전장치: flashlight 객체가 실제로 존재하는지 체크
+        return Boolean(this.flashlight && this.flashlight.active && this.isFlashlightOn && this.flashAlpha > minAlpha);
     },
 
     isPointInFlashlightCone(x, y) {
-        if (!this.isFlashlightRevealingClues()) return false;
+        // 1. 안전장치: 손전등이 없거나 꺼져있으면 계산 중단
+        if (!this.flashlight || !this.isFlashlightOn) return false;
 
         const originX = this.flashlight.x;
         const originY = this.flashlight.y;
@@ -16,15 +18,27 @@ export const clueMethods = {
         const dy = y - originY;
         const dist = Math.sqrt(dx * dx + dy * dy);
 
-        const baseRadius = this.FLASHLIGHT_CLUE_REVEAL_RADIUS ?? 210;
-        const radius = baseRadius * (this.flashlight.scaleX ?? 1);
-        if (dist > radius) return false;
+        // [판정 거리] 750px * 스케일 * 1.3배 (아주 넓음)
+        const baseRadius = 250;
+        const currentScale = this.flashlight.scaleX || 1;
+        const maxDist = baseRadius * currentScale * 1.0;
 
+        if (dist > maxDist) return false;
+
+        // [각도 계산] Phaser 의존성 제거 (순수 수학으로 구현)
         const angleToPoint = Math.atan2(dy, dx);
-        const delta = Phaser.Math.Angle.Wrap(angleToPoint - this.flashlight.rotation);
+        const flashRotation = this.flashlight.rotation || 0;
 
-        const halfAngle = this.FLASHLIGHT_CLUE_REVEAL_HALF_ANGLE ?? Math.PI / 10;
-        return Math.abs(delta) <= halfAngle;
+        let delta = angleToPoint - flashRotation;
+
+        // 각도 보정 (-PI ~ PI)
+        while (delta <= -Math.PI) delta += Math.PI * 2;
+        while (delta > Math.PI) delta -= Math.PI * 2;
+
+        // [판정 각도] 약 82도 (좌우 합치면 164도) -> 거의 앞면 전체가 다 보임
+        const leniencyAngle = Math.PI / 6;
+
+        return Math.abs(delta) <= leniencyAngle;
     },
 
     updateClueVisibilityByFlashlight() {
@@ -32,8 +46,11 @@ export const clueMethods = {
             return;
         }
 
+        // 손전등이 켜져있는지 확인 (켜져있으면 true, 꺼져있으면 false)
         const revealing = this.isFlashlightRevealingClues();
-        const nearRadius = Number.isFinite(this.CLUE_NEAR_REVEAL_RADIUS) ? this.CLUE_NEAR_REVEAL_RADIUS : 18;
+
+        // 플레이어 몸 주변 감지 거리 (100px)
+        const nearRadius = 40;
         const nearRadiusSq = nearRadius * nearRadius;
 
         for (const clue of this.clues) {
@@ -41,13 +58,18 @@ export const clueMethods = {
 
             const baseY = clue.getData("baseY") ?? clue.y;
             let isNearPlayer = false;
+
             if (this.player) {
                 const dx = clue.x - this.player.x;
                 const dy = baseY - this.player.y;
-                isNearPlayer = dx * dx + dy * dy <= nearRadiusSq;
+                isNearPlayer = (dx * dx + dy * dy) <= nearRadiusSq;
             }
 
+            // [핵심 수정] 괄호 위치 변경!
+            // 기존: isNearPlayer || (revealing && ...)  <-- 이게 문제였음
+            // 변경: revealing && (isNearPlayer || ...)  <-- 손전등이 켜져 있어야만 뒤의 조건을 확인함
             const shouldReveal = revealing && (isNearPlayer || this.isPointInFlashlightCone(clue.x, baseY));
+
             if (shouldReveal) {
                 if (!clue.visible) {
                     clue.setVisible(true);
@@ -58,6 +80,7 @@ export const clueMethods = {
                 continue;
             }
 
+            // 안 보여야 하는 상황 (손전등 꺼짐 포함)
             if (clue.visible) {
                 const baseY = clue.getData("baseY") ?? clue.y;
                 clue.y = baseY;
@@ -67,7 +90,7 @@ export const clueMethods = {
             }
         }
 
-        // 손전등 밖으로 나가서 타겟이 숨겨졌으면 즉시 정리
+        // 손전등 밖으로 나가거나 꺼져서 타겟이 숨겨졌으면 하이라이트 해제
         if (this.highlightTarget && (!this.highlightTarget.active || !this.highlightTarget.visible)) {
             this.highlightTarget = null;
             if (this.interactGlow) {
@@ -86,12 +109,11 @@ export const clueMethods = {
             g.generateTexture("clue_spark", 4, 4);
             g.destroy();
         }
-    
-        // on:false 로 시작 꺼두기
+
         this.clueSparkle = this.add.particles(0, 0, "clue_spark", {
             lifespan: { min: 280, max: 560 },
             speed: { min: 6, max: 18 },
-            angle: { min: 250, max: 290 }, // 위로 살짝 퍼짐
+            angle: { min: 250, max: 290 },
             scale: { start: 1.0, end: 0 },
             alpha: { start: 0.9, end: 0 },
             quantity: 1,
@@ -99,7 +121,7 @@ export const clueMethods = {
             blendMode: "ADD",
             on: false,
         });
-    
+
         this.clueSparkle.setDepth(12010);
         this.clueSparkleEmitter = this.clueSparkle.emitters?.list?.[0] ?? null;
         this.clueSparkleOn = false;
@@ -107,7 +129,7 @@ export const clueMethods = {
 
     setClueSparkle(active, x, y) {
         if (!this.clueSparkle || !this.clueSparkleEmitter) return;
-    
+
         if (active) {
             this.clueSparkle.setPosition(x, y);
             if (!this.clueSparkleOn) {
@@ -134,30 +156,30 @@ export const clueMethods = {
     createInspectUI() {
         const w = this.sys.game.config.width;
         const h = this.sys.game.config.height;
-    
+
         this.inspectUI = this.add.container(w / 2, h / 2).setScrollFactor(0).setDepth(30000).setVisible(false);
-    
+
         const panelW = 300;
         const panelH = 200;
-    
+
         const bg = this.add.rectangle(0, 0, panelW, panelH, 0x000000, 0.9).setStrokeStyle(2, 0xffffff);
         const title = this.add.text(-panelW / 2 + 18, -panelH / 2 + 14, "TITLE", {
             fontSize: "18px",
             color: "#ffffff",
             fontStyle: "bold",
         });
-    
+
         const body = this.add.text(-panelW / 2 + 18, -panelH / 2 + 48, "BODY", {
             fontSize: "14px",
             color: "#dddddd",
             wordWrap: { width: panelW - 36 },
             lineSpacing: 4,
         });
-    
+
         const hint = this.add
             .text(panelW / 2 - 18, panelH / 2 - 14, "SPACE/ESC 닫기", { fontSize: "12px", color: "#aaaaaa" })
             .setOrigin(1, 1);
-    
+
         this.inspectTitleText = title;
         this.inspectBodyText = body;
         this.inspectUI.add([bg, title, body, hint]);
@@ -165,38 +187,36 @@ export const clueMethods = {
 
     openInspect(target) {
         if (!target) return;
-    
+
         const title = target.getData("title") || "Unknown";
         const body = target.getData("body") || "";
         const evidenceId = target.getData("evidenceId") ?? null;
         const clueId = target.getData("clueId") ?? null;
-    
+
         try {
             this.onClueInspected?.({ evidenceId, clueId, title, body });
         } catch (e) {
             console.error("AgitScene onClueInspected error:", e);
         }
-    
+
         this.isInspecting = true;
         this.inspectTarget = null;
-    
+
         this.inspectTitleText.setText(title);
         this.inspectBodyText.setText(body);
         this.inspectUI.setVisible(true);
-    
-        // 하이라이트/스파클 정리
+
         if (this.highlightTarget === target) this.highlightTarget = null;
         if (this.interactGlow) {
             this.interactGlow.setVisible(false);
             this.interactGlow.setAlpha(0);
         }
         this.setClueSparkle(false);
-    
-        // clues 배열에서 제거 + 삭제
+
         const idx = this.clues.indexOf(target);
         if (idx !== -1) this.clues.splice(idx, 1);
         target.destroy();
-    
+
         this.interactionContainer?.setVisible(false);
     },
 
@@ -210,10 +230,10 @@ export const clueMethods = {
         const makeClue = ({ clueId, evidenceId, roomIndex, localX, localY, title, body }) => {
             const room = this.roomsData[roomIndex];
             if (!room) return;
-    
+
             const x = room.x + localX;
             const y = room.y + localY;
-    
+
             const clue = this.add.image(x, y, "clue_object");
             clue.setScale(this.CLUE_SCALE);
             clue.setDepth(y);
@@ -228,13 +248,13 @@ export const clueMethods = {
             clue.setData("baseY", clue.y);
             this.clues.push(clue);
         };
-    
+
         (Array.isArray(clues) ? clues : []).forEach((c, idx) => {
             const roomIndex = Number.isFinite(c?.roomIndex) ? c.roomIndex : null;
             const localX = Number.isFinite(c?.localX) ? c.localX : null;
             const localY = Number.isFinite(c?.localY) ? c.localY : null;
             if (roomIndex == null || localX == null || localY == null) return;
-    
+
             makeClue({
                 clueId: c?.clueId ?? idx,
                 evidenceId: c?.evidenceId ?? null,
@@ -262,7 +282,7 @@ export const clueMethods = {
 
     getNearestClue(maxDist) {
         if (!this.player || this.clues.length === 0) return null;
-    
+
         let best = null;
         let bestD = Infinity;
         for (const obj of this.clues) {
@@ -281,10 +301,8 @@ export const clueMethods = {
 
     updateNearestClueHighlight(time) {
         if (!this.interactGlow || !this.player || this.isInspecting) return;
-    
-        // 90ms마다만 갱신(성능)
+
         if (time < this.lastHighlightCheck + 90) {
-            // 펄스만 조금 유지(글로우만)
             if (this.highlightTarget && this.interactGlow.visible) {
                 const pulse = 0.5 + 0.5 * Math.sin(time * 0.02 + (this.highlightTarget.x + this.highlightTarget.y) * 0.01);
                 this.interactGlow.setAlpha(Phaser.Math.Clamp(0.14 + 0.10 * pulse, 0, 0.35));
@@ -292,95 +310,82 @@ export const clueMethods = {
             return;
         }
         this.lastHighlightCheck = time;
-    
+
         const nearest = this.getNearestClue(this.CLUE_HIGHLIGHT_RADIUS);
-    
-        // 범위 밖이면 원복
+
         if (!nearest) {
             if (this.highlightTarget) {
                 const baseTint = this.highlightTarget.getData("baseTint") ?? 0xffffff;
                 const baseScale = this.highlightTarget.getData("baseScale") ?? this.CLUE_SCALE;
                 const baseY = this.highlightTarget.getData("baseY") ?? this.highlightTarget.y;
-    
+
                 this.highlightTarget.setTint(baseTint);
                 this.highlightTarget.setAlpha(1);
                 this.highlightTarget.setScale(baseScale);
                 this.highlightTarget.y = baseY;
                 this.highlightTarget.setDepth(baseY);
             }
-    
+
             this.highlightTarget = null;
             this.interactGlow.setVisible(false);
             this.interactGlow.setAlpha(0);
-    
+
             this.setClueSparkle(false);
             return;
         }
-    
+
         const best = nearest.obj;
         const dist = nearest.dist;
-    
-        // 타겟 바뀌면 이전 타겟 원복
+
         if (this.highlightTarget !== best) {
             if (this.highlightTarget) {
                 const baseTint = this.highlightTarget.getData("baseTint") ?? 0xffffff;
                 const baseScale = this.highlightTarget.getData("baseScale") ?? this.CLUE_SCALE;
                 const baseY = this.highlightTarget.getData("baseY") ?? this.highlightTarget.y;
-    
+
                 this.highlightTarget.setTint(baseTint);
                 this.highlightTarget.setAlpha(1);
                 this.highlightTarget.setScale(baseScale);
                 this.highlightTarget.y = baseY;
                 this.highlightTarget.setDepth(baseY);
             }
-    
+
             this.highlightTarget = best;
-    
-            // 혹시 baseY/baseScale이 없으면 안전하게 저장(이미 있으면 무시)
+
             if (best.getData("baseY") == null) best.setData("baseY", best.y);
             if (best.getData("baseScale") == null) best.setData("baseScale", this.CLUE_SCALE);
             if (best.getData("baseTint") == null) best.setData("baseTint", 0xffffff);
         }
-    
-        // 가까울수록 강도 증가
+
         const t = Phaser.Math.Clamp(1 - dist / this.CLUE_HIGHLIGHT_RADIUS, 0, 1);
-    
-        // 펄스(반짝/확대)
         const pulse = 0.5 + 0.5 * Math.sin(time * 0.02 + (best.x + best.y) * 0.01);
-    
-        // ✅ 둥실(bob) : 위아래 이동
+
         const baseY = best.getData("baseY") ?? best.y;
-        const bobAmp = 3; // <- 움직임 크기(원하면 6~12)
+        const bobAmp = 3;
         const bob = Math.sin(time * 0.004 + best.x * 0.01) * bobAmp * (0.35 + 0.65 * t);
         best.y = baseY + bob;
         best.setDepth(best.y);
-    
-        // ✅ 증거 자체 반짝/확대(폭 더 큼)
+
         const baseScale = best.getData("baseScale") ?? this.CLUE_SCALE;
-    
-        // 스케일 폭: 0.09 -> 0.14로 더 크게(원하면 0.18까지)
         const scaleAmp = 0.14;
         best.setTint(0xffffff);
-        best.setAlpha(0.82 + 0.18 * pulse); // 알파도 조금 더 크게
+        best.setAlpha(0.82 + 0.18 * pulse);
         best.setScale(baseScale * (1 + scaleAmp * pulse * (0.35 + 0.65 * t)));
-    
-        // ✅ 글로우 강화(가까울수록 밝고 크게)
+
         this.interactGlow.setVisible(true);
         this.interactGlow.setPosition(best.x, best.y);
-    
+
         const w = best.displayWidth || best.width || 64;
         const h = best.displayHeight || best.height || 64;
         const s = Math.max(w, h) / 130;
-    
+
         this.interactGlow.setScale(s * (1 + 0.35 * t));
         this.interactGlow.setDepth((best.depth ?? best.y) + 0.5);
-    
+
         const glowA = 0.10 + 0.38 * t + 0.10 * pulse;
         this.interactGlow.setAlpha(Phaser.Math.Clamp(glowA, 0, 0.75));
-    
-        // ✅ 아주 가까우면 스파클 ON
+
         const sparkleOn = t > 0.55;
         this.setClueSparkle(sparkleOn, best.x, best.y - 12);
     },
-
 };

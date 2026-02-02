@@ -1,12 +1,20 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'wouter';
 
 export function Atmosphere() {
+    const [location] = useLocation();
     const [mousePos, setMousePos] = useState({ x: 50, y: 50 });
 
-    // 마우스 움직임에 따라 그림자(비네팅)가 살짝 움직이게 해서 입체감을 줌
+    // 1. 게임 관련 페이지인지 확인
+    const isGameMode = location.startsWith('/room/') || location.startsWith('/game/') || location.startsWith('/tutorial');
+
+    // [수정됨] 여기서 return null을 하지 않습니다. (DOM 안정성 유지)
+
     useEffect(() => {
+        // 게임 모드일 때는 이벤트 리스너도 붙이지 않아서 성능 최적화
+        if (isGameMode) return;
+
         const handleMouseMove = (e) => {
-            // 화면 전체 크기 대비 마우스 위치 (0~100%)
             const x = (e.clientX / window.innerWidth) * 100;
             const y = (e.clientY / window.innerHeight) * 100;
             setMousePos({ x, y });
@@ -14,13 +22,14 @@ export function Atmosphere() {
 
         window.addEventListener('mousemove', handleMouseMove);
         return () => window.removeEventListener('mousemove', handleMouseMove);
-    }, []);
+    }, [isGameMode]); // isGameMode가 바뀔 때마다 실행 여부 결정
 
     return (
-        <div className="fixed inset-0 pointer-events-none z-40 overflow-hidden">
+        // [핵심 수정] isGameMode가 true면 'hidden' 클래스를 추가해 CSS로 숨깁니다.
+        // 이렇게 하면 컴포넌트가 사라지지 않고 숨기만 하므로 화면 깨짐 방지에 좋습니다.
+        <div className={`fixed inset-0 pointer-events-none z-40 overflow-hidden ${isGameMode ? 'hidden' : ''}`}>
 
-            {/* 1. 필름 그레인 (Noise) 효과 */}
-            {/* 투명도를 0.05~0.1 사이로 조절해서 '자글자글한' 느낌 강도 조절 */}
+            {/* 1. 필름 그레인 */}
             <div
                 className="absolute inset-0 opacity-[0.07] w-full h-full"
                 style={{
@@ -29,8 +38,7 @@ export function Atmosphere() {
                 }}
             />
 
-            {/* 2. 다이내믹 비네팅 (Vignette) 효과 */}
-            {/* 마우스가 있는 곳이 조금 더 밝고, 주변은 어둡게 처리 */}
+            {/* 2. 다이내믹 비네팅 */}
             <div
                 className="absolute inset-0 transition-opacity duration-300"
                 style={{
@@ -40,11 +48,11 @@ export function Atmosphere() {
             rgba(0, 0, 0, 0.4) 60%, 
             rgba(0, 0, 0, 0.8) 100%
           )`,
-                    mixBlendMode: 'multiply' // 배경과 자연스럽게 섞임
+                    mixBlendMode: 'multiply'
                 }}
             />
 
-            {/* (선택) 3. 아주 얇은 스캔라인 (구형 모니터 느낌) */}
+            {/* 3. 스캔라인 */}
             <div
                 className="absolute inset-0 w-full h-full opacity-[0.03]"
                 style={{
