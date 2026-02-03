@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
   const actions = useMemo(
     () => ({
       // 1) 로그인
-      login(options = {}) {
+      login() {
         if (!base) {
           dispatch({
             type: "SET_USER",
@@ -80,13 +80,9 @@ export function AuthProvider({ children }) {
           return
         }
 
-        const redirect = typeof options === "object" ? options.redirect : undefined
-        const target = redirect || window.location.href
-
-        const url = new URL(`${base}/api/auth/login`)
-        url.searchParams.set("redirect", target)
-        console.log("LOGIN URL:", url.toString())
-        window.location.href = url.toString()
+        const url = `${base}/api/auth/login`
+        console.log("LOGIN URL:", url)
+        window.location.href = url
       },
 
       // 2) 로그아웃
@@ -102,7 +98,7 @@ export function AuthProvider({ children }) {
             credentials: "include",
           })
         } catch (e) {
-          console.warn("[AUTH] logout request failed:", e)
+          console.error("[AUTH] logout failed:", e)
         } finally {
           dispatch({ type: "CLEAR_USER" })
         }

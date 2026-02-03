@@ -1,6 +1,7 @@
 import React from 'react'
 import { Route, Switch } from 'wouter'
 import { ROUTES } from './routePaths'
+import ProtectedRoute from '../components/ProtectedRoute'
 
 // Pages
 import Home from '../pages/Home'
@@ -21,22 +22,43 @@ import Tutorial from '../pages/Tutorial'
 export function AppRoutes() {
   return (
     <Switch>
+      {/* 공개 라우트 */}
       <Route path={ROUTES.HOME} component={Home} />
       <Route path={ROUTES.TUTORIAL} component={Tutorial} />
       <Route path={ROUTES.SCENARIOS} component={Scenarios} />
       <Route path={ROUTES.SCENARIO_DETAIL} component={ScenarioDetail} />
-      <Route path={ROUTES.CREATE_SCENARIO} component={CreateScenario} />
       <Route path={ROUTES.RANKING} component={Ranking} />
       <Route path={ROUTES.PROFILE} component={Profile} />
       <Route path={ROUTES.BOARD} component={Board} />
-      <Route path={ROUTES.BOARD_SESSION} component={BoardSession} />
-      <Route path={ROUTES.MY_BOOKSHELF} component={MyBookshelf} />
-      <Route path={ROUTES.GAME} component={GameRoom} />
-      <Route path={ROUTES.GAME_SOLO} component={GameRoom} />
-      <Route path={ROUTES.GAME_RESUME} component={GameRoom} />
-      <Route path={ROUTES.SUBMIT} component={Submit} />
-      <Route path={ROUTES.SUBMIT_SESSION} component={SubmitSession} />
       <Route path={ROUTES.NOT_FOUND} component={NotFound} />
+
+      {/* 보호된 라우트 (인증 필요) */}
+      <Route path={ROUTES.CREATE_SCENARIO}>
+        {(params) => <ProtectedRoute component={CreateScenario} {...params} />}
+      </Route>
+      <Route path={ROUTES.MY_BOOKSHELF}>
+        {(params) => <ProtectedRoute component={MyBookshelf} {...params} />}
+      </Route>
+      <Route path={ROUTES.BOARD_SESSION}>
+        {(params) => <ProtectedRoute component={BoardSession} {...params} />}
+      </Route>
+      <Route path={ROUTES.GAME}>
+        {(params) => <ProtectedRoute component={GameRoom} {...params} />}
+      </Route>
+      <Route path={ROUTES.GAME_SOLO}>
+        {(params) => <ProtectedRoute component={GameRoom} {...params} />}
+      </Route>
+      <Route path={ROUTES.GAME_RESUME}>
+        {(params) => <ProtectedRoute component={GameRoom} {...params} />}
+      </Route>
+      <Route path={ROUTES.SUBMIT}>
+        {(params) => <ProtectedRoute component={Submit} {...params} />}
+      </Route>
+      <Route path={ROUTES.SUBMIT_SESSION}>
+        {(params) => <ProtectedRoute component={SubmitSession} {...params} />}
+      </Route>
+
+      {/* 404 */}
       <Route component={NotFound} />
     </Switch>
   )
