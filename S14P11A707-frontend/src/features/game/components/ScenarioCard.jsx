@@ -3,10 +3,13 @@ import { Link } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { Star, Clock, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { normalizeStatus } from '@/features/scenarios/api/scenarioMappers'
 
 export function ScenarioCard({ scenario, className }) {
-  const status = scenario?.status
-  const isPlayable = !status || status === 'COMPLETED'
+  const status = normalizeStatus(scenario?.status)
+  if (status === 'FAILED') return null
+
+  const isPlayable = status === 'COMPLETED'
 
   return (
     <div 
@@ -52,10 +55,9 @@ export function ScenarioCard({ scenario, className }) {
               className={cn(
                 "px-2 py-1 rounded text-xs font-bold uppercase tracking-wider",
                 status === 'GENERATING' && "bg-blue-500/90 text-white",
-                status === 'FAILED' && "bg-red-500/90 text-white",
               )}
             >
-              {status === 'GENERATING' ? '생성중' : '실패'}
+              생성중
             </span>
           </div>
         )}
@@ -81,7 +83,7 @@ export function ScenarioCard({ scenario, className }) {
             </Link>
           ) : (
             <Button variant="outline" disabled>
-              {status === 'GENERATING' ? '생성 중...' : '생성 실패'}
+              생성 중...
             </Button>
           )}
         </div>

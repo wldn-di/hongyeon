@@ -1006,6 +1006,12 @@ export default function GameRoom() {
           usedClueId: null  // 단서 사용 시 해당 clueId 전달
         })
 
+        // 심문 응답 직후 health UI 즉시 동기화 (API 응답의 health가 source of truth)
+        const nextHealth = Number(response?.health)
+        if (Number.isFinite(nextHealth)) {
+          setHealth(nextHealth)
+        }
+
         const elapsed = Date.now() - typingStartedAt
         const waitMs = Math.max(0, minTypingMs - elapsed)
         if (waitMs > 0) await sleep(waitMs)
@@ -1272,6 +1278,13 @@ export default function GameRoom() {
       toast.error('보고서 생성에 실패했습니다.')
     }
   }
+
+  const handleReportModalClose = useCallback(() => {
+    setReportModalOpen(false)
+    if (gameEndType === 'success') {
+      setLocation('/', { replace: true })
+    }
+  }, [gameEndType, setLocation])
 
   // 게임 종료 모달 핸들러
   const handleGameEndGoHome = useCallback(() => {
@@ -1566,9 +1579,14 @@ export default function GameRoom() {
 	        scenarioId={activeScenarioId}
 	        sessionId={sessionId}
 	        victim={scenario?.victim || null}
-	      />
+      />
       <ReviewModal isOpen={reviewModalOpen} onSubmit={handleReviewSubmit} />
-      <ReportModal isOpen={reportModalOpen} onClose={() => setReportModalOpen(false)} report={report} />
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={handleReportModalClose}
+        closeText={gameEndType === 'success' ? '보고서 확인 완료' : '닫기'}
+        report={report}
+      />
 
       {/* 게임 종료 모달 (성공/실패) */}
       <GameEndModal

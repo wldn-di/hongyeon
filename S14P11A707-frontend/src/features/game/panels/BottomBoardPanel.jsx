@@ -70,6 +70,7 @@ export default function BottomBoardPanel({
               title="개인 추리보드"
               victim={victim}
               isModal={false}
+              isActive={isOpen}
               onClose={() => onOpenChange?.(false)}
               acceptExternalDrop={true}
               pendingAddItem={pendingAddItem}
