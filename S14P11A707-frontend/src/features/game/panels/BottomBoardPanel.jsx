@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 export default function BottomBoardPanel({
   isOpen,
   onOpenChange,
-  sessionId,    // ✅ 추가
+  sessionId,    //  추가
   scenarioId,
   leftOffsetPx = 0,
   rightOffsetPx = 0,

@@ -40,6 +40,11 @@ public class ScenarioV2EmitterRepository {
         return Optional.ofNullable(emitters.get(userId));
     }
 
+
+    public Map<Long, SseEmitter> snapshot() {
+        return Map.copyOf(emitters);
+    }
+
     /**
      * 사용자별 emitter 저장/갱신
      * <p>

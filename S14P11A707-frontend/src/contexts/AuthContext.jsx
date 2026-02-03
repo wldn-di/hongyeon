@@ -64,7 +64,7 @@ export function AuthProvider({ children }) {
   const actions = useMemo(
     () => ({
       // 1) 로그인
-      login() {
+      login(options = {}) {
         if (!base) {
           dispatch({
             type: "SET_USER",
@@ -80,9 +80,13 @@ export function AuthProvider({ children }) {
           return
         }
 
-        const url = `${base}/api/auth/login`
-        console.log("LOGIN URL:", url)
-        window.location.href = url
+        const redirect = typeof options === "object" ? options.redirect : undefined
+        const target = redirect || window.location.href
+
+        const url = new URL(`${base}/api/auth/login`)
+        url.searchParams.set("redirect", target)
+        console.log("LOGIN URL:", url.toString())
+        window.location.href = url.toString()
       },
 
       // 2) 로그아웃
@@ -91,8 +95,17 @@ export function AuthProvider({ children }) {
           dispatch({ type: "CLEAR_USER" })
           return
         }
-        // TODO: 백엔드 logout 엔드포인트 확인 후 연결
-        dispatch({ type: "CLEAR_USER" })
+
+        try {
+          await fetch(`${base}/api/auth/logout`, {
+            method: "POST",
+            credentials: "include",
+          })
+        } catch (e) {
+          console.warn("[AUTH] logout request failed:", e)
+        } finally {
+          dispatch({ type: "CLEAR_USER" })
+        }
       },
 
       // 3) 수동 재조회

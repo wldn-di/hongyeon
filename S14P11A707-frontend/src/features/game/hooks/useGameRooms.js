@@ -12,15 +12,26 @@ const clampFloor = (value, fallback = 1) => {
 /**
  * 시나리오 방 정보 조회 Hook
  * @param {number} scenarioId - 시나리오 ID
+ * @param {Object} [options]
+ * @param {boolean} [options.enabled=true]
  * @returns {Object} { rooms, victim, loading, error, refetch }
  */
-export function useGameRooms(scenarioId) {
+export function useGameRooms(scenarioId, options = {}) {
+  const { enabled = true } = options
   const [rooms, setRooms] = useState([])
   const [victim, setVictim] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const fetchRooms = useCallback(async (id) => {
+    if (!enabled) {
+      setRooms([])
+      setVictim(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     if (!id) {
       setRooms([])
       setVictim(null)
@@ -73,11 +84,11 @@ export function useGameRooms(scenarioId) {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
     fetchRooms(scenarioId)
-  }, [scenarioId, fetchRooms])
+  }, [scenarioId, enabled, fetchRooms])
 
   return {
     rooms,

@@ -5,6 +5,8 @@ import { Button } from '@/components/ui/Button'
 import { ScenarioCard } from '@/features/game/components/ScenarioCard'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { useTopScenarios } from '@/features/scenarios/hooks/useTopScenarios'
+import { useAuth } from '@/contexts/AuthContext'
+import { isVisibleInAll } from '@/features/scenarios/api/scenarioMappers'
 
 function SectionHeader({ title, to = '/scenarios', rightText = '전체 보기 →' }) {
   return (
@@ -24,6 +26,8 @@ function SectionHeader({ title, to = '/scenarios', rightText = '전체 보기 �
  * API 기반으로 시나리오 데이터를 표시합니다
  */
 export default function Home() {
+  const { state, actions } = useAuth()
+  const user = state.user
   const { topByRating, topByPlayCount } = useTopScenarios()
 
   const popularTop10 = topByPlayCount || []
@@ -78,11 +82,22 @@ export default function Home() {
                   ▶ 튜토리얼 하러 가기
                 </Button>
               </Link>
-              <Link href="/create-scenario">
-                <Button variant="neon" size="lg" className="text-lg px-8">
+              {user ? (
+                <Link href="/create-scenario">
+                  <Button variant="neon" size="lg" className="text-lg px-8">
+                    ▶ 나만의 시나리오 만들러 가기
+                  </Button>
+                </Link>
+              ) : (
+                <Button
+                  variant="neon"
+                  size="lg"
+                  className="text-lg px-8"
+                  onClick={() => actions.login()}
+                >
                   ▶ 나만의 시나리오 만들러 가기
                 </Button>
-              </Link>
+              )}
             </div>
           </div>
         </div>
@@ -100,7 +115,7 @@ export default function Home() {
           {showEmptyState && (
             <div className="container py-16">
               <div className="rounded-xl border border-border bg-card/40 p-6 text-center">
-                <p className="text-muted-foreground">TOP 데이터를 불러올 수 없습니다.</p>
+                <p className="text-muted-foreground">아직 등록된 시나리오가 없습니다.</p>
               </div>
             </div>
           )}
@@ -111,7 +126,7 @@ export default function Home() {
               <div className="container">
                 <SectionHeader title="인기 TOP 10" to="/scenarios" />
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {popularTop10.slice(0, 3).map((scenario) => (
+                  {popularTop10.filter(isVisibleInAll).slice(0, 3).map((scenario) => (
                     <ScenarioCard key={scenario.id} scenario={scenario} />
                   ))}
                 </div>
@@ -125,7 +140,7 @@ export default function Home() {
               <div className="container">
                 <SectionHeader title="평점 TOP 10" to="/scenarios" />
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {ratingTop10.slice(0, 3).map((scenario) => (
+                  {ratingTop10.filter(isVisibleInAll).slice(0, 3).map((scenario) => (
                     <ScenarioCard key={scenario.id} scenario={scenario} />
                   ))}
                 </div>

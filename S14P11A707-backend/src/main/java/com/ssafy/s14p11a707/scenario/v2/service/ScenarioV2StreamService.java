@@ -6,6 +6,7 @@ import com.ssafy.s14p11a707.scenario.v2.stream.ScenarioV2EmitterRepository;
 import java.io.IOException;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -19,11 +20,12 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  *
  * @see com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2RedisSubscriber
  */
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ScenarioV2StreamService {
 
-    private static final long DEFAULT_TIMEOUT_MILLIS = Duration.ofMinutes(5).toMillis();
+    private static final long DEFAULT_TIMEOUT_MILLIS = Duration.ofMinutes(30).toMillis();
 
     private final ScenarioV2EmitterRepository emitterRepository;
 
@@ -37,6 +39,7 @@ public class ScenarioV2StreamService {
      * @return SSE emitter
      */
     public SseEmitter connect(long userId) {
+        log.info("[v2] SSE connect. userId={}", userId);
         SseEmitter emitter = new SseEmitter(DEFAULT_TIMEOUT_MILLIS);
 
         emitterRepository.find(userId).ifPresent(existing -> {
@@ -46,9 +49,20 @@ public class ScenarioV2StreamService {
 
         emitterRepository.put(userId, emitter);
 
-        emitter.onCompletion(() -> emitterRepository.remove(userId));
-        emitter.onTimeout(() -> emitterRepository.remove(userId));
-        emitter.onError(e -> emitterRepository.remove(userId));
+        emitter.onCompletion(() -> {
+            log.info("[v2] SSE completed. userId={}", userId);
+            emitterRepository.remove(userId);
+        });
+        emitter.onTimeout(() -> {
+            log.warn("[v2] SSE timeout. userId={}", userId);
+            emitter.complete();
+            emitterRepository.remove(userId);
+        });
+        emitter.onError(e -> {
+            log.warn("[v2] SSE error. userId={}", userId, e);
+            emitter.complete();
+            emitterRepository.remove(userId);
+        });
 
         try {
             emitter.send(SseEmitter.event()
@@ -61,6 +75,8 @@ public class ScenarioV2StreamService {
                             null
                     )));
         } catch (IOException e) {
+            log.info("[v2] SSE initial connect event send failed. userId={}", userId, e);
+            emitter.complete();
             emitterRepository.remove(userId);
         }
 

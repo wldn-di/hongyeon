@@ -313,7 +313,7 @@ export function InvestigationBoard({
   // 초기 데이터 로드
   // ========================================
   useEffect(() => {
-    // ✅ sessionId 변경 시 플래그 먼저 리셋 (API 호출 전에!)
+    //  sessionId 변경 시 플래그 먼저 리셋 (API 호출 전에!)
     isLoadedRef.current = false
 
     if (Array.isArray(initialBoardItems) || Array.isArray(initialConnections)) {
@@ -383,7 +383,7 @@ export function InvestigationBoard({
         name: evidence.name,
         x: clamp(Number.isFinite(x) ? x : fallbackX, 0, maxX),
         y: clamp(Number.isFinite(y) ? y : fallbackY, 0, maxY),
-        image: evidence.image || evidence.detailImageUrl || null,
+        image: evidence.image || evidence.detailImageUrl || evidence.imageUrl || null,
         note: evidence.description || evidence.location || '',
       }
       setSelectedItem(nextItemId)

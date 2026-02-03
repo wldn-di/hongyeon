@@ -50,7 +50,26 @@ export default function Scenarios() {
     setKeywordDraft(keyword)
   }, [keyword])
 
-  const isScenarioCompleted = (scenario) => !scenario?.status || scenario.status === 'COMPLETED'
+  const isScenarioPlayable = (scenario) => !scenario?.status || scenario.status === 'COMPLETED'
+
+  const sortScenarioList = (list, sortBy) => {
+    const sorted = [...(list || [])]
+
+    switch (sortBy) {
+      case 'latest':
+        return sorted.sort((a, b) => {
+          const aTime = a.createdAt ? new Date(a.createdAt).getTime() : Number(a.id) || 0
+          const bTime = b.createdAt ? new Date(b.createdAt).getTime() : Number(b.id) || 0
+          return bTime - aTime
+        })
+      case 'popular':
+        return sorted.sort((a, b) => (Number(b.playCount) || 0) - (Number(a.playCount) || 0))
+      case 'rating':
+        return sorted.sort((a, b) => (Number(b.avgRating) || 0) - (Number(a.avgRating) || 0))
+      default:
+        return sorted
+    }
+  }
 
   // 전체 시나리오 조회 (API)
   const {
@@ -73,8 +92,8 @@ export default function Scenarios() {
   const { topByRating, topByPlayCount } = useTopScenarios({ enabled: tab === 'all' })
 
   const allScenarios = useMemo(
-    () => (allScenariosRaw || []).filter(isScenarioCompleted),
-    [allScenariosRaw],
+    () => sortScenarioList((allScenariosRaw || []).filter(isScenarioPlayable), sortBy),
+    [allScenariosRaw, sortBy],
   )
 
   const myFilteredScenarios = useFilteredScenarios(myScenariosRaw || [], {
@@ -84,15 +103,12 @@ export default function Scenarios() {
     sortBy,
   })
 
-  const myScenariosCompleted = useMemo(
-    () => myFilteredScenarios.filter(isScenarioCompleted),
-    [myFilteredScenarios],
-  )
+  const hasMyScenarios = (myScenariosRaw || []).length > 0
 
   const myTotalPages = useMemo(() => {
-    if (!myScenariosCompleted.length) return 0
-    return Math.ceil(myScenariosCompleted.length / Math.max(1, size))
-  }, [myScenariosCompleted, size])
+    if (!myFilteredScenarios.length) return 0
+    return Math.ceil(myFilteredScenarios.length / Math.max(1, size))
+  }, [myFilteredScenarios, size])
 
   const myCurrentPage = useMemo(() => {
     if (myTotalPages === 0) return 0
@@ -102,8 +118,8 @@ export default function Scenarios() {
   const myVisibleScenarios = useMemo(() => {
     const start = myCurrentPage * size
     const end = start + size
-    return myScenariosCompleted.slice(start, end)
-  }, [myScenariosCompleted, myCurrentPage, size])
+    return myFilteredScenarios.slice(start, end)
+  }, [myFilteredScenarios, myCurrentPage, size])
 
   const loading = tab === 'mine' ? myLoading : allLoading
   const error = tab === 'mine' ? myError : allError
@@ -130,9 +146,9 @@ export default function Scenarios() {
             <input
               value={keywordDraft}
               onChange={(e) => setKeywordDraft(e.target.value)}
-              placeholder="시나리오 검색..."
-              className="flex-1 bg-card/50 border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            />
+              placeholder="시나리오 검색..." //시나리오 검색 글자 밝아서 안 보이던 거 수정
+              className="flex-1 bg-card/50 border border-border rounded-lg px-4 py-3 text-sm !text-zinc-800 caret-zinc-800 
+              !placeholder:text-zinc-500 focus:outline-none focus:ring-2 focus:ring-primary"/>
             <div className="flex gap-2">
               <Button type="submit" variant="neon">
                 검색
@@ -189,12 +205,10 @@ export default function Scenarios() {
           {tab === 'mine' && !user && !state.loading && (
             <div className="bg-card/40 border border-border rounded-xl p-10 text-center mb-6">
               <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
-              <p className="text-muted-foreground mb-6">내 시나리오를 보려면 로그인이 필요해요.</p>
-              <Link href="/profile">
-                <Button variant="neon">
-                  로그인하러 가기
-                </Button>
-              </Link>
+              <p className="text-muted-foreground mb-6">내 시나리오를 보려면 Google 로그인을 해주세요.</p>
+              <Button variant="neon" onClick={() => actions.login()}>
+                구글 로그인
+              </Button>
             </div>
           )}
 
@@ -209,11 +223,11 @@ export default function Scenarios() {
           ) : error ? (
             <div className="flex justify-center items-center py-20">
               <div className="text-center">
-                <p className="text-red-400 mb-4">시나리오를 불러오는데 실패했습니다.</p>
-                <Button onClick={() => window.location.reload()}>다시 시도</Button>
+                <p className="text-red-400 mb-4">아직 등록된 시나리오가 없습니다.</p>
+                <Button onClick={() => window.location.reload()}>새로 고침</Button>
               </div>
             </div>
-          ) : tab === 'mine' && !user ? null : tab === 'mine' && myScenariosCompleted.length === 0 ? (
+          ) : tab === 'mine' && !user ? null : tab === 'mine' && !hasMyScenarios ? (
             <div className="bg-card/40 border border-border rounded-xl p-10 text-center">
               <p className="text-xl font-bold mb-2">내 시나리오가 아직 없어요</p>
               <p className="text-muted-foreground mb-6">첫 번째 사건을 만들어 볼까요?</p>

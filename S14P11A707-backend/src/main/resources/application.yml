@@ -4,6 +4,10 @@ spring:
   main:
     allow-bean-definition-overriding: true
 
+  mvc:
+    async:
+      request-timeout: ${SPRING_MVC_ASYNC_REQUEST_TIMEOUT:30m}
+
   # 로컬/테스트: .env 파일을 사용하고 싶으면(선택)
   # - `.env` 파일은 properties 형식(KEY=VALUE)으로 작성
   # - 파일이 없으면 무시(optional)

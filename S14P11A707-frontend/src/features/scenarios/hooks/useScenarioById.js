@@ -6,14 +6,24 @@ import { toast } from 'sonner'
 /**
  * 시나리오 상세 조회 Hook
  * @param {number|string} id - 시나리오 ID
+ * @param {Object} [options]
+ * @param {boolean} [options.enabled=true]
  * @returns {Object} { scenario, loading, error, refetch }
  */
-export function useScenarioById(id) {
+export function useScenarioById(id, options = {}) {
+  const { enabled = true } = options
   const [scenario, setScenario] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
 
   const fetch = async () => {
+    if (!enabled) {
+      setScenario(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     if (!id) {
       setScenario(null)
       setLoading(false)
@@ -37,7 +47,7 @@ export function useScenarioById(id) {
 
   useEffect(() => {
     fetch()
-  }, [id])
+  }, [id, enabled])
 
   return {
     scenario,

@@ -2,16 +2,17 @@ import React, { useMemo, useState } from 'react'
 import { Filter, ArrowUpDown, ChevronDown, Check } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-// shadcn/ui Popover 사용 (프로젝트에 이미 있으면 OK)
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover'
+// shadcn/ui Popover 사용(리눅스 배포시 파일명이 대문자면 문제 생길 수 있어서 Popover->popover)
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Button } from '@/components/ui/Button'
+
 
 function summarizeSelection(selectedValues, options, allLabel) {
   const selected = Array.isArray(selectedValues) ? selectedValues : []
   if (selected.length === 0) return allLabel
 
-  const map = new Map((options || []).map((o) => [o.value, o.label]))
-  const labels = selected.map((v) => map.get(v) ?? v).filter(Boolean)
+  const map = new Map((options || []).map((o) => [String(o.value), o.label]))//value 전부 String으로 정규화
+  const labels = selected.map((v) => map.get(String(v)) ?? v).filter(Boolean)//value 전부 String으로 정규화
 
   if (labels.length === 0) return allLabel
   if (labels.length === 1) return labels[0]
@@ -27,6 +28,7 @@ function MultiSelectPopover({
   onClear,
   align = 'start',
 }) {
+  
   const [open, setOpen] = useState(false)
 
   const summary = useMemo(
@@ -34,7 +36,12 @@ function MultiSelectPopover({
     [selectedValues, options, allLabel],
   )
 
-  const selectedSet = useMemo(() => new Set(selectedValues || []), [selectedValues])
+  const selectedSet = useMemo(
+    () => new Set((selectedValues || []).map((v) => String(v).trim())),
+   [selectedValues],
+   )
+  const hasSelection = selectedSet.size > 0
+
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -42,13 +49,16 @@ function MultiSelectPopover({
         <button
           type="button"
           className={cn(
-            'inline-flex items-center gap-2 rounded-lg border border-border bg-muted/40',
-            'px-3 py-2 text-sm text-foreground hover:bg-muted/60 transition-colors',
+            'inline-flex items-center gap-2 rounded-lg border',
+            'px-3 py-2 text-sm transition-colors',
             'focus:outline-none focus:ring-2 focus:ring-primary',
+            hasSelection
+              ? 'border-primary/40 bg-primary/10 text-foreground hover:bg-primary/15'
+              : 'border-border bg-muted/40 text-foreground hover:bg-muted/60',
           )}
         >
-          <span className="text-sm">{summary}</span>
-          <ChevronDown className="w-4 h-4 text-muted-foreground" />
+          <span className={cn('text-sm', hasSelection && 'text-primary')}>{summary}</span>
+          <ChevronDown className={cn('w-4 h-4', hasSelection ? 'text-primary' : 'text-muted-foreground')} />
         </button>
       </PopoverTrigger>
 
@@ -72,19 +82,20 @@ function MultiSelectPopover({
 
         <div className="max-h-64 overflow-auto py-1">
           {(options || []).map((opt) => {
-            const active = selectedSet.has(opt.value)
+             const value = String(opt.value).trim()
+             const active = selectedSet.has(value)
             return (
               <button
-                key={opt.value}
+                key={value}
                 type="button"
-                onClick={() => onToggle?.(opt.value)}
+                onClick={() => onToggle?.(value)}
                 className={cn(
                   'w-full flex items-center justify-between gap-2 rounded-md px-2 py-2 text-sm',
                   'hover:bg-muted/50 transition-colors',
                   active ? 'bg-primary/10' : 'bg-transparent',
                 )}
               >
-                <span className={cn(active ? 'text-foreground' : 'text-muted-foreground')}>
+                <span className={cn(active ? 'text-primary' : 'text-muted-foreground')}>
                   {opt.label}
                 </span>
                 {active && <Check className="w-4 h-4 text-primary" />}
@@ -92,6 +103,7 @@ function MultiSelectPopover({
             )
           })}
         </div>
+
 
         <div className="h-px bg-border my-1" />
 
@@ -103,6 +115,7 @@ function MultiSelectPopover({
         </div>
       </PopoverContent>
     </Popover>
+    
   )
 }
 
