@@ -53,6 +53,9 @@ export const clueMethods = {
         const nearRadius = 40;
         const nearRadiusSq = nearRadius * nearRadius;
 
+        const now = Number(this.time?.now) || 0;
+        const REVEAL_GRACE_MS = 220;
+
         for (const clue of this.clues) {
             if (!clue || !clue.active) continue;
 
@@ -70,7 +73,16 @@ export const clueMethods = {
             // 변경: revealing && (isNearPlayer || ...)  <-- 손전등이 켜져 있어야만 뒤의 조건을 확인함
             const shouldReveal = revealing && (isNearPlayer || this.isPointInFlashlightCone(clue.x, baseY));
 
+            // 손전등 흔들림/각도 경계로 인한 깜빡임 방지: 잠깐 유지(hysteresis)
             if (shouldReveal) {
+                clue.setData("revealUntil", now + REVEAL_GRACE_MS);
+            }
+
+            const revealUntil = Number(clue.getData("revealUntil")) || 0;
+            const keepRevealed = revealing && now < revealUntil;
+            const isRevealed = shouldReveal || keepRevealed;
+
+            if (isRevealed) {
                 if (!clue.visible) {
                     clue.setVisible(true);
                     clue.y = baseY;
@@ -236,7 +248,35 @@ export const clueMethods = {
 
             const clue = this.add.image(x, y, "clue_object");
             clue.setScale(this.CLUE_SCALE);
-            clue.setDepth(y);
+
+            // 엘리베이터/상단 벽 쪽(막힌 영역)으로 단서가 붙어 보이는 경우가 있어,
+            // 스폰 위치를 "실제로 걸어다닐 수 있는 바닥 영역" 안으로 강제 클램프한다.
+            // (상단 벽/문 이미지 영역 밖으로 내려오게)
+            const roomLeft = room.x;
+            const roomRight = room.x + this.ROOM_WIDTH;
+            const roomTop = room.y;
+            const roomBottom = room.y + this.ROOM_WIDTH;
+
+            const halfW = (clue.displayWidth || clue.width || 0) * 0.5;
+            const halfH = (clue.displayHeight || clue.height || 0) * 0.5;
+
+            const insetX = 18;
+            const insetBottom = 18;
+            // 상단 벽(엘리베이터/벽) 라인 아래쪽으로 충분히 내려오게
+            const safeTopY = roomTop + 68;
+
+            const minX = roomLeft + insetX + halfW;
+            const maxX = roomRight - insetX - halfW;
+            const minY = safeTopY + halfH;
+            const maxY = roomBottom - insetBottom - halfH;
+
+            if (minX <= maxX) clue.x = Phaser.Math.Clamp(clue.x, minX, maxX);
+            else clue.x = (roomLeft + roomRight) * 0.5;
+
+            if (minY <= maxY) clue.y = Phaser.Math.Clamp(clue.y, minY, maxY);
+            else clue.y = (roomTop + roomBottom) * 0.5;
+
+            clue.setDepth(clue.y);
             clue.setTint(0xffffff);
             clue.setVisible(false);
             clue.setData("clueId", clueId ?? null);

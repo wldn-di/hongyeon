@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { AlertCircle, CheckCircle, Info, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -14,22 +14,14 @@ let setAlertState = null
 export function AlertModal() {
   const [alert, setAlert] = useState(null)
   const [isVisible, setIsVisible] = useState(false)
+  const isVisibleRef = useRef(isVisible)
 
-  // 전역 상태 setter 등록
   useEffect(() => {
-    setAlertState = (newAlert) => {
-      if (newAlert) {
-        alertQueue.push(newAlert)
-        processQueue()
-      }
-    }
-    return () => {
-      setAlertState = null
-    }
-  }, [])
+    isVisibleRef.current = isVisible
+  }, [isVisible])
 
   const processQueue = useCallback(() => {
-    if (alertQueue.length > 0 && !isVisible) {
+    if (alertQueue.length > 0 && !isVisibleRef.current) {
       const nextAlert = alertQueue.shift()
       setAlert(nextAlert)
       setIsVisible(true)
@@ -44,7 +36,15 @@ export function AlertModal() {
         }, 300)
       }, duration)
     }
-  }, [isVisible])
+  }, [])
+
+  // 전역 상태 setter 등록
+  useEffect(() => {
+    setAlertState = processQueue
+    return () => {
+      setAlertState = null
+    }
+  }, [processQueue])
 
   useEffect(() => {
     processQueue()
@@ -100,12 +100,8 @@ export function AlertModal() {
  * @param {number} duration - 표시 시간 (ms), 기본 1500ms
  */
 export const showAlert = (type, message, duration = 1500) => {
-  if (setAlertState) {
-    setAlertState({ type, message, duration })
-  } else {
-    // fallback: console.log
-    console.log(`[Alert ${type}]`, message)
-  }
+  alertQueue.push({ type, message, duration })
+  setAlertState?.()
 }
 
 // 편의 함수

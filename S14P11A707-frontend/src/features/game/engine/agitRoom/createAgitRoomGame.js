@@ -12,12 +12,13 @@ export function createAgitRoomGame({
     isDialogActiveRef,
     inputFocusedRef,
     canUseElevatorRef,
-    enablePuzzles = false,
+    enablePuzzles = true,
+    enableRushers = false,
 }) {
     if (!parent) throw new Error("createAgitRoomGame: parent is required");
 
     const BootScene = createBootScene({ initialClues, initialRoomIndexRef, onClueInspectedRef, onRoomChangedRef });
-    const AgitScene = createAgitScene({ enablePuzzles, isDialogActiveRef, inputFocusedRef, canUseElevatorRef });
+    const AgitScene = createAgitScene({ enablePuzzles, enableRushers, isDialogActiveRef, inputFocusedRef, canUseElevatorRef });
 
     const config = {
         type: Phaser.AUTO,

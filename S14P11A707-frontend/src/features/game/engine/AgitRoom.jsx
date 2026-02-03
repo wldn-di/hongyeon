@@ -18,7 +18,8 @@ export default function AgitRoom({
     inputFocused = false,
     canUseElevator = true,
     initialRoomIndex = 0,
-    enablePuzzles = false,
+    enablePuzzles = true,
+    enableRushers = false,
 }) {
     const gameContainer = useRef(null);
     const gameInstance = useRef(null);
@@ -82,6 +83,7 @@ export default function AgitRoom({
                 inputFocusedRef,
                 canUseElevatorRef,
                 enablePuzzles,
+                enableRushers,
             });
         } catch (e) {
             console.error("Failed to create AgitRoom Phaser game:", e);

@@ -3,6 +3,7 @@ import { useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { InlineEdit } from './InlineEdit'
 import { Camera, Check, X, ChevronDown, ChevronUp, LogOut } from 'lucide-react'
+import { alertSuccess } from '@/components/ui/AlertModal'
 
 /**
  * ProfileCard - 프로필 정보 카드
@@ -43,7 +44,7 @@ export function ProfileCard({ user, onUpdateProfile, onLogout }) {
   const saveUrlFromAdvanced = () => {
     const url = draftUrl.trim()
     onUpdateProfile({ picture: url })
-    alert('프로필 이미지가 변경되었습니다. (고급 옵션)')
+    alertSuccess('프로필 이미지가 변경되었습니다. (고급 옵션)')
   }
 
   const handleSaveName = (newName) => {
@@ -125,7 +126,7 @@ export function ProfileCard({ user, onUpdateProfile, onLogout }) {
                     onClick={() => {
                       onUpdateProfile({ picture: localPreview })
                       setLocalPreview('')
-                      alert('프로필 사진이 저장되었습니다. (개발용)')
+                      alertSuccess('프로필 사진이 저장되었습니다. (개발용)')
                     }}
                     className="h-9 px-3 rounded-xl border border-border bg-primary/20 hover:bg-primary/25 transition text-xs font-semibold inline-flex items-center gap-2"
                   >

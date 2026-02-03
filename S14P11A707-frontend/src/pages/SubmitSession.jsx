@@ -6,6 +6,7 @@ import { AlertCircle, CheckCircle, ChevronLeft } from 'lucide-react'
 import { useSubmit } from '@/features/session/hooks/useSubmit'
 import { useBoardSelection } from '@/features/session/hooks/useBoardSelection'
 import { createPath } from '@/app/routePaths'
+import { alertWarning } from '@/components/ui/AlertModal'
 
 export default function SubmitSession() {
   const [, params] = useRoute('/submit/session/:sessionId')
@@ -29,7 +30,7 @@ export default function SubmitSession() {
   const handleSubmit = async () => {
     // Check if all required fields are selected
     if (!selection.culpritId || !selection.weaponClueId || selection.locationFloor === null) {
-      alert('보드에서 범인, 흉기, 장소를 선택해주세요.')
+      alertWarning('보드에서 범인, 흉기, 장소를 선택해주세요.')
       return
     }
 

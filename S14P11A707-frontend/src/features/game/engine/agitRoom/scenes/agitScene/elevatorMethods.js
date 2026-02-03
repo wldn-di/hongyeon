@@ -173,6 +173,7 @@ export const elevatorMethods = {
     openElevatorMenu() {
         if (!this.elevatorMenuContainer) return;
         this.isElevatorMenuOpen = true;
+        this.elevatorMenuAwaitRelease = true;
         this.playUiBeep(760, 0.06, 0.08);
         this.updateElevatorMenuAvailability();
         this.tweens.killTweensOf(this.elevatorMenuContainer);
@@ -191,6 +192,7 @@ export const elevatorMethods = {
     closeElevatorMenu() {
         if (!this.elevatorMenuContainer) return;
         this.isElevatorMenuOpen = false;
+        this.elevatorMenuAwaitRelease = false;
         this.elevatorMenuContainer.setVisible(false);
     },
 

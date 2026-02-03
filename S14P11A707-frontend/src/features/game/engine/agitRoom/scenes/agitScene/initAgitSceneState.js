@@ -1,5 +1,8 @@
-export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, inputFocusedRef, canUseElevatorRef }) {
+export function initAgitSceneState(scene, { enablePuzzles, enableRushers, isDialogActiveRef, inputFocusedRef, canUseElevatorRef }) {
     scene.ENABLE_PUZZLES = Boolean(enablePuzzles);
+    scene.ENABLE_RUSHERS = Boolean(enableRushers);
+    // 엘리베이터 전선 퍼즐 발생 확률 (0~1)
+    scene.ELEVATOR_WIRE_PUZZLE_CHANCE = 0.4;
     scene.isDialogActiveRef = isDialogActiveRef;
     scene.inputFocusedRef = inputFocusedRef;
     scene.canUseElevatorRef = canUseElevatorRef;
@@ -53,6 +56,8 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.sfxRumble = null;
     scene.sfxWalk = null;
     scene.sfxElevator = null;
+    scene.sfxWhoosh = null;
+    scene.sfxHit = null;
 
     scene.noiseCooldownUntil = 0;
     scene.noiseStopAt = 0;
@@ -66,6 +71,44 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.lastDirection = "down";
 
     scene.reflection = null;
+
+    // ----------------------------
+    // 랜덤 돌진 오브젝트(플레이어 밀치기)
+    // ----------------------------
+    scene.rusherGroup = null;
+    scene.rusherTextureKeys = [];
+    scene.rusherNextAt = 0;
+    // 5초마다 스폰 시도 + 50% 확률로만 실제 생성
+    scene.RUSHER_SPAWN_MIN_MS = 5000;
+    scene.RUSHER_SPAWN_MAX_MS = 5000;
+    scene.RUSHER_SPAWN_CHANCE = 0.5; // 스폰 시도 시 실제 생성 확률
+    // 예고(텔레그래프) 후 생성 (회피 여지 제공)
+    scene.RUSHER_TELEGRAPH_MS = 420;
+    // 카메라 뷰(약 320px)를 "훅" 지나가도 확실히 보이도록 속도는 너무 빠르지 않게
+    // (기준 100 -> 70 체감으로 약 0.7배)
+    scene.RUSHER_SPEED = 224; // px/s
+    scene.RUSHER_PUSH_SPEED = 260; // px/s 추가 밀침(짧게)
+    scene.RUSHER_PUSH_MS = 220; // 밀림 지속 시간
+    scene.RUSHER_STUN_MS = 2000; // 피격 시 스턴 시간
+    scene.rusherKnockbackUntil = 0;
+    scene.rusherKnockbackVx = 0;
+    scene.rusherKnockbackVy = 0;
+    scene.rusherStunUntil = 0;
+    scene.stunFxContainer = null;
+    scene.stunFxStars = null;
+    scene.stunFxSeed = Math.random() * 1000;
+
+    // 피격/스턴 화면 FX
+    scene.stunScreenOverlay = null;
+    scene.hitFlashOverlay = null;
+    scene.hitFlashTween = null;
+
+    // 방 타입별 앰비언스(루프)
+    scene.ambRumble = null;
+    scene.ambAir = null;
+    scene.ambElectric = null;
+    scene.ambFilters = null;
+    scene.ambienceFadeTween = null;
 
     // Elevator door overlay
     scene.elevatorDoorLeft = null;
@@ -101,6 +144,7 @@ export function initAgitSceneState(scene, { enablePuzzles, isDialogActiveRef, in
     scene.elevatorMenuUpKey = null;
     scene.elevatorMenuDownKey = null;
     scene.isElevatorMenuOpen = false;
+    scene.elevatorMenuAwaitRelease = false;
     scene.elevatorGlows = [];
     scene.elevatorGlowPulseSeed = Math.random() * 1000;
     scene.uiBeepCooldownUntil = 0;

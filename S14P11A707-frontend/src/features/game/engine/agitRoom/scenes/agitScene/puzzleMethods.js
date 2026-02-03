@@ -43,6 +43,10 @@ export const puzzleMethods = {
     openElevatorWirePuzzle() {
         if (this.isPuzzleActive) return false;
         if (!this.ENABLE_PUZZLES) return false;
+
+        const rawChance = Number(this.ELEVATOR_WIRE_PUZZLE_CHANCE);
+        const chance = Number.isFinite(rawChance) ? Phaser.Math.Clamp(rawChance, 0, 1) : 0.4;
+        if (Math.random() >= chance) return false;
     
         this.isPuzzleActive = true;
         this.puzzleTarget = null;

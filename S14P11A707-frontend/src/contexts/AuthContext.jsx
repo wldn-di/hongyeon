@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer } from "react"
+import { alertError, alertWarning } from "@/components/ui/AlertModal"
 
 const AuthContext = createContext(null)
 
@@ -128,7 +129,7 @@ export function AuthProvider({ children }) {
           return
         }
 
-        alert("회원탈퇴 기능은 서버 준비 중입니다.")
+        alertWarning("회원탈퇴 기능은 서버 준비 중입니다.")
         console.warn("[AUTH] deleteAccount not implemented yet. Waiting backend endpoint.")
         return
 
@@ -186,7 +187,7 @@ export function AuthProvider({ children }) {
               } catch {
                 // ignore
               }
-              alert(message)
+              alertError(message)
               return
             }
 
@@ -197,7 +198,7 @@ export function AuthProvider({ children }) {
             })
           } catch (e) {
             console.error("[AUTH] update nickname failed:", e)
-            alert("닉네임 변경에 실패했습니다.")
+            alertError("닉네임 변경에 실패했습니다.")
           }
         })()
       },

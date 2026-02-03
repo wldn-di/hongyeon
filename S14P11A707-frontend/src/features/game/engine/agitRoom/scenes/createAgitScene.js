@@ -11,11 +11,11 @@ import { roomMethods } from "./agitScene/roomMethods";
 import { uiMethods } from "./agitScene/uiMethods";
 import { updateMethods } from "./agitScene/updateMethods";
 
-export function createAgitScene({ enablePuzzles, isDialogActiveRef, inputFocusedRef, canUseElevatorRef }) {
+export function createAgitScene({ enablePuzzles, enableRushers, isDialogActiveRef, inputFocusedRef, canUseElevatorRef }) {
     class AgitScene extends Phaser.Scene {
         constructor() {
             super("AgitScene");
-            initAgitSceneState(this, { enablePuzzles, isDialogActiveRef, inputFocusedRef, canUseElevatorRef });
+            initAgitSceneState(this, { enablePuzzles, enableRushers, isDialogActiveRef, inputFocusedRef, canUseElevatorRef });
         }
     }
 

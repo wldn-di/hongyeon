@@ -24,6 +24,17 @@ export const updateMethods = {
         // 1. 배터리 변수 안전 초기화
         if (typeof this.flashBattery === 'undefined') this.flashBattery = 1.0;
 
+        // 플레이어 그림자/반사(Reflection) 동기화
+        this.syncReflectionToPlayer?.();
+
+        // 랜덤 돌진 오브젝트(밀치기) 업데이트/정리
+        this.updateRusherSystem?.(time);
+
+        // 스턴 상태 이펙트(별이 도는 연출)
+        const stunUntil = Number(this.rusherStunUntil) || 0;
+        const isStunned = Boolean(stunUntil && Number(time) < stunUntil);
+        this.updateStunEffect?.(time, isStunned);
+
         // 2. 랜덤 시드 변수 안전 초기화
         const seed1 = this.flashJitterSeed || 0;
         const seed2 = this.flashJitterSeed2 || 0;
@@ -150,20 +161,30 @@ export const updateMethods = {
         if (this.staticNoise) {
             this.staticNoise.tilePositionX += Phaser.Math.Between(0, 3);
             this.staticNoise.tilePositionY += Phaser.Math.Between(0, 3);
-            if (this.sfxNoise && this.sfxNoise.isPlaying && this.noiseStopAt > 0 && time > this.noiseStopAt) {
-                this.sfxNoise.stop();
-                this.noiseStopAt = 0;
-            }
-            if (Math.random() < 0.0016) {
-                this.staticNoise.setAlpha(Phaser.Math.FloatBetween(0.28, 0.46));
-                if (this.sfxNoise && time > this.noiseCooldownUntil && !this.sfxNoise.isPlaying) {
-                    this.sfxNoise.play({ volume: 0.12, rate: Phaser.Math.FloatBetween(0.95, 1.05) });
-                    this.noiseStopAt = time + 320;
-                    this.noiseCooldownUntil = time + 1400;
+            // 스턴 중에는 화면 노이즈/버스트를 끄고(가시성 방해 방지) 기본 알파로만 유지
+            if (isStunned) {
+                if (this.sfxNoise && this.sfxNoise.isPlaying) {
+                    this.sfxNoise.stop();
+                    this.noiseStopAt = 0;
                 }
-            } else {
-                const a = Phaser.Math.Linear(this.staticNoise.alpha, this.grainBaseAlpha, 0.08);
+                const a = Phaser.Math.Linear(this.staticNoise.alpha, this.grainBaseAlpha, 0.12);
                 this.staticNoise.setAlpha(a);
+            } else {
+                if (this.sfxNoise && this.sfxNoise.isPlaying && this.noiseStopAt > 0 && time > this.noiseStopAt) {
+                    this.sfxNoise.stop();
+                    this.noiseStopAt = 0;
+                }
+                if (Math.random() < 0.0016) {
+                    this.staticNoise.setAlpha(Phaser.Math.FloatBetween(0.28, 0.46));
+                    if (this.sfxNoise && time > this.noiseCooldownUntil && !this.sfxNoise.isPlaying) {
+                        this.sfxNoise.play({ volume: 0.12, rate: Phaser.Math.FloatBetween(0.95, 1.05) });
+                        this.noiseStopAt = time + 320;
+                        this.noiseCooldownUntil = time + 1400;
+                    }
+                } else {
+                    const a = Phaser.Math.Linear(this.staticNoise.alpha, this.grainBaseAlpha, 0.08);
+                    this.staticNoise.setAlpha(a);
+                }
             }
         }
 
@@ -277,8 +298,30 @@ export const updateMethods = {
                     this.elevatorMenuHint.setAlpha(0.5 + 0.2 * pulse);
                 }
 
-                const upPressed = Phaser.Input.Keyboard.JustDown(this.cursors.up) || Phaser.Input.Keyboard.JustDown(this.wasd.up);
-                const downPressed = Phaser.Input.Keyboard.JustDown(this.cursors.down) || Phaser.Input.Keyboard.JustDown(this.wasd.down);
+                // 메뉴가 열리는 프레임/직후에 W/S 입력이 버퍼링되어 즉시 이동하는 현상 방지:
+                // Up/Down 키가 한 번 "떼졌다가" 다시 눌릴 때만 층 이동 허용
+                const cursorUp = this.cursors?.up;
+                const cursorDown = this.cursors?.down;
+                const wasdUp = this.wasd?.up;
+                const wasdDown = this.wasd?.down;
+                const justDown = (key) => (key ? Phaser.Input.Keyboard.JustDown(key) : false);
+
+                const anyNavKeyDown = Boolean(cursorUp?.isDown || cursorDown?.isDown || wasdUp?.isDown || wasdDown?.isDown);
+
+                if (this.elevatorMenuAwaitRelease) {
+                    if (cursorUp) Phaser.Input.Keyboard.JustDown(cursorUp);
+                    if (cursorDown) Phaser.Input.Keyboard.JustDown(cursorDown);
+                    if (wasdUp) Phaser.Input.Keyboard.JustDown(wasdUp);
+                    if (wasdDown) Phaser.Input.Keyboard.JustDown(wasdDown);
+
+                    if (!anyNavKeyDown) {
+                        this.elevatorMenuAwaitRelease = false;
+                    }
+                }
+
+                const allowNav = !this.elevatorMenuAwaitRelease;
+                const upPressed = allowNav && (justDown(cursorUp) || justDown(wasdUp));
+                const downPressed = allowNav && (justDown(cursorDown) || justDown(wasdDown));
 
                 if (upPressed && this.currentRoomIndex < this.ROOM_COUNT - 1) {
                     this.closeElevatorMenu();
@@ -298,6 +341,7 @@ export const updateMethods = {
             const dir = this.lastDirection || "down";
             this.player.anims.play(`bob-idle-${dir}`, true);
             this.player.setDepth(this.player.y);
+            this.syncReflectionToPlayer?.();
             return;
         }
 
@@ -308,8 +352,8 @@ export const updateMethods = {
         const isRight = this.cursors.right.isDown || this.wasd.right.isDown;
         const isUp = this.cursors.up.isDown || this.wasd.up.isDown;
         const isDown = this.cursors.down.isDown || this.wasd.down.isDown;
-        let vx = (isRight ? 1 : 0) - (isLeft ? 1 : 0);
-        let vy = (isDown ? 1 : 0) - (isUp ? 1 : 0);
+        let vx = isStunned ? 0 : (isRight ? 1 : 0) - (isLeft ? 1 : 0);
+        let vy = isStunned ? 0 : (isDown ? 1 : 0) - (isUp ? 1 : 0);
         const isMoving = vx !== 0 || vy !== 0;
         body.setVelocity(0);
         const skin = "bob";
@@ -323,7 +367,28 @@ export const updateMethods = {
             const dir = this.lastDirection || "down";
             this.player.anims.play(`${skin}-idle-${dir}`, true);
         }
+
+        // 밀쳐짐(짧은 넉백) 적용
+        const kbUntil = Number(this.rusherKnockbackUntil) || 0;
+        if (kbUntil && Number(time) < kbUntil) {
+            body.velocity.x += Number(this.rusherKnockbackVx) || 0;
+            body.velocity.y += Number(this.rusherKnockbackVy) || 0;
+        } else if (kbUntil) {
+            this.rusherKnockbackUntil = 0;
+            this.rusherKnockbackVx = 0;
+            this.rusherKnockbackVy = 0;
+        }
+        if (!isStunned && stunUntil) {
+            this.rusherStunUntil = 0;
+        }
         this.player.setDepth(this.player.y);
+        this.syncReflectionToPlayer?.();
+
+        // 스턴 중에는 상호작용/이동만 막고(밀림은 허용), 나머지 UI는 그대로
+        if (isStunned) {
+            this.interactionContainer?.setVisible(false);
+            return;
+        }
 
         // 발소리/먼지
         const roomType = currentRoom?.type ?? "default";

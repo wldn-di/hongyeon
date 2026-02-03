@@ -27,6 +27,7 @@ import { chatWithSuspect, fetchChatHistory } from '@/features/session/api/sessio
 
 import { toast } from 'sonner'
 import { alertError } from '@/components/ui/AlertModal'
+import { showConfirm } from '@/components/ui/ConfirmModal'
 import { cn } from '@/lib/utils'
 
 const START_GAME_DEDUP_MS = 5000
@@ -1130,8 +1131,9 @@ export default function GameRoom() {
     }
   }
 
-  const handleExit = useCallback(() => {
-    if (!window.confirm('정말 종료하시겠습니까?')) return
+  const handleExit = useCallback(async () => {
+    const ok = await showConfirm('정말 종료하시겠습니까?')
+    if (!ok) return
     setLocation('/scenarios')
   }, [setLocation])
 
@@ -1477,6 +1479,7 @@ export default function GameRoom() {
 	                onClueInspected={handleClueInspected}
 	                onRoomChanged={handleRoomChanged}
                 initialRoomIndex={currentRoomIndex}
+                enableRushers
 	              />
 	            ) : gameInitError ? (
 	              <div className="w-full h-full flex items-center justify-center">

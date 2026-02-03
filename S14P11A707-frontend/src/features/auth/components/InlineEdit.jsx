@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/Button'
 import { Check, Edit3, X } from 'lucide-react'
+import { alertWarning } from '@/components/ui/AlertModal'
 
 /**
  * InlineEdit - 인라인 편집 컴포넌트
@@ -30,7 +31,7 @@ export function InlineEdit({ value, onSave, placeholder = '', minLength = 2, lab
 
   const save = () => {
     if (!canSave) {
-      alert(`${label}은(는) ${minLength}글자 이상이어야 합니다.`)
+      alertWarning(`${label}은(는) ${minLength}글자 이상이어야 합니다.`)
       return
     }
     onSave(draft.trim())

@@ -1,6 +1,8 @@
 import React from 'react'
 import { Button } from '@/components/ui/Button'
 import { ShieldAlert } from 'lucide-react'
+import { alertError, alertSuccess } from '@/components/ui/AlertModal'
+import { showConfirm } from '@/components/ui/ConfirmModal'
 
 /**
  * DangerZone - 회원탈퇴 등 위험한 작업 섹션
@@ -10,14 +12,20 @@ import { ShieldAlert } from 'lucide-react'
  */
 export function DangerZone({ onDeleteAccount }) {
   const handleDelete = async () => {
-    const ok = window.confirm('정말 회원탈퇴 하시겠습니까?')
+    const ok = await showConfirm({
+      title: '회원탈퇴',
+      message: '정말 회원탈퇴 하시겠습니까?',
+      confirmText: '탈퇴',
+      cancelText: '취소',
+      tone: 'destructive',
+    })
     if (!ok) return
     
     try {
       await onDeleteAccount()
-      alert('탈퇴 처리되었습니다.')
+      alertSuccess('탈퇴 처리되었습니다.')
     } catch (error) {
-      alert('회원탈퇴 실패. 서버 상태를 확인해주세요.')
+      alertError('회원탈퇴 실패. 서버 상태를 확인해주세요.')
     }
   }
 

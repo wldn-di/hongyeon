@@ -31,6 +31,13 @@ export const lifecycleMethods = {
         this.load.audio("sfx_rumble", "/assets/sound/effect/rumble.mp3");
         this.load.audio("sfx_walk", "/assets/sound/effect/walk2.mp3");
         this.load.audio("sfx_elevator", "/assets/sound/effect/elevator.mp3");
+        this.load.audio("sfx_whoosh", "/assets/sound/effect/whoosh.mp3");
+        this.load.audio("sfx_hit", "/assets/sound/effect/hit.mp3");
+
+        // 방 타입별 앰비언스(루프)
+        this.load.audio("amb_rumble", "/assets/sound/effect/rumble.mp3");
+        this.load.audio("amb_air", "/assets/sound/effect/noise1.mp3");
+        this.load.audio("amb_electric", "/assets/sound/effect/noise.mp3");
     
         // ✅ 임시 증거 이미지
         this.load.image("clue_object", "/assets/object/object.png");
@@ -61,6 +68,8 @@ export const lifecycleMethods = {
             this.sfxRumble = this.sound.add("sfx_rumble", { volume: 0.6 });
             this.sfxWalk = this.sound.add("sfx_walk", { volume: 0.3 });
             this.sfxElevator = this.sound.add("sfx_elevator", { volume: 0.7 });
+            this.sfxWhoosh = this.sound.add("sfx_whoosh", { volume: 0.25 });
+            this.sfxHit = this.sound.add("sfx_hit", { volume: 0.5 });
     
             for (let i = 0; i < this.ROOM_COUNT; i++) {
                 const roomOriginX = i * this.ROOM_GAP;
@@ -193,6 +202,7 @@ export const lifecycleMethods = {
             this.physics.add.collider(this.player, this.wallGroup);
     
             this.createReflection();
+            this.createRusherSystem();
     
             this.createStrongAmbientDust();
             this.createWalkingDust();
