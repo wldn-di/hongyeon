@@ -98,6 +98,7 @@ public class ScenarioBaseNode implements ScenarioV2Node {
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
         state.setScenarioJson(cleaned);
+        state.setDraftJson(null);
         log.info("[v2] ScenarioBaseNode completed. scenarioId={}, rawLen={}, jsonLen={}", state.getScenarioId(), content == null ? 0 : content.length(), cleaned.length());
         return state;
     }

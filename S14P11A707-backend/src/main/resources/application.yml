@@ -115,6 +115,8 @@ app:
         max-requests-per-minute: ${APP_SCENARIO_V2_IMAGE_MAX_REQUESTS_PER_MINUTE:10}
   minio:
     endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+    # 프론트(브라우저)가 직접 접근 가능한 공개 엔드포인트(리버스 프록시/도메인). 미지정 시 endpoint를 사용.
+    public-endpoint: ${MINIO_PUBLIC_ENDPOINT:${MINIO_ENDPOINT:http://localhost:9000}}
     access-key: ${MINIO_ACCESS_KEY:minioadmin}
     secret-key: ${MINIO_SECRET_KEY:ssafy1031}
     bucket: ${MINIO_BUCKET:hongyeon}
