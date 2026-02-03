@@ -91,8 +91,17 @@ export function AuthProvider({ children }) {
           dispatch({ type: "CLEAR_USER" })
           return
         }
-        // TODO: 백엔드 logout 엔드포인트 확인 후 연결
-        dispatch({ type: "CLEAR_USER" })
+
+        try {
+          await fetch(`${base}/api/auth/logout`, {
+            method: "POST",
+            credentials: "include",
+          })
+        } catch (e) {
+          console.error("[AUTH] logout failed:", e)
+        } finally {
+          dispatch({ type: "CLEAR_USER" })
+        }
       },
 
       // 3) 수동 재조회

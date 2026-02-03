@@ -79,7 +79,7 @@ export function useScenarioFilters() {
   const basePath = pathname || '/scenarios'
 
   const filters = useMemo(
-    () => parseScenarioFiltersFromLocation(`${basePath}${search || ''}`),
+    () => parseScenarioFiltersFromLocation(`${basePath}${search ? '?' + search : ''}`),
     [basePath, search],
   )
 
