@@ -81,7 +81,7 @@ export const updateMethods = {
         const dtSecRaw = (Number(delta) || 0) / 1000;
         const dtSec = Phaser.Math.Clamp(dtSecRaw, 0, 0.25);
         if (dtSec > 0) {
-            const drain = Number(this.FLASHLIGHT_BATTERY_DRAIN_PER_SEC) || 0.005;
+            const drain = 0.04;
             const recharge = Number(this.FLASHLIGHT_BATTERY_RECHARGE_PER_SEC) || 0.15;
 
             const isUiBlockingInput = Boolean(this.isDialogActiveRef?.current || shouldReleaseKeyboardCapture);
