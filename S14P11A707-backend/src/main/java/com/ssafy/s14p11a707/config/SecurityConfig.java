@@ -79,7 +79,13 @@ public class SecurityConfig {
             // Reviews: list by scenario (read-only)
             "/api/reviews/*/reviews",
             // Global rankings (read-only)
-            "/api/rankings"
+            "/api/rankings",
+            // Scenarios: detail and sub-resources (read-only)
+            "/api/scenarios/*",
+            "/api/scenarios/*/status",
+            "/api/scenarios/*/rankings",
+            "/api/scenarios/*/victim",
+            "/api/scenarios/*/suspects",
     };
 
     private final RestAuthenticationEntryPoint restAuthenticationEntryPoint;
