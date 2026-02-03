@@ -924,18 +924,24 @@ export default function GameRoom() {
     }
   }, [rooms, visitedFloors, addLog, sessionId, refetchLogs, showAssistantDialog])
 
-    const handleSendMessage = async (contactId, text) => {
+    const handleSendMessage = async (contactId, text, usedClueId = null) => {
       const timeStr = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })
 
       const randomInt = (min, max) => Math.floor(min + Math.random() * (max - min + 1))
       const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms))
+
+      // 사용된 단서 이름 조회
+      const usedClue = usedClueId ? discoveredEvidence.find(e => e.id === usedClueId) : null
+      const usedClueName = usedClue?.name || null
 
       // 유저 메시지 즉시 추가
       const newMessage = {
         id: Date.now(),
         sender: 'user',
         text,
-        time: timeStr
+        time: timeStr,
+        usedClueId,
+        usedClueName
       }
 
       setChatHistories(prev => ({
@@ -1003,8 +1009,14 @@ export default function GameRoom() {
       try {
         const response = await chatWithSuspect(sessionId, suspectId, {
           message: text,
-          usedClueId: null  // 단서 사용 시 해당 clueId 전달
+          usedClueId: usedClueId || null
         })
+
+        // 심문 응답 직후 health UI 즉시 동기화 (API 응답의 health가 source of truth)
+        const nextHealth = Number(response?.health)
+        if (Number.isFinite(nextHealth)) {
+          setHealth(nextHealth)
+        }
 
         const elapsed = Date.now() - typingStartedAt
         const waitMs = Math.max(0, minTypingMs - elapsed)
@@ -1273,6 +1285,13 @@ export default function GameRoom() {
     }
   }
 
+  const handleReportModalClose = useCallback(() => {
+    setReportModalOpen(false)
+    if (gameEndType === 'success') {
+      setLocation('/', { replace: true })
+    }
+  }, [gameEndType, setLocation])
+
   // 게임 종료 모달 핸들러
   const handleGameEndGoHome = useCallback(() => {
     setGameEndModalOpen(false)
@@ -1512,6 +1531,9 @@ export default function GameRoom() {
 	        rightOffsetPx={rightLogOpen ? SIDE_PANEL_WIDTH_PX : 0}
 	        pendingAddItem={pendingAddItem}
 	        onConsumePendingAddItem={() => setPendingAddItem(null)}
+	        clues={discoveredEvidence}
+	        suspects={suspects}
+	        rooms={rooms}
 	      />
 
       {/* 오른쪽 하단: 방 이동 + 휴대폰 */}
@@ -1555,6 +1577,7 @@ export default function GameRoom() {
         setCurrentChat={setCurrentChat}
         onContactSelect={handleContactSelect}
         onMarkAsRead={handleMarkAsRead}
+        clues={discoveredEvidence}
       />
 
       {/* 모달들 */}
@@ -1566,9 +1589,14 @@ export default function GameRoom() {
 	        scenarioId={activeScenarioId}
 	        sessionId={sessionId}
 	        victim={scenario?.victim || null}
-	      />
+      />
       <ReviewModal isOpen={reviewModalOpen} onSubmit={handleReviewSubmit} />
-      <ReportModal isOpen={reportModalOpen} onClose={() => setReportModalOpen(false)} report={report} />
+      <ReportModal
+        isOpen={reportModalOpen}
+        onClose={handleReportModalClose}
+        closeText={gameEndType === 'success' ? '보고서 확인 완료' : '닫기'}
+        report={report}
+      />
 
       {/* 게임 종료 모달 (성공/실패) */}
       <GameEndModal

@@ -394,15 +394,15 @@ public class GameSessionServiceImpl implements GameSessionService {
             }
         }
 
-        // SessionSuspectState에서 현재 심문 레벨 조회 (없으면 생성)
+        // SessionSuspectState에서 현재 심문 레벨 조회 (없으면 생성 후 저장)
         SessionSuspectStateId stateId = new SessionSuspectStateId(session.getId(), suspect.getId());
         SessionSuspectState state = sessionSuspectStateRepository.findById(stateId)
-                .orElseGet(() -> SessionSuspectState.builder()
+                .orElseGet(() -> sessionSuspectStateRepository.save(SessionSuspectState.builder()
                         .session(session)
                         .suspect(suspect)
                         .currentInterrogationLevel(1)
                         .secretRevealed(false)
-                        .build());
+                        .build()));
 
         // 현재 레벨 확인 (Level 2 이상이면 약점이 이미 드러난 상태)
         Long usedClueId = request.usedClueId();
@@ -616,7 +616,8 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .build();
         chatMessageRepository.save(userMessageEntity);
 
-        int responseLevel = isWeaknessClueUsed ? 2 : 1;
+        int responseLevel = state.getCurrentInterrogationLevel();
+
         ChatMessage assistantMessageEntity = ChatMessage.builder()
                 .session(session)
                 .suspect(suspect)
@@ -637,7 +638,6 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         saveEventLog(session, CHAT_STARTED, suspect.getName());
 
-        Long revealedClueId = null;
 
         return new SuspectChatResponse(
                 sessionId,
@@ -645,7 +645,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 reply,
                 responseLevel,
                 health,
-                revealedClueId
+                null
         );
 
     }

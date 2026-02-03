@@ -15,6 +15,7 @@ import { ScenarioFooter } from '@/features/scenarios/components/ScenarioFooter'
 import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
+import { isVisibleInAll } from '@/features/scenarios/api/scenarioMappers'
 
 /**
  * 시나리오 목록 페이지
@@ -49,8 +50,6 @@ export default function Scenarios() {
   useEffect(() => {
     setKeywordDraft(keyword)
   }, [keyword])
-
-  const isScenarioPlayable = (scenario) => !scenario?.status || scenario.status === 'COMPLETED'
 
   const sortScenarioList = (list, sortBy) => {
     const sorted = [...(list || [])]
@@ -92,7 +91,7 @@ export default function Scenarios() {
   const { topByRating, topByPlayCount } = useTopScenarios({ enabled: tab === 'all' })
 
   const allScenarios = useMemo(
-    () => sortScenarioList((allScenariosRaw || []).filter(isScenarioPlayable), sortBy),
+    () => sortScenarioList((allScenariosRaw || []).filter(isVisibleInAll), sortBy),
     [allScenariosRaw, sortBy],
   )
 

@@ -1,5 +1,5 @@
 import React from "react"
-import { FileText, Search, MessageCircle, MapPin, Save, AlertCircle, Pin } from "lucide-react"
+import { FileText, Search, MessageCircle, MapPin, Save, AlertCircle, Pin, X } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 // 로그 타입별 설정
@@ -18,61 +18,70 @@ const logTypeConfig = {
 // 오른쪽 수사 로그 사이드바
 export default function RightLogSidebar({ isOpen, onToggle, logs = [] }) {
   return (
-    <div className={cn(
-      "fixed top-16 right-0 h-[calc(100%-140px)] bg-card/95 backdrop-blur border-l border-border transition-transform duration-300 z-30",
-      "w-72 flex flex-col",
-      isOpen ? "translate-x-0" : "translate-x-full"
-    )}>
-      <button
-        onClick={onToggle}
-        className="absolute top-1/2 -translate-y-1/2 -left-10 w-10 h-24 bg-card border border-border border-r-0 rounded-l-lg flex items-center justify-center hover:bg-muted/50 transition-colors"
-      >
-        <FileText className="w-5 h-5" />
-      </button>
-
-      <div className="p-4 border-b border-border bg-muted/20">
-        <h3 className="font-bold flex items-center gap-2">
-          <FileText className="w-5 h-5 text-primary" />
-          수사 로그
-          <span className="text-xs text-muted-foreground ml-auto">({logs.length})</span>
-        </h3>
-        <p className="text-xs text-muted-foreground mt-1">수사 진행 상황이 기록됩니다</p>
-      </div>
-
-      <div className="flex-1 p-3 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'thin' }}>
-        {logs.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-8">
-            아직 수사 기록이 없습니다.<br />
-            현장을 탐색해보세요!
-          </p>
-        ) : (
-          <div className="space-y-2">
-            {logs.map(log => {
-              const config = logTypeConfig[log.type] || logTypeConfig.system
-              const IconComponent = config.icon
-
-              return (
-                <div
-                  key={log.id}
-                  className="flex items-start gap-2 py-2.5 px-2 rounded-lg bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors"
-                >
-                  <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">
-                    {log.time}
-                  </span>
-                  <span className={cn(
-                    "text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap flex items-center gap-1",
-                    config.color
-                  )}>
-                    <IconComponent className="w-3 h-3" />
-                    {config.label}
-                  </span>
-                  <span className="text-xs flex-1 text-gray-300 leading-relaxed">{log.message}</span>
-                </div>
-              )
-            })}
+    <>
+      <div className={cn(
+        "fixed top-16 right-0 h-[calc(100%-140px)] bg-card/95 backdrop-blur border-l border-border transition-transform duration-300 z-30",
+        "w-72 flex flex-col",
+        isOpen ? "translate-x-0" : "translate-x-full"
+      )}>
+        <div className="p-4 border-b border-border bg-muted/20 flex items-center justify-between gap-3">
+          <div className="min-w-0">
+            <h3 className="font-bold flex items-center gap-2">
+              <FileText className="w-5 h-5 text-primary" />
+              수사 로그
+              <span className="text-xs text-muted-foreground">({logs.length})</span>
+            </h3>
+            <p className="text-xs text-muted-foreground mt-1">수사 진행 상황이 기록됩니다</p>
           </div>
-        )}
+          <button onClick={onToggle} className="p-1 hover:bg-muted rounded">
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <div className="flex-1 p-3 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'thin' }}>
+          {logs.length === 0 ? (
+            <p className="text-sm text-muted-foreground text-center py-8">
+              아직 수사 기록이 없습니다.<br />
+              현장을 탐색해보세요!
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {logs.map(log => {
+                const config = logTypeConfig[log.type] || logTypeConfig.system
+                const IconComponent = config.icon
+
+                return (
+                  <div
+                    key={log.id}
+                    className="flex items-start gap-2 py-2.5 px-2 rounded-lg bg-muted/20 border border-border/30 hover:bg-muted/30 transition-colors"
+                  >
+                    <span className="text-[10px] font-mono text-muted-foreground whitespace-nowrap mt-0.5">
+                      {log.time}
+                    </span>
+                    <span className={cn(
+                      "text-[10px] px-1.5 py-0.5 rounded font-medium whitespace-nowrap flex items-center gap-1",
+                      config.color
+                    )}>
+                      <IconComponent className="w-3 h-3" />
+                      {config.label}
+                    </span>
+                    <span className="text-xs flex-1 text-gray-300 leading-relaxed">{log.message}</span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {!isOpen && (
+        <button
+          onClick={onToggle}
+          className="fixed top-1/2 -translate-y-1/2 right-0 z-30 w-10 h-24 bg-card border border-border border-r-0 rounded-l-lg flex items-center justify-center hover:bg-muted/50 transition-colors"
+        >
+          <FileText className="w-5 h-5" />
+        </button>
+      )}
+    </>
   )
 }

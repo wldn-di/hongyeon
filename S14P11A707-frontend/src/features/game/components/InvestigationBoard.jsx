@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/Button'
-import { X, Pin, Save, Check, Plus, Loader2 } from 'lucide-react'
+import { X, Pin, Save, Check, Plus, Minus, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MemoInputModal } from '@/features/game/modals'
 import { fetchBoard, saveBoard } from '@/features/session/api/sessionApi'
@@ -14,6 +14,7 @@ export function InvestigationBoard({
   scenarioId = 1,
   victim = null,
   isModal = false,
+  isActive = true,
   onClose = null,
   readOnly = false,
   title = "추리 보드",
@@ -30,6 +31,9 @@ export function InvestigationBoard({
   hideSave = false,
   onBoardStateChange = null,
   fullHeight = false, // 전체 높이 사용 여부
+  clues = [],      // 단서 목록 (API 응답에서 상세정보 조회용)
+  suspects = [],   // 용의자 목록 (API 응답에서 상세정보 조회용)
+  rooms = [],      // 장소 목록 (API 응답에서 상세정보 조회용)
 }) {
   const isSubmitMode = mode === 'submit'
   const effectiveAllowedLineModes =
@@ -55,12 +59,28 @@ export function InvestigationBoard({
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [hoveredItem, setHoveredItem] = useState(null) // 호버된 카드 ID
+  const [zoom, setZoom] = useState(1)
 
   const boardRef = useRef(null)
   const hoverTimeoutRef = useRef(null) // 호버 1초 딜레이용
   const autosaveTimerRef = useRef(null)
   const pendingConnectFromRef = useRef(null)
   const isLoadedRef = useRef(false)  // 로드 중복 방지
+  const zoomRef = useRef(1)
+  const panRef = useRef({
+    isPanning: false,
+    startX: 0,
+    startY: 0,
+    startScrollLeft: 0,
+    startScrollTop: 0,
+    didMove: false,
+  })
+  const didAutoCenterVictimRef = useRef(false)
+  const didAutoFitSubmitRef = useRef(false)
+
+  useEffect(() => {
+    didAutoCenterVictimRef.current = false
+  }, [victim?.id, sessionId, scenarioId])
   const modalDragRef = useRef({
     isDragging: false,
     startX: 0,
@@ -82,6 +102,156 @@ export function InvestigationBoard({
   // 유틸리티 함수
   // ========================================
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
+
+  const BOARD_BASE_WIDTH = 1600
+  const BOARD_BASE_HEIGHT = 1200
+  const CARD_WIDTH = 176
+  const CARD_HEIGHT = 200
+  const CARD_HALF_WIDTH = CARD_WIDTH / 2
+  const CARD_HALF_HEIGHT = CARD_HEIGHT / 2
+  const MIN_ZOOM = 0.6
+  const MAX_ZOOM = 1.8
+  const ZOOM_STEP = 0.1
+
+  useEffect(() => {
+    zoomRef.current = zoom
+  }, [zoom])
+
+  const getViewportCenterWorld = useCallback(() => {
+    const el = boardRef.current
+    const rect = el?.getBoundingClientRect()
+    const currentZoom = zoomRef.current || 1
+
+    if (!el || !rect) {
+      return { x: BOARD_BASE_WIDTH / 2, y: BOARD_BASE_HEIGHT / 2 }
+    }
+
+    return {
+      x: (el.scrollLeft + rect.width / 2) / currentZoom,
+      y: (el.scrollTop + rect.height / 2) / currentZoom,
+    }
+  }, [])
+
+  const getWorldTopLeftFromClient = useCallback((clientX, clientY) => {
+    const el = boardRef.current
+    const rect = el?.getBoundingClientRect()
+    const currentZoom = zoomRef.current || 1
+    if (!el || !rect) return null
+
+    const worldX = (clientX - rect.left + el.scrollLeft) / currentZoom
+    const worldY = (clientY - rect.top + el.scrollTop) / currentZoom
+    return { x: worldX - CARD_HALF_WIDTH, y: worldY - CARD_HALF_HEIGHT }
+  }, [])
+
+  const zoomTo = useCallback((nextZoom, options = {}) => {
+    const el = boardRef.current
+    const rect = el?.getBoundingClientRect()
+    const prevZoom = zoomRef.current || 1
+
+    const clamped = clamp(Number(nextZoom) || 1, MIN_ZOOM, MAX_ZOOM)
+
+    if (!el || !rect) {
+      zoomRef.current = clamped
+      setZoom(clamped)
+      return
+    }
+
+    const anchorClientX = Number.isFinite(Number(options.clientX)) ? Number(options.clientX) : rect.left + rect.width / 2
+    const anchorClientY = Number.isFinite(Number(options.clientY)) ? Number(options.clientY) : rect.top + rect.height / 2
+    const anchorX = anchorClientX - rect.left
+    const anchorY = anchorClientY - rect.top
+
+    const worldX = (el.scrollLeft + anchorX) / prevZoom
+    const worldY = (el.scrollTop + anchorY) / prevZoom
+
+    zoomRef.current = clamped
+    setZoom(clamped)
+    requestAnimationFrame(() => {
+      const nextEl = boardRef.current
+      if (!nextEl) return
+      nextEl.scrollLeft = worldX * clamped - anchorX
+      nextEl.scrollTop = worldY * clamped - anchorY
+    })
+  }, [])
+
+  const handleBoardWheelZoom = useCallback((e) => {
+    if (!boardRef.current) return
+    if (!Number.isFinite(e?.deltaY) || e.deltaY === 0) return
+
+    e.preventDefault()
+
+    const direction = e.deltaY < 0 ? 1 : -1
+    const nextZoom = (zoomRef.current || 1) + direction * ZOOM_STEP
+    zoomTo(nextZoom, { clientX: e.clientX, clientY: e.clientY })
+  }, [zoomTo])
+
+  useEffect(() => {
+    const el = boardRef.current
+    if (!el || isSubmitMode) return
+
+    // React wheel 이벤트는 passive일 수 있어 직접 등록
+    el.addEventListener('wheel', handleBoardWheelZoom, { passive: false })
+    return () => {
+      el.removeEventListener('wheel', handleBoardWheelZoom)
+    }
+  }, [handleBoardWheelZoom, isSubmitMode])
+
+  useEffect(() => {
+    if (!isSubmitMode) return
+    if (didAutoFitSubmitRef.current) return
+
+    const el = boardRef.current
+    if (!el) return
+
+    const items = boardItems.filter((item) => item?.type && item.type !== 'note')
+    if (items.length === 0) return
+
+    const rect = el.getBoundingClientRect()
+    if (!rect?.width || !rect?.height) return
+
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    items.forEach((item) => {
+      const x = Number(item?.x) || 0
+      const y = Number(item?.y) || 0
+      minX = Math.min(minX, x)
+      minY = Math.min(minY, y)
+      maxX = Math.max(maxX, x + CARD_WIDTH)
+      maxY = Math.max(maxY, y + CARD_HEIGHT)
+    })
+
+    if (!Number.isFinite(minX) || !Number.isFinite(minY) || !Number.isFinite(maxX) || !Number.isFinite(maxY)) {
+      return
+    }
+
+    didAutoFitSubmitRef.current = true
+
+    const padding = 56
+    const contentWidth = Math.max(1, (maxX - minX) + padding * 2)
+    const contentHeight = Math.max(1, (maxY - minY) + padding * 2)
+
+    const fitZoomRaw = Math.min(rect.width / contentWidth, rect.height / contentHeight)
+    const nextZoom = clamp(fitZoomRaw, 0.35, 1)
+
+    zoomRef.current = nextZoom
+    setZoom(nextZoom)
+
+    requestAnimationFrame(() => {
+      const nextEl = boardRef.current
+      if (!nextEl) return
+      const nextRect = nextEl.getBoundingClientRect()
+      const centerX = (minX + maxX) / 2
+      const centerY = (minY + maxY) / 2
+      const targetScrollLeft = centerX * nextZoom - nextRect.width / 2
+      const targetScrollTop = centerY * nextZoom - nextRect.height / 2
+
+      nextEl.scrollLeft = clamp(targetScrollLeft, 0, nextEl.scrollWidth - nextRect.width)
+      nextEl.scrollTop = clamp(targetScrollTop, 0, nextEl.scrollHeight - nextRect.height)
+    })
+  }, [isSubmitMode, boardItems])
 
   const getConnectionKey = (fromId, toId) => {
     const a = String(fromId ?? '')
@@ -234,38 +404,72 @@ export function InvestigationBoard({
         return false
       }
 
-      // API 데이터를 UI 형식으로 변환
+      // API 데이터를 UI 형식으로 변환 (상세정보 조회)
       const uiItems = response.nodes.map(node => {
         const nodeId = node.nodeId
         let type = 'note'
         let id = `note-${nodeId}`
         let extraProps = {}
+        let name = node.memoContent || ''
+        let image = null
+        let note = node.memoContent || ''
 
         if (node.type === 'CLUE') {
           type = 'evidence'
           id = `evidence-${node.targetId}`
           extraProps = { evidenceId: node.targetId }
+          // clues 목록에서 상세정보 조회
+          const clueData = clues.find(c => c.id === node.targetId)
+          if (clueData) {
+            name = clueData.name || clueData.title || name
+            image = clueData.image || clueData.detailImageUrl || clueData.imageUrl || null
+            note = clueData.description || clueData.location || note
+          }
         } else if (node.type === 'SUSPECT') {
           type = 'suspect'
           id = `suspect-${node.targetId}`
           extraProps = { suspectId: node.targetId }
+          // suspects 목록에서 상세정보 조회
+          const suspectData = suspects.find(s => s.id === node.targetId)
+          if (suspectData) {
+            name = suspectData.name || name
+            image = suspectData.image || suspectData.portraitUrl || null
+            extraProps.role = suspectData.role || suspectData.occupation || ''
+            note = suspectData.oneLiner || note
+          }
         } else if (node.type === 'VICTIM') {
           type = 'victim'
           id = `victim-${node.targetId}`
           extraProps = { victimId: node.targetId }
+          // victim prop에서 상세정보 조회
+          if (victim && (victim.id === node.targetId || !node.targetId)) {
+            name = victim.name || '피해자'
+            image = victim.portraitUrl || victim.image || null
+            extraProps.occupation = victim.occupation || ''
+            note = victim.background || note
+          }
         } else if (node.type === 'LOCATION') {
           type = 'location'
           id = `location-${node.targetId}`
           extraProps = { locationId: node.targetId }
+          // rooms 목록에서 상세정보 조회
+          const roomData = rooms.find(r => r.id === node.targetId || r.floor === node.targetId)
+          if (roomData) {
+            name = roomData.name || name
+            image = roomData.image || null
+            extraProps.floorNumber = roomData.floorNumber || roomData.floor || roomData.id
+            note = roomData.description || note
+          }
         }
 
         return {
           id,
           type,
-          name: node.memoContent || type,
+          name: name || type,
           x: node.x || 0,
           y: node.y || 0,
-          note: node.memoContent || '',
+          image,
+          note,
           nodeId,
           ...extraProps,
         }
@@ -307,7 +511,7 @@ export function InvestigationBoard({
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId, loadFromLocalStorage, saveToLocalStorage])
+  }, [sessionId, loadFromLocalStorage, saveToLocalStorage, clues, suspects, rooms, victim])
 
   // ========================================
   // 초기 데이터 로드
@@ -332,6 +536,74 @@ export function InvestigationBoard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, initialBoardItems, initialConnections])
+
+  // ========================================
+  // 보드 아이템 상세정보 보강 (clues/suspects/rooms가 늦게 로드될 경우)
+  // ========================================
+  useEffect(() => {
+    if (boardItems.length === 0) return
+    // 상세정보가 누락된 아이템이 있는지 확인
+    const needsEnrichment = boardItems.some(item => {
+      if (item.type === 'evidence' && item.evidenceId && !item.image && clues.length > 0) return true
+      if (item.type === 'suspect' && item.suspectId && !item.image && suspects.length > 0) return true
+      if (item.type === 'location' && item.locationId && !item.image && rooms.length > 0) return true
+      if (item.type === 'victim' && item.victimId && !item.image && victim) return true
+      return false
+    })
+
+    if (!needsEnrichment) return
+
+    // 상세정보 보강
+    setBoardItems(prev => prev.map(item => {
+      if (item.type === 'evidence' && item.evidenceId) {
+        const clueData = clues.find(c => c.id === item.evidenceId)
+        if (clueData && !item.image) {
+          return {
+            ...item,
+            name: clueData.name || clueData.title || item.name,
+            image: clueData.image || clueData.detailImageUrl || clueData.imageUrl || null,
+            note: clueData.description || clueData.location || item.note,
+          }
+        }
+      }
+      if (item.type === 'suspect' && item.suspectId) {
+        const suspectData = suspects.find(s => s.id === item.suspectId)
+        if (suspectData && !item.image) {
+          return {
+            ...item,
+            name: suspectData.name || item.name,
+            image: suspectData.image || suspectData.portraitUrl || null,
+            role: suspectData.role || suspectData.occupation || item.role || '',
+            note: suspectData.oneLiner || item.note,
+          }
+        }
+      }
+      if (item.type === 'location' && item.locationId) {
+        const roomData = rooms.find(r => r.id === item.locationId || r.floor === item.locationId)
+        if (roomData && !item.image) {
+          return {
+            ...item,
+            name: roomData.name || item.name,
+            image: roomData.image || null,
+            floorNumber: roomData.floorNumber || roomData.floor || roomData.id,
+            note: roomData.description || item.note,
+          }
+        }
+      }
+      if (item.type === 'victim' && item.victimId && victim) {
+        if (!item.image) {
+          return {
+            ...item,
+            name: victim.name || item.name,
+            image: victim.portraitUrl || victim.image || null,
+            occupation: victim.occupation || item.occupation || '',
+            note: victim.background || item.note,
+          }
+        }
+      }
+      return item
+    }))
+  }, [clues, suspects, rooms, victim, boardItems.length])
 
   // ========================================
   // 보드 상태 변경 콜백
@@ -362,11 +634,11 @@ export function InvestigationBoard({
   const addEvidenceItem = useCallback((evidence, { x, y } = {}) => {
     if (readOnly || !evidence?.id) return
 
-    const rect = boardRef.current?.getBoundingClientRect()
-    const fallbackX = rect ? rect.width / 2 - 88 : 350
-    const fallbackY = rect ? rect.height / 2 - 100 : 200
-    const maxX = rect ? Math.max(0, rect.width - 176) : 750
-    const maxY = rect ? Math.max(0, rect.height - 200) : 500
+    const center = getViewportCenterWorld()
+    const fallbackX = center.x - CARD_HALF_WIDTH
+    const fallbackY = center.y - CARD_HALF_HEIGHT
+    const maxX = Math.max(0, BOARD_BASE_WIDTH - CARD_WIDTH)
+    const maxY = Math.max(0, BOARD_BASE_HEIGHT - CARD_HEIGHT)
 
     const nextItemId = `evidence-${evidence.id}`
 
@@ -389,16 +661,16 @@ export function InvestigationBoard({
       setSelectedItem(nextItemId)
       return [...prev, nextItem]
     })
-  }, [readOnly])
+  }, [readOnly, getViewportCenterWorld])
 
   const addSuspectItem = useCallback((suspect, { x, y } = {}) => {
     if (readOnly || !suspect?.id) return
 
-    const rect = boardRef.current?.getBoundingClientRect()
-    const fallbackX = rect ? rect.width / 2 - 88 : 350
-    const fallbackY = rect ? rect.height / 2 - 100 : 200
-    const maxX = rect ? Math.max(0, rect.width - 176) : 750
-    const maxY = rect ? Math.max(0, rect.height - 200) : 500
+    const center = getViewportCenterWorld()
+    const fallbackX = center.x - CARD_HALF_WIDTH
+    const fallbackY = center.y - CARD_HALF_HEIGHT
+    const maxX = Math.max(0, BOARD_BASE_WIDTH - CARD_WIDTH)
+    const maxY = Math.max(0, BOARD_BASE_HEIGHT - CARD_HEIGHT)
 
     const nextItemId = `suspect-${suspect.id}`
 
@@ -422,16 +694,16 @@ export function InvestigationBoard({
       setSelectedItem(nextItemId)
       return [...prev, nextItem]
     })
-  }, [readOnly])
+  }, [readOnly, getViewportCenterWorld])
 
   const addLocationItem = useCallback((location, { x, y } = {}) => {
     if (readOnly || !location?.id) return
 
-    const rect = boardRef.current?.getBoundingClientRect()
-    const fallbackX = rect ? rect.width / 2 - 88 : 350
-    const fallbackY = rect ? rect.height / 2 - 100 : 200
-    const maxX = rect ? Math.max(0, rect.width - 176) : 750
-    const maxY = rect ? Math.max(0, rect.height - 200) : 500
+    const center = getViewportCenterWorld()
+    const fallbackX = center.x - CARD_HALF_WIDTH
+    const fallbackY = center.y - CARD_HALF_HEIGHT
+    const maxX = Math.max(0, BOARD_BASE_WIDTH - CARD_WIDTH)
+    const maxY = Math.max(0, BOARD_BASE_HEIGHT - CARD_HEIGHT)
 
     const nextItemId = `location-${location.id}`
 
@@ -455,16 +727,16 @@ export function InvestigationBoard({
       setSelectedItem(nextItemId)
       return [...prev, nextItem]
     })
-  }, [readOnly])
+  }, [readOnly, getViewportCenterWorld])
 
   const addVictimItem = useCallback((victimData, { x, y } = {}) => {
     if (readOnly || !victimData?.id) return
 
-    const rect = boardRef.current?.getBoundingClientRect()
-    const fallbackX = rect ? rect.width / 2 - 88 : 350
-    const fallbackY = rect ? rect.height / 2 - 100 : 200
-    const maxX = rect ? Math.max(0, rect.width - 176) : 750
-    const maxY = rect ? Math.max(0, rect.height - 200) : 500
+    const center = getViewportCenterWorld()
+    const fallbackX = center.x - CARD_HALF_WIDTH
+    const fallbackY = center.y - CARD_HALF_HEIGHT
+    const maxX = Math.max(0, BOARD_BASE_WIDTH - CARD_WIDTH)
+    const maxY = Math.max(0, BOARD_BASE_HEIGHT - CARD_HEIGHT)
 
     const nextItemId = `victim-${victimData.id}`
 
@@ -485,18 +757,18 @@ export function InvestigationBoard({
       setSelectedItem(nextItemId)
       return [...prev, nextItem]
     })
-  }, [readOnly])
+  }, [readOnly, getViewportCenterWorld])
 
   const addNoteItem = useCallback((text, { x, y } = {}) => {
     if (readOnly || isSubmitMode || !allowMemo) return
     const normalized = String(text ?? '').trim()
     if (!normalized) return
 
-    const rect = boardRef.current?.getBoundingClientRect()
-    const fallbackX = rect ? rect.width / 2 - 88 : 350
-    const fallbackY = rect ? rect.height / 2 - 100 : 200
-    const maxX = rect ? Math.max(0, rect.width - 176) : 750
-    const maxY = rect ? Math.max(0, rect.height - 200) : 500
+    const center = getViewportCenterWorld()
+    const fallbackX = center.x - CARD_HALF_WIDTH
+    const fallbackY = center.y - CARD_HALF_HEIGHT
+    const maxX = Math.max(0, BOARD_BASE_WIDTH - CARD_WIDTH)
+    const maxY = Math.max(0, BOARD_BASE_HEIGHT - CARD_HEIGHT)
 
     const nextItemId = `note-${Date.now()}`
     const nextItem = {
@@ -510,7 +782,7 @@ export function InvestigationBoard({
 
     setBoardItems(prev => [...prev, nextItem])
     setSelectedItem(nextItemId)
-  }, [readOnly, isSubmitMode, allowMemo])
+  }, [readOnly, isSubmitMode, allowMemo, getViewportCenterWorld])
 
   // ========================================
   // 연결선 관리
@@ -610,24 +882,22 @@ export function InvestigationBoard({
       if (!itemDataStr) return
 
       const { type, data } = JSON.parse(itemDataStr)
-      const rect = boardRef.current?.getBoundingClientRect()
-      const point = rect ? { x: e.clientX - rect.left - 88, y: e.clientY - rect.top - 100 } : {}
+      const point = getWorldTopLeftFromClient(e.clientX, e.clientY) || {}
 
       if (type === 'evidence') addEvidenceItem(data, point)
       if (type === 'suspect') addSuspectItem(data, point)
       if (type === 'location') addLocationItem(data, point)
     } catch {}
-  }, [acceptExternalDrop, readOnly, isSubmitMode, addEvidenceItem, addSuspectItem, addLocationItem])
+  }, [acceptExternalDrop, readOnly, isSubmitMode, addEvidenceItem, addSuspectItem, addLocationItem, getWorldTopLeftFromClient])
 
   // pendingAddItem 처리
   useEffect(() => {
     if (!pendingAddItem || readOnly || isSubmitMode) return
 
-    const rect = boardRef.current?.getBoundingClientRect()
-    const point = rect && Number.isFinite(pendingAddItem.dropClientX) ? {
-      x: pendingAddItem.dropClientX - rect.left - 88,
-      y: pendingAddItem.dropClientY - rect.top - 100,
-    } : {}
+    const point =
+      Number.isFinite(pendingAddItem.dropClientX) && Number.isFinite(pendingAddItem.dropClientY)
+        ? (getWorldTopLeftFromClient(pendingAddItem.dropClientX, pendingAddItem.dropClientY) || {})
+        : {}
 
     const { type, data } = pendingAddItem
     if (type === 'evidence') addEvidenceItem(data, point)
@@ -659,15 +929,15 @@ export function InvestigationBoard({
   const handleMouseMove = useCallback((e) => {
     if (!dragRef.current.isDragging || readOnly) return
 
-    const deltaX = e.clientX - dragRef.current.startX
-    const deltaY = e.clientY - dragRef.current.startY
+    const currentZoom = zoomRef.current || 1
+    const deltaX = (e.clientX - dragRef.current.startX) / currentZoom
+    const deltaY = (e.clientY - dragRef.current.startY) / currentZoom
     if (!dragRef.current.didMove && (Math.abs(deltaX) > 3 || Math.abs(deltaY) > 3)) {
       dragRef.current.didMove = true
     }
 
-    const rect = boardRef.current?.getBoundingClientRect()
-    const maxX = rect ? Math.max(0, rect.width - 176) : 750
-    const maxY = rect ? Math.max(0, rect.height - 200) : 500
+    const maxX = Math.max(0, BOARD_BASE_WIDTH - CARD_WIDTH)
+    const maxY = Math.max(0, BOARD_BASE_HEIGHT - CARD_HEIGHT)
 
     setBoardItems(prev => prev.map(item =>
       item.id === dragRef.current.itemId
@@ -736,11 +1006,11 @@ export function InvestigationBoard({
         return prev  // 이미 있으면 그대로 반환
       }
 
-      const rect = boardRef.current?.getBoundingClientRect()
-      const fallbackX = rect ? rect.width / 2 - 88 : 350
-      const fallbackY = rect ? rect.height / 2 - 100 : 200
-      const maxX = rect ? Math.max(0, rect.width - 176) : 750
-      const maxY = rect ? Math.max(0, rect.height - 200) : 500
+      const center = getViewportCenterWorld()
+      const fallbackX = center.x - CARD_HALF_WIDTH
+      const fallbackY = center.y - CARD_HALF_HEIGHT
+      const maxX = Math.max(0, BOARD_BASE_WIDTH - CARD_WIDTH)
+      const maxY = Math.max(0, BOARD_BASE_HEIGHT - CARD_HEIGHT)
 
       return [...prev, {
         id: victimId,
@@ -754,7 +1024,90 @@ export function InvestigationBoard({
         note: victim.background || '',
       }]
     })
-  }, [victim?.id, readOnly, isLoading])
+  }, [victim?.id, readOnly, isLoading, getViewportCenterWorld])
+
+  useEffect(() => {
+    if (!fullHeight || !isActive) return
+    if (didAutoCenterVictimRef.current) return
+
+    const el = boardRef.current
+    if (!el) return
+
+    const victimItemId = victim?.id ? `victim-${victim.id}` : null
+    const victimItem =
+      boardItems.find((item) => item?.type === 'victim' && item?.victimId === victim?.id) ??
+      (victimItemId ? boardItems.find((item) => item?.id === victimItemId) : null)
+
+    if (!victimItem) return
+
+    didAutoCenterVictimRef.current = true
+
+    const centerVictim = () => {
+      const rect = el.getBoundingClientRect()
+      if (!rect?.width || !rect?.height) return
+
+      const currentZoom = zoomRef.current || 1
+      const worldCenterX = (victimItem.x || 0) + CARD_HALF_WIDTH
+      const worldCenterY = (victimItem.y || 0) + CARD_HALF_HEIGHT
+      const targetScrollLeft = worldCenterX * currentZoom - rect.width / 2
+      const targetScrollTop = worldCenterY * currentZoom - rect.height / 2
+
+      el.scrollLeft = clamp(targetScrollLeft, 0, el.scrollWidth - rect.width)
+      el.scrollTop = clamp(targetScrollTop, 0, el.scrollHeight - rect.height)
+    }
+
+    requestAnimationFrame(() => {
+      centerVictim()
+      window.setTimeout(centerVictim, 350)
+    })
+  }, [fullHeight, isActive, victim?.id, boardItems, clamp])
+
+  const handleBoardPointerDown = useCallback((e) => {
+    const el = boardRef.current
+    if (!el || e.button !== 0) return
+
+    // 카드/버튼 등 위에서는 pan 시작 금지 (DnD 우선)
+    if (e.target?.closest?.('[data-board-item], button, a, input, textarea, [data-no-board-pan]')) return
+
+    panRef.current = {
+      isPanning: true,
+      startX: e.clientX,
+      startY: e.clientY,
+      startScrollLeft: el.scrollLeft,
+      startScrollTop: el.scrollTop,
+      didMove: false,
+    }
+
+    try {
+      el.setPointerCapture?.(e.pointerId)
+    } catch {
+      // ignore
+    }
+
+    e.preventDefault()
+    document.body.style.cursor = 'grabbing'
+  }, [])
+
+  const handleBoardPointerMove = useCallback((e) => {
+    const el = boardRef.current
+    if (!el || !panRef.current.isPanning) return
+
+    const dx = e.clientX - panRef.current.startX
+    const dy = e.clientY - panRef.current.startY
+
+    if (!panRef.current.didMove && (Math.abs(dx) > 3 || Math.abs(dy) > 3)) {
+      panRef.current.didMove = true
+    }
+
+    el.scrollLeft = panRef.current.startScrollLeft - dx
+    el.scrollTop = panRef.current.startScrollTop - dy
+  }, [])
+
+  const handleBoardPointerUp = useCallback(() => {
+    if (!panRef.current.isPanning) return
+    panRef.current.isPanning = false
+    document.body.style.cursor = ''
+  }, [])
 
   // submit 모드에서 필터 초기화
   useEffect(() => {
@@ -783,7 +1136,7 @@ export function InvestigationBoard({
   // ========================================
   return (
     <div
-      className={cn("bg-card rounded-lg", isModal && "p-0")}
+      className={cn("bg-card rounded-lg flex flex-col", fullHeight && "h-full min-h-0", isModal && "p-0")}
       style={isModal ? { transform: `translate3d(${modalOffset.x}px, ${modalOffset.y}px, 0)` } : undefined}
     >
       {/* 헤더 */}
@@ -846,6 +1199,39 @@ export function InvestigationBoard({
             </Button>
           )}
 
+          {!isSubmitMode && (
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => zoomTo(zoom - ZOOM_STEP)}
+                title="축소"
+              >
+                <Minus className="w-4 h-4" />
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="font-mono px-3"
+                onClick={() => zoomTo(1)}
+                title="줌 리셋"
+              >
+                {Math.round(zoom * 100)}%
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => zoomTo(zoom + ZOOM_STEP)}
+                title="확대"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+          )}
+
           {!hideSave && canSaveToApi && (
             <Button
               variant="outline"
@@ -903,16 +1289,22 @@ export function InvestigationBoard({
       {/* 보드 영역 */}
       <div
         ref={boardRef}
-        className="relative overflow-auto"
+        className={cn(
+          "relative",
+          isSubmitMode ? "overflow-hidden pointer-events-none" : "overflow-auto",
+          fullHeight && !isSubmitMode && "no-scrollbar",
+          fullHeight && "flex-1 min-h-0"
+        )}
         style={{
-          height: fullHeight ? 'calc(100% - 120px)' : (isModal ? '65vh' : '500px'),
-          minHeight: fullHeight ? '60vh' : undefined,
-          backgroundImage: 'url(/board/board.jpg)',
-          backgroundSize: 'cover',
-          backgroundPosition: 'center',
+          height: fullHeight ? undefined : (isModal ? '65vh' : (isSubmitMode ? 'min(420px, 45vh)' : '500px')),
+          overscrollBehavior: 'contain',
         }}
         onDragOver={handleExternalDragOver}
         onDrop={handleExternalDrop}
+        onPointerDown={handleBoardPointerDown}
+        onPointerMove={handleBoardPointerMove}
+        onPointerUp={handleBoardPointerUp}
+        onPointerCancel={handleBoardPointerUp}
         onClick={() => {
           setSelectedItem(null)
           setPendingConnectFromWithRef(null)
@@ -926,153 +1318,173 @@ export function InvestigationBoard({
           </div>
         )}
 
-        {/* 연결선 - 확정은 실 이미지, 의심은 점선 */}
-        {connections.map(conn => {
-          if (!conn?.from || !conn?.to) return null
-          const fromItem = boardItems.find(item => item.id === conn.from)
-          const toItem = boardItems.find(item => item.id === conn.to)
-          if (!fromItem || !toItem) return null
-
-          const key = getConnectionKey(conn.from, conn.to)
-          const isConfirmed = conn.type !== 'suspected'
-          const fromX = fromItem.x + 88, fromY = fromItem.y + 100
-          const toX = toItem.x + 88, toY = toItem.y + 100
-          const dx = toX - fromX, dy = toY - fromY
-          const distance = Math.sqrt(dx * dx + dy * dy)
-          const angle = Math.atan2(dy, dx) * 180 / Math.PI
-          const midX = (fromX + toX) / 2, midY = (fromY + toY) / 2
-          const isSelected = selectedConnectionKey === key
-
-          // 확정 연결선: 실 이미지 사용 (튜토리얼과 동일)
-          if (isConfirmed) {
-            const sag = Math.min(distance * 0.08, 25)
-            return (
-              <div
-                key={key}
-                className={cn("absolute cursor-pointer", isSelected && "z-10")}
-                style={{
-                  left: midX,
-                  top: midY,
-                  width: distance,
-                  height: 40,
-                  transform: `translate(-50%, -50%) rotate(${angle}deg)`,
-                  transformOrigin: 'center center',
-                }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setPendingConnectFromWithRef(null)
-                  setSelectedItem(null)
-                  setSelectedConnectionPos({ x: midX, y: midY })
-                  setSelectedConnectionKey(prev => prev === key ? null : key)
-                }}
-              >
-                <div
-                  className="w-full h-full relative"
-                  style={{
-                    backgroundImage: 'url(/board/thread.png)',
-                    backgroundSize: 'auto 100%',
-                    backgroundRepeat: 'repeat-x',
-                    backgroundPosition: 'center',
-                    filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(1px 2px 2px rgba(0,0,0,0.3))',
-                    borderRadius: `0 0 ${sag}px ${sag}px`,
-                    transform: `scaleY(${1 + sag/50})`,
-                  }}
-                />
-                {isSelected && (
-                  <div className="absolute inset-0 bg-white/30 rounded animate-pulse" />
-                )}
-              </div>
-            )
-          }
-
-          // 의심 연결선: 기존 SVG 점선 유지
-          const hash = hashString(key)
-          const controlX = midX + ((hash % 7) - 3) * 10
-          const controlY = midY - 50 + ((hash % 5) - 2) * 5
-          const pathD = `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toX} ${toY}`
-
-          return (
-            <svg key={key} className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '100%', minHeight: '100%', zIndex: isSelected ? 10 : 1 }}>
-              <path
-                d={pathD}
-                stroke="transparent"
-                strokeWidth={20}
-                fill="none"
-                style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setPendingConnectFromWithRef(null)
-                  setSelectedItem(null)
-                  setSelectedConnectionPos({ x: controlX, y: controlY })
-                  setSelectedConnectionKey(prev => prev === key ? null : key)
-                }}
-              />
-              <path
-                d={pathD}
-                stroke="#f59e0b"
-                strokeWidth={3}
-                strokeDasharray="8 8"
-                fill="none"
-                style={{ pointerEvents: 'none', filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))' }}
-              />
-            </svg>
-          )
-        })}
-
-        {/* 연결선 삭제 버튼 */}
-        {!readOnly && selectedConnectionKey && selectedConnectionPos && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation()
-              removeConnectionByKey(selectedConnectionKey)
-              setSelectedConnectionKey(null)
-              setSelectedConnectionPos(null)
+        <div
+          className="relative"
+          style={{
+            width: `${BOARD_BASE_WIDTH * zoom}px`,
+            height: `${BOARD_BASE_HEIGHT * zoom}px`,
+          }}
+        >
+          <div
+            className="relative"
+            style={{
+              width: `${BOARD_BASE_WIDTH}px`,
+              height: `${BOARD_BASE_HEIGHT}px`,
+              transform: `scale(${zoom})`,
+              transformOrigin: '0 0',
+              backgroundImage: 'url(/board/board.jpg)',
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
             }}
-            className="absolute w-9 h-9 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 flex items-center justify-center text-base font-bold border-2 border-white/50 transition-transform hover:scale-110"
-            style={{ left: selectedConnectionPos.x, top: selectedConnectionPos.y, transform: 'translate(-50%, -50%)', zIndex: 200 }}
           >
-            ✕
-          </button>
-        )}
+            {/* 연결선 - 확정은 실 이미지, 의심은 점선 */}
+            {connections.map(conn => {
+              if (!conn?.from || !conn?.to) return null
+              const fromItem = boardItems.find(item => item.id === conn.from)
+              const toItem = boardItems.find(item => item.id === conn.to)
+              if (!fromItem || !toItem) return null
 
-        {/* 아이템 카드 - 폴라로이드 스타일 */}
-        {filteredItems.map(item => {
-          // 타입별 색상 및 라벨
-          const typeConfig = {
-            victim: { label: '피해자', color: 'bg-red-500', borderColor: 'border-red-400' },
-            suspect: { label: '용의자', color: 'bg-amber-500', borderColor: 'border-amber-400' },
-            evidence: { label: '증거', color: 'bg-blue-500', borderColor: 'border-blue-400' },
-            location: { label: '장소', color: 'bg-green-500', borderColor: 'border-green-400' },
-            note: { label: '메모', color: 'bg-gray-500', borderColor: 'border-gray-400' },
-          }
-          const config = typeConfig[item.type] || typeConfig.note
+              const key = getConnectionKey(conn.from, conn.to)
+              const isConfirmed = conn.type !== 'suspected'
+              const fromX = fromItem.x + CARD_HALF_WIDTH, fromY = fromItem.y + CARD_HALF_HEIGHT
+              const toX = toItem.x + CARD_HALF_WIDTH, toY = toItem.y + CARD_HALF_HEIGHT
+              const dx = toX - fromX, dy = toY - fromY
+              const distance = Math.sqrt(dx * dx + dy * dy)
+              const angle = Math.atan2(dy, dx) * 180 / Math.PI
+              const midX = (fromX + toX) / 2, midY = (fromY + toY) / 2
+              const isSelected = selectedConnectionKey === key
 
-          return (
-            <div
-              key={item.id}
-              className={cn(
-                "absolute group select-none",
-                lineMode && pendingConnectFrom === item.id && (lineMode === 'confirmed' ? "ring-4 ring-red-500 ring-offset-2" : "ring-4 ring-amber-500 ring-offset-2"),
-                !readOnly && "cursor-move"
-              )}
-              style={{ left: item.x, top: item.y, zIndex: hoveredItem === item.id ? 50 : (selectedItem === item.id ? 10 : 2) }}
-              onMouseDown={(e) => handleMouseDown(e, item.id)}
-              onClick={(e) => {
-                e.stopPropagation()
-                handleCardClick(item.id)
-              }}
-              onMouseEnter={() => {
-                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
-                hoverTimeoutRef.current = setTimeout(() => {
-                  setHoveredItem(item.id)
-                }, 1000) // 1초 딜레이
-              }}
-              onMouseLeave={() => {
-                if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
-                setHoveredItem(null)
-              }}
-            >
+              // 확정 연결선: 실 이미지 사용 (튜토리얼과 동일)
+              if (isConfirmed) {
+                const sag = Math.min(distance * 0.08, 25)
+                return (
+                  <div
+                    key={key}
+                    className={cn("absolute cursor-pointer", isSelected && "z-10")}
+                    style={{
+                      left: midX,
+                      top: midY,
+                      width: distance,
+                      height: 40,
+                      transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+                      transformOrigin: 'center center',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPendingConnectFromWithRef(null)
+                      setSelectedItem(null)
+                      setSelectedConnectionPos({ x: midX, y: midY })
+                      setSelectedConnectionKey(prev => prev === key ? null : key)
+                    }}
+                  >
+                    <div
+                      className="w-full h-full relative"
+                      style={{
+                        backgroundImage: 'url(/board/thread.png)',
+                        backgroundSize: 'auto 100%',
+                        backgroundRepeat: 'repeat-x',
+                        backgroundPosition: 'center',
+                        filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(1px 2px 2px rgba(0,0,0,0.3))',
+                        borderRadius: `0 0 ${sag}px ${sag}px`,
+                        transform: `scaleY(${1 + sag/50})`,
+                      }}
+                    />
+                    {isSelected && (
+                      <div className="absolute inset-0 bg-white/30 rounded animate-pulse" />
+                    )}
+                  </div>
+                )
+              }
+
+              // 의심 연결선: 기존 SVG 점선 유지
+              const hash = hashString(key)
+              const controlX = midX + ((hash % 7) - 3) * 10
+              const controlY = midY - 50 + ((hash % 5) - 2) * 5
+              const pathD = `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toX} ${toY}`
+
+              return (
+                <svg key={key} className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '100%', minHeight: '100%', zIndex: isSelected ? 10 : 1 }}>
+                  <path
+                    d={pathD}
+                    stroke="transparent"
+                    strokeWidth={20}
+                    fill="none"
+                    style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setPendingConnectFromWithRef(null)
+                      setSelectedItem(null)
+                      setSelectedConnectionPos({ x: controlX, y: controlY })
+                      setSelectedConnectionKey(prev => prev === key ? null : key)
+                    }}
+                  />
+                  <path
+                    d={pathD}
+                    stroke="#f59e0b"
+                    strokeWidth={3}
+                    strokeDasharray="8 8"
+                    fill="none"
+                    style={{ pointerEvents: 'none', filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))' }}
+                  />
+                </svg>
+              )
+            })}
+
+            {/* 연결선 삭제 버튼 */}
+            {!readOnly && selectedConnectionKey && selectedConnectionPos && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeConnectionByKey(selectedConnectionKey)
+                  setSelectedConnectionKey(null)
+                  setSelectedConnectionPos(null)
+                }}
+                className="absolute w-9 h-9 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 flex items-center justify-center text-base font-bold border-2 border-white/50 transition-transform hover:scale-110"
+                style={{ left: selectedConnectionPos.x, top: selectedConnectionPos.y, transform: 'translate(-50%, -50%)', zIndex: 200 }}
+              >
+                ✕
+              </button>
+            )}
+
+            {/* 아이템 카드 - 폴라로이드 스타일 */}
+            {filteredItems.map(item => {
+              // 타입별 색상 및 라벨
+              const typeConfig = {
+                victim: { label: '피해자', color: 'bg-red-500', borderColor: 'border-red-400' },
+                suspect: { label: '용의자', color: 'bg-amber-500', borderColor: 'border-amber-400' },
+                evidence: { label: '증거', color: 'bg-blue-500', borderColor: 'border-blue-400' },
+                location: { label: '장소', color: 'bg-green-500', borderColor: 'border-green-400' },
+                note: { label: '메모', color: 'bg-gray-500', borderColor: 'border-gray-400' },
+              }
+              const config = typeConfig[item.type] || typeConfig.note
+
+              return (
+                <div
+                  key={item.id}
+                  data-board-item
+                  className={cn(
+                    "absolute group select-none",
+                    lineMode && pendingConnectFrom === item.id && (lineMode === 'confirmed' ? "ring-4 ring-red-500 ring-offset-2" : "ring-4 ring-amber-500 ring-offset-2"),
+                    !readOnly && "cursor-move"
+                  )}
+                  style={{ left: item.x, top: item.y, zIndex: hoveredItem === item.id ? 50 : (selectedItem === item.id ? 10 : 2) }}
+                  onMouseDown={(e) => handleMouseDown(e, item.id)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleCardClick(item.id)
+                  }}
+                  onMouseEnter={() => {
+                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                    hoverTimeoutRef.current = setTimeout(() => {
+                      setHoveredItem(item.id)
+                    }, 1000) // 1초 딜레이
+                  }}
+                  onMouseLeave={() => {
+                    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current)
+                    setHoveredItem(null)
+                  }}
+                >
               {/* 호버 툴팁 - 상세정보 (1초 딜레이, 튜토리얼 스타일 그대로) */}
               {hoveredItem === item.id && item.type !== 'note' && (
                 <div
@@ -1136,6 +1548,8 @@ export function InvestigationBoard({
                         src={item.image}
                         alt={item.name}
                         className="w-full h-28 object-cover bg-gray-200"
+                        draggable={false}
+                        onDragStart={(e) => e.preventDefault()}
                         onError={(e) => {
                           e.target.onerror = null
                           e.target.src = ''
@@ -1220,24 +1634,28 @@ export function InvestigationBoard({
                   ✕
                 </button>
               )}
-            </div>
-          )
-        })}
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
 
       {/* 범례 */}
-      <div className="p-4 flex gap-6 justify-center items-center text-sm border-t border-border">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-1 bg-red-600 rounded" />
-          <span className="text-muted-foreground">확정</span>
-        </div>
-        {effectiveAllowedLineModes.includes('suspected') && (
+      {!isSubmitMode && (
+        <div className="p-4 flex gap-6 justify-center items-center text-sm border-t border-border">
           <div className="flex items-center gap-2">
-            <div className="w-8 h-1 rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #f59e0b 0, #f59e0b 4px, transparent 4px, transparent 8px)' }} />
-            <span className="text-muted-foreground">의심</span>
+            <div className="w-8 h-1 bg-red-600 rounded" />
+            <span className="text-muted-foreground">확정</span>
           </div>
-        )}
-      </div>
+          {effectiveAllowedLineModes.includes('suspected') && (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-1 rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #f59e0b 0, #f59e0b 4px, transparent 4px, transparent 8px)' }} />
+              <span className="text-muted-foreground">의심</span>
+            </div>
+          )}
+        </div>
+      )}
 
       <MemoInputModal isOpen={memoModalOpen} onClose={() => setMemoModalOpen(false)} onSubmit={addNoteItem} />
     </div>

@@ -299,54 +299,58 @@ export default function SubmitAnswerModal({ isOpen, onClose, onSubmit, sessionId
           </p>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          <div className="bg-muted/20 border border-border rounded-xl p-3">
-            <InvestigationBoard
-              key={`submit-board-${scenarioId}-${isOpen ? 'open' : 'closed'}`}
-              scenarioId={scenarioId}
-              title="제출 보드"
-              mode="submit"
-              persist={false}
-              allowMemo={false}
-              hideFilter={true}
-              hideSave={true}
-              acceptExternalDrop={false}
-              initialBoardItems={submitInitialItems}
-              initialConnections={submitInitialConnections}
-              onBoardStateChange={setSubmitBoardState}
-            />
-          </div>
-
-          {/* 검증 에러 메시지 또는 안내 */}
-          {validationError ? (
-            <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
-              {validationError}
+        <div className="flex-1 overflow-y-auto p-4">
+          <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+            <div className="bg-muted/20 border border-border rounded-xl p-3">
+              <InvestigationBoard
+                key={`submit-board-${scenarioId}-${isOpen ? 'open' : 'closed'}`}
+                scenarioId={scenarioId}
+                title="제출 보드"
+                mode="submit"
+                persist={false}
+                allowMemo={false}
+                hideFilter={true}
+                hideSave={true}
+                acceptExternalDrop={false}
+                initialBoardItems={submitInitialItems}
+                initialConnections={submitInitialConnections}
+                onBoardStateChange={setSubmitBoardState}
+              />
             </div>
-          ) : (
-            <div className="text-sm text-muted-foreground bg-muted/20 border border-border rounded-lg p-4">
-              <p className="font-semibold mb-2">제출 조건:</p>
-              <ul className="list-disc list-inside space-y-1">
-                <li>빨간선(확정) 연결이 정확히 <span className="text-red-300 font-bold">3개</span>여야 합니다</li>
-                <li>피해자, 용의자, 장소, 증거 <span className="text-red-300 font-bold">4가지 타입</span>이 모두 연결되어야 합니다</li>
-              </ul>
-            </div>
-          )}
 
-          {/* 범행동기 입력 폼 */}
-          <div className="bg-muted/20 border border-border rounded-xl p-4">
-            <label className="block text-sm font-semibold mb-2">
-              범행 동기 <span className="text-red-400">*</span>
-            </label>
-            <textarea
-              value={motive}
-              onChange={(e) => setMotive(e.target.value)}
-              placeholder="범인의 범행 동기를 추론하여 입력해주세요..."
-              className="w-full min-h-[80px] p-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-              maxLength={500}
-            />
-            <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-              <span>최종 정답 제출 전에 범행 동기를 입력해주세요</span>
-              <span>{motive.length}/500</span>
+            <div className="space-y-4">
+              {/* 검증 에러 메시지 또는 안내 */}
+              {validationError ? (
+                <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                  {validationError}
+                </div>
+              ) : (
+                <div className="text-sm text-muted-foreground bg-muted/20 border border-border rounded-lg p-4">
+                  <p className="font-semibold mb-2">제출 조건:</p>
+                  <ul className="list-disc list-inside space-y-1">
+                    <li>빨간선(확정) 연결이 정확히 <span className="text-red-300 font-bold">3개</span>여야 합니다</li>
+                    <li>피해자, 용의자, 장소, 증거 <span className="text-red-300 font-bold">4가지 타입</span>이 모두 연결되어야 합니다</li>
+                  </ul>
+                </div>
+              )}
+
+              {/* 범행동기 입력 폼 */}
+              <div className="bg-muted/20 border border-border rounded-xl p-4">
+                <label className="block text-sm font-semibold mb-2">
+                  범행 동기 <span className="text-red-400">*</span>
+                </label>
+                <textarea
+                  value={motive}
+                  onChange={(e) => setMotive(e.target.value)}
+                  placeholder="범인의 범행 동기를 추론하여 입력해주세요..."
+                  className="w-full min-h-[120px] p-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                  maxLength={500}
+                />
+                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                  <span>최종 정답 제출 전에 범행 동기를 입력해주세요</span>
+                  <span>{motive.length}/500</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>

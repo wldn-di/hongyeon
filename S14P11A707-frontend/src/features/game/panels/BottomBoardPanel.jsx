@@ -14,6 +14,9 @@ export default function BottomBoardPanel({
   pendingAddItem = null,
   onConsumePendingAddItem = null,
   victim = null,
+  clues = [],
+  suspects = [],
+  rooms = [],
 }) {
   const containerRef = useRef(null)
 
@@ -70,11 +73,15 @@ export default function BottomBoardPanel({
               title="개인 추리보드"
               victim={victim}
               isModal={false}
+              isActive={isOpen}
               onClose={() => onOpenChange?.(false)}
               acceptExternalDrop={true}
               pendingAddItem={pendingAddItem}
               onConsumePendingAddItem={onConsumePendingAddItem}
               fullHeight={true}
+              clues={clues}
+              suspects={suspects}
+              rooms={rooms}
             />
           </div>
         </div>

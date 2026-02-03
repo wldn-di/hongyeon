@@ -1,11 +1,13 @@
-import { ArrowLeft, Send, Users } from "lucide-react"
+import { ArrowLeft, Send, Users, Plus, X, Search } from "lucide-react"
 import { React, useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
 // 용의자 심문용 휴대폰 UI 컴포넌트
-export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistories, onSendMessage, currentChat, setCurrentChat, onContactSelect, onMarkAsRead }) {
+export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistories, onSendMessage, currentChat, setCurrentChat, onContactSelect, onMarkAsRead, clues = [] }) {
   const [message, setMessage] = useState('')
   const [selectedContact, setSelectedContact] = useState(null)
+  const [selectedClue, setSelectedClue] = useState(null) // 선택된 단서
+  const [clueModalOpen, setClueModalOpen] = useState(false) // 단서 선택 모달
   const chatEndRef = useRef(null)
 
   // 용의자만 표시 (조수 왓슨 제외)
@@ -24,10 +26,16 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
     }
   }, [selectedContact, onMarkAsRead])
 
+  // 연락처 변경 시 선택된 단서 초기화
+  useEffect(() => {
+    setSelectedClue(null)
+  }, [selectedContact?.id])
+
   const handleSend = () => {
     if (message.trim() && selectedContact) {
-      onSendMessage(selectedContact.id, message)
+      onSendMessage(selectedContact.id, message, selectedClue?.id || null)
       setMessage('')
+      setSelectedClue(null) // 전송 후 단서 선택 초기화
     }
   }
 
@@ -36,6 +44,15 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
       e.preventDefault()
       handleSend()
     }
+  }
+
+  const handleClueSelect = (clue) => {
+    setSelectedClue(clue)
+    setClueModalOpen(false)
+  }
+
+  const handleRemoveClue = () => {
+    setSelectedClue(null)
   }
 
   const getUnreadCount = (contactId) => {
@@ -109,6 +126,12 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                     </div>
                   ) : (
                     <>
+                      {/* 단서 태그 표시 */}
+                      {msg.usedClueName && (
+                        <span className="inline-block px-1.5 py-0.5 bg-blue-500/30 text-blue-300 text-xs rounded mr-1 mb-1">
+                          @{msg.usedClueName}
+                        </span>
+                      )}
                       <p>{msg.text}</p>
                       <p className="text-xs opacity-60 mt-1">{msg.time}</p>
                     </>
@@ -119,8 +142,38 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
             <div ref={chatEndRef} />
           </div>
 
+          {/* 선택된 단서 표시 */}
+          {selectedClue && (
+            <div className="bg-gray-800 px-3 py-2 border-t border-gray-700 flex items-center gap-2">
+              <span className="text-xs text-gray-400">첨부 단서:</span>
+              <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full border border-blue-500/30">
+                <Search className="w-3 h-3" />
+                @{selectedClue.name}
+                <button
+                  onClick={handleRemoveClue}
+                  className="ml-1 hover:text-blue-200 transition-colors"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            </div>
+          )}
+
           <div className="bg-gray-800 p-2">
             <div className="flex gap-2">
+              {/* 단서 추가 버튼 */}
+              <button
+                onClick={() => setClueModalOpen(true)}
+                className={cn(
+                  "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                  selectedClue
+                    ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                    : "bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-gray-200"
+                )}
+                title="단서 첨부"
+              >
+                <Plus className="w-5 h-5" />
+              </button>
               <input
                 type="text"
                 value={message}
@@ -128,7 +181,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                 onKeyDown={(e) => e.stopPropagation()}
                 onKeyPress={handleKeyPress}
                 autoFocus
-                placeholder="메시지 입력..."
+                placeholder={selectedClue ? `@${selectedClue.name} 관련 질문...` : "메시지 입력..."}
                 className="flex-1 bg-gray-700 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
               <button
@@ -139,6 +192,84 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
               </button>
             </div>
           </div>
+
+          {/* 단서 선택 모달 */}
+          {clueModalOpen && (
+            <div className="absolute inset-0 bg-black/80 z-10 flex flex-col rounded-3xl overflow-hidden">
+              <div className="bg-gray-800 p-3 flex items-center justify-between border-b border-gray-700">
+                <h3 className="font-bold text-sm">단서 선택</h3>
+                <button
+                  onClick={() => setClueModalOpen(false)}
+                  className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto bg-gray-950 p-2">
+                {clues.length === 0 ? (
+                  <div className="text-center text-gray-500 py-8">
+                    <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                    <p className="text-sm">발견한 단서가 없습니다</p>
+                    <p className="text-xs mt-1">현장을 조사하여 단서를 찾아보세요</p>
+                  </div>
+                ) : (
+                  <div className="space-y-1">
+                    {clues.map((clue) => (
+                      <button
+                        key={clue.id}
+                        onClick={() => handleClueSelect(clue)}
+                        className={cn(
+                          "w-full p-2 rounded-lg text-left transition-colors flex items-center gap-3",
+                          selectedClue?.id === clue.id
+                            ? "bg-blue-500/20 border border-blue-500/30"
+                            : "bg-gray-800 hover:bg-gray-700"
+                        )}
+                      >
+                        {/* 단서 이미지 */}
+                        <div className="w-12 h-12 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
+                          {clue.image || clue.imageUrl || clue.detailImageUrl ? (
+                            <img
+                              src={clue.image || clue.imageUrl || clue.detailImageUrl}
+                              alt={clue.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-500">
+                              <Search className="w-5 h-5" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-sm truncate">{clue.name}</p>
+                          {clue.location && (
+                            <p className="text-xs text-gray-400 truncate">{clue.location}</p>
+                          )}
+                          {clue.description && (
+                            <p className="text-xs text-gray-500 truncate mt-0.5">{truncatePreview(clue.description)}</p>
+                          )}
+                        </div>
+                        {selectedClue?.id === clue.id && (
+                          <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                            <span className="text-white text-xs">✓</span>
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+              {selectedClue && (
+                <div className="bg-gray-800 p-3 border-t border-gray-700">
+                  <button
+                    onClick={() => setClueModalOpen(false)}
+                    className="w-full py-2 bg-blue-500 text-white rounded-lg font-bold text-sm hover:bg-blue-600 transition-colors"
+                  >
+                    @{selectedClue.name} 첨부하기
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </>
       ) : (
         // 연락처 목록
