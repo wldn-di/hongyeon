@@ -15,6 +15,8 @@ import com.ssafy.s14p11a707.game.entity.ChatMessage;
 import com.ssafy.s14p11a707.game.entity.DiscoveredClue;
 import com.ssafy.s14p11a707.game.entity.EventLog;
 import com.ssafy.s14p11a707.game.entity.GameSession;
+import com.ssafy.s14p11a707.game.entity.SessionSuspectState;
+import com.ssafy.s14p11a707.game.entity.SessionSuspectStateId;
 import com.ssafy.s14p11a707.game.entity.GameSession.RankGrade;
 import com.ssafy.s14p11a707.game.repository.BoardConnectionRepository;
 import com.ssafy.s14p11a707.game.repository.BoardNodeRepository;
@@ -22,6 +24,7 @@ import com.ssafy.s14p11a707.game.repository.ChatMessageRepository;
 import com.ssafy.s14p11a707.game.repository.DiscoveredClueRepository;
 import com.ssafy.s14p11a707.game.repository.EventLogRepository;
 import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
+import com.ssafy.s14p11a707.game.repository.SessionSuspectStateRepository;
 import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.scenario.entity.*;
@@ -58,6 +61,7 @@ import static com.ssafy.s14p11a707.game.entity.GameSession.Status.PLAYING;
 public class GameSessionServiceImpl implements GameSessionService {
 
     private final GameSessionRepository gameSessionRepository;
+    private final SessionSuspectStateRepository sessionSuspectStateRepository;
     private final ScenarioRepository scenarioRepository;
     private final UserRepository userRepository;
     private final VictimRepository victimRepository;
@@ -78,8 +82,9 @@ public class GameSessionServiceImpl implements GameSessionService {
     @PersistenceContext
     private EntityManager entityManager;
 
-    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
+    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
         this.gameSessionRepository = gameSessionRepository;
+        this.sessionSuspectStateRepository = sessionSuspectStateRepository;
         this.scenarioRepository = scenarioRepository;
         this.userRepository = userRepository;
         this.victimRepository = victimRepository;
@@ -205,6 +210,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         discoveredClueRepository.deleteBySessionId(session.getId());
         chatMessageRepository.deleteBySessionId(session.getId());
         eventLogRepository.deleteBySessionId(session.getId());
+        sessionSuspectStateRepository.deleteBySessionId(session.getId());
 
         gameSessionRepository.save(session);
     }
@@ -388,11 +394,27 @@ public class GameSessionServiceImpl implements GameSessionService {
             }
         }
 
-        // usedClueId로 weakness_clue.id와 비교
+        // SessionSuspectState에서 현재 심문 레벨 조회 (없으면 생성)
+        SessionSuspectStateId stateId = new SessionSuspectStateId(session.getId(), suspect.getId());
+        SessionSuspectState state = sessionSuspectStateRepository.findById(stateId)
+                .orElseGet(() -> SessionSuspectState.builder()
+                        .session(session)
+                        .suspect(suspect)
+                        .currentInterrogationLevel(1)
+                        .secretRevealed(false)
+                        .build());
+
+        // 현재 레벨 확인 (Level 2 이상이면 약점이 이미 드러난 상태)
         Long usedClueId = request.usedClueId();
-        boolean isWeaknessClueUsed = false;
-        if (usedClueId != null && weaknessClueId != null) {
-            isWeaknessClueUsed = usedClueId.equals(weaknessClueId);
+        boolean isWeaknessClueUsed = state.getCurrentInterrogationLevel() >= 2;
+
+        // 아직 Level 2가 아니고, 약점 단서를 제시한 경우
+        if (!isWeaknessClueUsed && usedClueId != null && weaknessClueId != null) {
+            if (usedClueId.equals(weaknessClueId)) {
+                isWeaknessClueUsed = true;
+                state.setCurrentInterrogationLevel(2);  // Level 2로 영구 변경
+                sessionSuspectStateRepository.save(state);
+            }
         }
 
         // 용의자 심문을 위한 프롬프트 구성
