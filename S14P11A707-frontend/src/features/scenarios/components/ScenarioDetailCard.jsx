@@ -337,9 +337,9 @@ export default function ScenarioDetailCard({ scenario, onPlay, playStatus, isPla
         </div>
       </div>
 
-      {/* 플레이 버튼 (오른쪽 하단 고정) */}
-      <div className="fixed bottom-8 right-8 z-50">
-        <div className="flex flex-col items-end gap-2">
+      {/* 플레이 버튼 (하단 중앙 고정) */}
+      <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50">
+        <div className="flex flex-col items-center gap-2">
           {/* 상태 배지 */}
           {buttonConfig.badge && (
             <div className={cn(

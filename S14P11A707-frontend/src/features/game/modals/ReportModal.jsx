@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import { cn } from "@/lib/utils"
 
 // 수사보고서 팝업
-export default function ReportModal({ isOpen, onClose, report }) {
+export default function ReportModal({ isOpen, onClose, report, closeText = "닫기" }) {
   const [shareUuid, setShareUuid] = useState(null)
   const [copied, setCopied] = useState(false)
 
@@ -172,7 +172,7 @@ export default function ReportModal({ isOpen, onClose, report }) {
 
           <div className="flex gap-3">
             <Button variant="outline" className="flex-1" onClick={handleClose}>
-              닫기
+              {closeText}
             </Button>
             <Button variant="neon" className="flex-1" onClick={handleShare}>
               <Share2 className="w-4 h-4 mr-2" />

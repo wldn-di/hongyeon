@@ -436,6 +436,8 @@ export default function Board() {
                                 src={item.image}
                                 alt={item.name}
                                 className="w-full h-full object-cover"
+                                draggable={false}
+                                onDragStart={(e) => e.preventDefault()}
                                 onError={(e) => {
                                   e.target.style.display = 'none'
                                   e.target.innerHTML = '[이미지 없음]'
