@@ -15,6 +15,8 @@ import com.ssafy.s14p11a707.game.entity.ChatMessage;
 import com.ssafy.s14p11a707.game.entity.DiscoveredClue;
 import com.ssafy.s14p11a707.game.entity.EventLog;
 import com.ssafy.s14p11a707.game.entity.GameSession;
+import com.ssafy.s14p11a707.game.entity.SessionSuspectState;
+import com.ssafy.s14p11a707.game.entity.SessionSuspectStateId;
 import com.ssafy.s14p11a707.game.entity.GameSession.RankGrade;
 import com.ssafy.s14p11a707.game.repository.BoardConnectionRepository;
 import com.ssafy.s14p11a707.game.repository.BoardNodeRepository;
@@ -22,6 +24,7 @@ import com.ssafy.s14p11a707.game.repository.ChatMessageRepository;
 import com.ssafy.s14p11a707.game.repository.DiscoveredClueRepository;
 import com.ssafy.s14p11a707.game.repository.EventLogRepository;
 import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
+import com.ssafy.s14p11a707.game.repository.SessionSuspectStateRepository;
 import com.ssafy.s14p11a707.game.repository.ScenarioRankingRepository;
 import com.ssafy.s14p11a707.game.entity.ScenarioRanking;
 import com.ssafy.s14p11a707.scenario.entity.*;
@@ -37,12 +40,12 @@ import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
 
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.client.advisor.api.Advisor;
-import org.springframework.ai.document.Document;
+import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
+import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.MessageWindowChatMemory;
+import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.embedding.EmbeddingModel;
-import org.springframework.ai.vectorstore.SimpleVectorStore;
-import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.dao.DataIntegrityViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -58,6 +61,7 @@ import static com.ssafy.s14p11a707.game.entity.GameSession.Status.PLAYING;
 public class GameSessionServiceImpl implements GameSessionService {
 
     private final GameSessionRepository gameSessionRepository;
+    private final SessionSuspectStateRepository sessionSuspectStateRepository;
     private final ScenarioRepository scenarioRepository;
     private final UserRepository userRepository;
     private final VictimRepository victimRepository;
@@ -72,13 +76,15 @@ public class GameSessionServiceImpl implements GameSessionService {
     private final ScenarioRankingRepository scenarioRankingRepository;
     private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
+    private final ChatMemoryRepository chatMemoryRepository;
+    private final ChatMemory chatMemory;
     private final EmbeddingModel embeddingModel;
-    private final Map<String, VectorStore> vectorStoreMap;  // 세션별 용의자 VectorStore 관리 (key: "session-{sessionId}-suspect-{suspectId}")
     @PersistenceContext
     private EntityManager entityManager;
 
-    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, EmbeddingModel embeddingModel) {
+    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
         this.gameSessionRepository = gameSessionRepository;
+        this.sessionSuspectStateRepository = sessionSuspectStateRepository;
         this.scenarioRepository = scenarioRepository;
         this.userRepository = userRepository;
         this.victimRepository = victimRepository;
@@ -93,13 +99,16 @@ public class GameSessionServiceImpl implements GameSessionService {
         this.scenarioRankingRepository = scenarioRankingRepository;
         this.objectMapper = objectMapper;
         this.chatClient = chatClient;
+        this.chatMemoryRepository = chatMemoryRepository;
+        this.chatMemory = MessageWindowChatMemory.builder()
+                .maxMessages(20)
+                .chatMemoryRepository(chatMemoryRepository)
+                .build();
         this.embeddingModel = embeddingModel;
-        this.vectorStoreMap = new HashMap<>();
     }
 
     /**
      * 게임 시작 및 관리 섹션
-     *
      * 세션 없음 : createSession()
      * Playing : resumeGame API 호출
      * Completed/Failed : 세션 데이터 삭제 후 해당 세션 재사용(세션 연관 테이블은 sumbit()에서 세션 실패/성공 시점에 이미 삭제됨)
@@ -159,7 +168,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             session = existingSession.get();
             if(session.getStatus() == PLAYING) {
                 resetSession(session);
-                session = getSession(session.getId());;
+                session = getSession(session.getId());
             }
             session.reset(objectMapper.valueToTree(List.of(1)));
 
@@ -201,9 +210,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         discoveredClueRepository.deleteBySessionId(session.getId());
         chatMessageRepository.deleteBySessionId(session.getId());
         eventLogRepository.deleteBySessionId(session.getId());
-
-        // VectorStore에서도 해당 세션 데이터 삭제
-        clearVectorStoreBySession(session.getId());
+        sessionSuspectStateRepository.deleteBySessionId(session.getId());
 
         gameSessionRepository.save(session);
     }
@@ -217,7 +224,6 @@ public class GameSessionServiceImpl implements GameSessionService {
     /**
      *
      * PLAYING 세션 이어하기 : 현 세션 정보
-     *
      * 프론트 추가 API 호출 필요
      * - getClues API : 발견한 단서 정보
      * - getBoard API : 추리보드 정보
@@ -234,8 +240,6 @@ public class GameSessionServiceImpl implements GameSessionService {
             throw new BaseException(ErrorCode.INVALID_SESSION_STATUS);
         }
 
-        // VectorStore 복구: 이전 대화 내역을 VectorStore에 다시 로드
-        loadChatHistoryToVectorStore(sessionId);
         List<Integer> visitedFloors = parseVisitedFloors(session.getVisitedFloorsJson());
 
         return GameResumeResponse.from(session, visitedFloors);
@@ -370,7 +374,6 @@ public class GameSessionServiceImpl implements GameSessionService {
         // aiConfigJson에서 alibi_progression 및 weakness_clue.id 추출
         String level1_lie = "알리바이: 사건 시간에 다른 장소에 있었습니다.";
         String level2_weak = "알리바이가 깨지며 당황하는 상태입니다.";
-        String weaknessClueName = null;
         Long weaknessClueId = null;  // weakness_clue의 id
         if (aiConfig != null && aiConfig.has("secret")) {
             JsonNode secret = aiConfig.get("secret");
@@ -383,17 +386,35 @@ public class GameSessionServiceImpl implements GameSessionService {
                     level2_weak = alibiProgression.get("level2_partial").asText();
                 }
             }
-            if (secret.has("weakness_clue") && secret.get("weakness_clue").has("name")) {
-                weaknessClueName = secret.get("weakness_clue").get("name").asText();
+            if (secret.has("weakness_clue")) {
+                JsonNode weaknessClue = secret.get("weakness_clue");
+                if (weaknessClue.has("id")) {
+                    weaknessClueId = weaknessClue.get("id").asLong();
+                }
             }
         }
 
-        // usedClueId로 Clue를 찾아 weakness_clue.name과 비교
+        // SessionSuspectState에서 현재 심문 레벨 조회 (없으면 생성)
+        SessionSuspectStateId stateId = new SessionSuspectStateId(session.getId(), suspect.getId());
+        SessionSuspectState state = sessionSuspectStateRepository.findById(stateId)
+                .orElseGet(() -> SessionSuspectState.builder()
+                        .session(session)
+                        .suspect(suspect)
+                        .currentInterrogationLevel(1)
+                        .secretRevealed(false)
+                        .build());
+
+        // 현재 레벨 확인 (Level 2 이상이면 약점이 이미 드러난 상태)
         Long usedClueId = request.usedClueId();
-        boolean isWeaknessClueUsed = false;
-        if (usedClueId != null && weaknessClueName != null) {
-            var usedClue = clueRepository.findById(usedClueId);
-            isWeaknessClueUsed = usedClue.isPresent() && weaknessClueName.equals(usedClue.get().getName());
+        boolean isWeaknessClueUsed = state.getCurrentInterrogationLevel() >= 2;
+
+        // 아직 Level 2가 아니고, 약점 단서를 제시한 경우
+        if (!isWeaknessClueUsed && usedClueId != null && weaknessClueId != null) {
+            if (usedClueId.equals(weaknessClueId)) {
+                isWeaknessClueUsed = true;
+                state.setCurrentInterrogationLevel(2);  // Level 2로 영구 변경
+                sessionSuspectStateRepository.save(state);
+            }
         }
 
         // 용의자 심문을 위한 프롬프트 구성
@@ -405,7 +426,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                    - 예외 없이 질문의 범위를 벗어나는 정보를 제공하지 마세요.
                    - 잘못된 예시: 질문 "직업이 뭐죠?" → 답변 "케빈과의 관계는 고용주입니다. 제 직업은 클럽 운영자입니다." (X)
                    - 올바른 예시: 질문 "직업이 뭐죠?" → 답변 "제 직업은 댄스 클럽 운영자입니다." (O)
-                   - 질문에 특정 인물의 이름이 없으면, 그 인물에 대한 언급을 하지 마세요.
                 1. 소유권 인정과 기만:
                    - 본인 소유가 확실한 물건이 제시되면 부인하지 마세요. "제 것이 맞네요"라고 인정하되, 그것이 왜 의심스러운 곳에 있는지 '사건과 무관한 가짜 서사'를 즉흥적으로 만드세요.
                 2. 중립적 표현 유지 (중요):
@@ -439,6 +459,35 @@ public class GameSessionServiceImpl implements GameSessionService {
                     """;
         }
 
+        // 현재 심문 상태에 따른 지침 설정
+        String interrogationProtocol;
+        if (isWeaknessClueUsed) {
+            // Level 2: 약점 단서가 제시된 상태
+            interrogationProtocol = String.format("""
+                        ## 현재 심문 상태: Level 2 (심리적 균열 및 부분 진실)
+
+                        결정적인 약점 단서가 제시되어 당신의 논리가 깨지기 시작했습니다.
+
+                        **알리바이 응답 지침:** %s
+
+                        - 성격과 말투를 유지하여 응답하세요.
+                        - **유저가 단서의 의미를 정확히 짚거나, 당신의 비밀과 관련된 단어를 하나라도 언급하면** 더 이상 숨기지 못하는 척하며 'secret'의 내용을 부분적으로 실토하십시오.
+                        - 당황하고 동요하는 태도를 보이세요.
+                        """, level2_weak);
+        } else {
+            // Level 1: 약점 단서가 제시되지 않은 상태
+            interrogationProtocol = String.format("""
+                        ## 현재 심문 상태: Level 1 (거짓말 및 알리바이 고수)
+
+                        아직 약점 단서가 제시되지 않았습니다. 당신의 '비밀(secret)'을 절대 직접 언급하지 마세요.
+
+                        **알리바이 응답 지침:** %s
+
+                        - 알리바이를 물으면 철저히 위 지침에 기반하여 의심을 회피하세요.
+                        - 당황하지 말고 차분하게 태도를 유지하세요.
+                        """, level1_lie);
+        }
+
         // 최종 시스템 메시지 결합
         String systemMessage = String.format("""
 
@@ -458,19 +507,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                         %s
                         %s
 
-                        ## 현재 심문 상태 프로토콜
-                        (Match 결과가 true면 Level2, false면 Level1)
-                        # Match 결과
-                        %b
-
-                        1. [Level 1: 거짓말 및 알리바이 고수]
-                           - 약점 단서가 제시되지 않았습니다. 당신의 '비밀(secret)'을 절대 직접 언급하지 마세요.
-                           - 알리바이를 물으면 '알리바이 타임라인' 정보를 참고하되, 철저히 %s에 기반하여 의심을 회피하세요.
-
-                        2. [Level 2: 심리적 균열 및 부분 진실]
-                           - 결정적인 약점 단서가 제시되어 당신의 논리가 깨지기 시작했습니다.
-                           - 처음에는 %s에 기반하되 성격과 말투를 유지하여 응답하세요.
-                           - **유저가 단서의 의미를 정확히 짚거나, 당신의 비밀과 관련된 단어를 하나라도 언급하면** 더 이상 숨기지 못하는 척하며 'secret'의 내용을 부분적으로 실토하십시오.
+                        %s
 
                         ## 심문 규칙
                         1. 이전 대화의 모순을 기억하고, 지적당하면 당황하며 말을 바꾸는 연기를 하십시오.
@@ -506,35 +543,10 @@ public class GameSessionServiceImpl implements GameSessionService {
                 suspect.getMotive() != null ? suspect.getMotive() : "없음",
                 behaviorGuideline,
                 commonClueRule,
-                isWeaknessClueUsed,
-                level1_lie,
-                level2_weak
+                interrogationProtocol
         );
 
         String userMessage = request.message() == null ? "" : request.message().trim();
-
-        // 1단계: 질문 분석 (다중 질문 감지 및 첫 번째 질문 추출)
-        QuestionAnalysisResult analysis = analyzeQuestion(userMessage);
-
-        // 다중 질문인 경우 첫 번째 질문만 사용, 단일 질문이면 원본 사용
-        boolean hasMultipleQuestions = false;
-        if (analysis.hasMultipleQuestions() && analysis.firstQuestion() != null) {
-            userMessage = analysis.firstQuestion();
-            hasMultipleQuestions = true;
-        }
-
-        // 다중 질문일 경우 시스템 프롬프트에 응답 끝 안내 지침 추가
-        if (hasMultipleQuestions) {
-            systemMessage += """
-
-                ## 다중 질문 응답 지침
-                - 사용자가 한 번에 여러 질문을 했습니다. 현재 첫 번째 질문에만 답변하고 있습니다.
-                - 응답의 마지막에 용의자인 당신의 성격과 태도에 맞게 "질문을 한 번에 하나씩만 해주세요"라는 뉘앙스의 멘트를 자연스럽게 덧붙이세요.
-                - 예시: "그게 제 직업이에요. 그건 그렇고, 한 번에 한 질문씩만 해주실 수 있나요? 머리가 복잡해지네요."
-                """;
-        }
-
-        // usedClueId는 이미 위에서 선언됨
 
         // 단서를 사용한 경우 단서 정보 조회 후 AI에게 전달
         if (usedClueId != null) {
@@ -552,11 +564,13 @@ public class GameSessionServiceImpl implements GameSessionService {
             }
         }
 
-        // RAG Advisor (관련 대화 맥락 검색)
-        VectorStore sessionVectorStore = getOrCreateVectorStore(sessionId, suspectId);
+        // 대화 기록을 ChatMemory에 로드 (세션별 용의자별 conversationId 사용)
+        String conversationId = "session-" + sessionId + "-suspect-" + suspectId;
 
-        Advisor questionAnswerAdvisor = QuestionAnswerAdvisor.builder(sessionVectorStore)
-                .order(1)
+        // MessageChatMemoryAdvisor 설정 (ChatMemoryRepository가 자동으로 대화 기록 관리)
+        Advisor memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory)
+                .conversationId(conversationId)
+                .order(10)
                 .build();
 
         // AI 응답 생성
@@ -564,7 +578,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         chatClient.prompt()
                 .system(systemMessage)
                 .user(userMessage)
-                .advisors(questionAnswerAdvisor)
+                .advisors(memoryAdvisor)
                 .stream()
                 .content()
                 .doOnNext(sb::append)
@@ -614,21 +628,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .build();
         chatMessageRepository.save(assistantMessageEntity);
 
-        // VectorStore에 대화 내용 추가 (RAG용)
-        String conversationId = "session-" + sessionId + "-suspect-" + suspectId;
-        sessionVectorStore.add(List.of(
-            Document.builder()
-                    .id(conversationId + "-user-" + userMessageEntity.getId())
-                    .text(userMessage)
-                    .metadata(Map.of("conversationId", conversationId, "role", "user", "suspectId", String.valueOf(suspectId)))
-                    .build(),
-            Document.builder()
-                    .id(conversationId + "-assistant-" + assistantMessageEntity.getId())
-                    .text(reply)
-                    .metadata(Map.of("conversationId", conversationId, "role", "suspect", "suspectId", String.valueOf(suspectId)))
-                    .build()
-        ));
-
         // 진행도 업데이트 (health 반영)
         int health = session.getHealth() != null ? session.getHealth() : 100;
         health = Math.max(0, health - 5);
@@ -662,31 +661,15 @@ public class GameSessionServiceImpl implements GameSessionService {
     private String buildScenarioContext(Scenario scenario, Suspect currentSuspect) {
         StringBuilder contextBuilder = new StringBuilder();
 
-        // 1. 줄거리, 상세 줄거리
-        contextBuilder.append("## 줄거리\n");
-        if (scenario.getSynopsis() != null && !scenario.getSynopsis().isBlank()) {
-            contextBuilder.append(scenario.getSynopsis()).append("\n");
-        }
+        // 1. 상세 줄거리
+        contextBuilder.append("## 상세 줄거리\n");
         if (scenario.getSynopsisDetail() != null && !scenario.getSynopsisDetail().isBlank()) {
-            contextBuilder.append("\n### 상세 줄거리\n").append(scenario.getSynopsisDetail()).append("\n");
+            contextBuilder.append(scenario.getSynopsisDetail()).append("\n");
         }
 
-        // 2. 타임라인
-        JsonNode storyConfig = scenario.getStoryConfigJson();
-        if (storyConfig != null && storyConfig.has("timeline")) {
-            JsonNode timeline = storyConfig.get("timeline");
-            contextBuilder.append("\n## 사건 타임라인\n");
-            for (JsonNode event : timeline) {
-                String time = event.has("time") ? event.get("time").asText() : "";
-                String eventText = event.has("event") ? event.get("event").asText() : "";
-                String witness = event.has("witness") ? event.get("witness").asText() : "";
-                contextBuilder.append(String.format("- %s: %s (목격자: %s)\n", time, eventText, witness));
-            }
-        }
-
-        // 3. 용의자 정보 (모든 용의자의 기본 정보, 현재 심문 중인 용의자의 상세 정보)
+        // 2. 용의자 정보 (모든 용의자의 기본 정보, 현재 심문 중인 용의자의 상세 정보)
         List<Suspect> suspects = suspectRepository.findByScenarioIdOrderByDisplayOrderAsc(scenario.getId());
-        contextBuilder.append("\n## 용의자 정보\n");
+        contextBuilder.append("## 용의자 정보\n");
         for (Suspect suspect : suspects) {
             boolean isCurrentSuspect = suspect.getId() == currentSuspect.getId();
 
@@ -698,9 +681,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                     suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
                     suspect.getOccupation() != null ? suspect.getOccupation() : "알 수 없음"
             ));
-            if (suspect.getMotive() != null && !suspect.getMotive().isBlank()) {
-                contextBuilder.append("  동기: ").append(suspect.getMotive()).append("\n");
-            }
             if (suspect.getOneLiner() != null && !suspect.getOneLiner().isBlank()) {
                 contextBuilder.append("  성격: ").append(suspect.getOneLiner()).append("\n");
             }
@@ -708,8 +688,8 @@ public class GameSessionServiceImpl implements GameSessionService {
             // aiConfigJson에서 추가 정보 추출
             JsonNode aiConfig = suspect.getAiConfigJson();
             if (aiConfig != null) {
-                // relationship은 모든 용의자에게 포함
-                if (aiConfig.has("relationship")) {
+                // relationship은 현재 심문 중인 용의자에게만 포함
+                if (isCurrentSuspect && aiConfig.has("relationship")) {
                     String relationship = aiConfig.get("relationship").asText();
                     if (!relationship.isBlank()) {
                         contextBuilder.append("  관계: ").append(relationship).append("\n");
@@ -1071,9 +1051,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                     entityManager.flush();
 
                     resetSession(session);
-                    // VectorStore에서도 해당 세션 데이터 삭제
-                    clearVectorStoreBySession(sessionId);
-                    session = getSession(sessionId);;
+                    session = getSession(sessionId);
 
                     // storyConfigJson에서 unsolved_monologue 추출
                     String unsolvedMonologue = extractNarration(scenario, "unsolved_monologue");
@@ -1087,7 +1065,7 @@ public class GameSessionServiceImpl implements GameSessionService {
             }
 
         // 4. 범인 맞음 - motive 임베딩
-        float[] motiveEmbedding = null;
+        float[] motiveEmbedding=null;
         float motiveSimilarity = 0.0f;
 
         if (request.motive() != null && !request.motive().isBlank()) {
@@ -1150,8 +1128,6 @@ public class GameSessionServiceImpl implements GameSessionService {
         session.completeGame(finalScore, rankGrade);
         entityManager.flush();
         resetSession(session);
-        // VectorStore에서도 해당 세션 데이터 삭제
-        clearVectorStoreBySession(sessionId);
 
         // storyConfigJson에서 epilogue, culprit_monologue 추출
         String epilogue = extractNarration(scenario, "epilogue");
@@ -1171,7 +1147,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         );
     }
 
-    /**
+    /*
      * private 헬프 메서드 섹션
      */
 
@@ -1437,167 +1413,6 @@ public class GameSessionServiceImpl implements GameSessionService {
         }
 
         return (float) (dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2)));
-    }
-
-    /**
-     * 질문 분석 결과 (다중 질문 감지용)
-     */
-    private record QuestionAnalysisResult(
-        boolean hasMultipleQuestions,
-        String firstQuestion
-    ) {}
-
-    /**
-     * 사용자 메시지를 분석하여 다중 질문 여부와 첫 번째 질문을 추출
-     *
-     * @param userMessage 사용자 메시지
-     * @return 질문 분석 결과
-     */
-    private QuestionAnalysisResult analyzeQuestion(String userMessage) {
-        String analysisPrompt = """
-            당신은 질문 분석 전문가입니다. 사용자의 메시지를 분석하여 다음 정보를 JSON 형식으로 반환하세요.
-
-            ## 핵심 원칙: 의도 기반 분석
-            - 사용자가 "실제로 몇 개의 주제에 대해 답변을 원하는지"를 파악하세요.
-            - 질문이 서로 다른 주제에 관한 것이면 별도 질문으로 간주하세요.
-            - 문법적 구조보다는 의도와 맥락을 우선하세요.
-
-            ## 분석 기준
-            1. 주제 분리: 서로 다른 주제에 대해 물어보면 별도 질문으로 간주
-               - 예: "직업이 뭐냐 어디에 있었냐" → 2개 질문 (직업 + 알리바이)
-               - 예: "직업이 뭐냐 그리고 회사 이름은 뭐냐" → 2개 질문 (서로 다른 정보 요구)
-
-            2. 의문문 패턴 (한국어 종결어미 기반)
-               - ~냐, ~니, ~야, ~인가, ~습니까, ~입니까, ~세요
-               - ~뭡니까, ~인지, ~야 (~냐의 변형)
-               - 문장 끝이 올림표 intonation으로 읽히는 의문형
-
-            3. 구분자 기반 분리
-               - 문장 부호: . ? !
-               - 연결어: 그리고, 또한, 그런데, 또
-               - 공백: 질문 사이에 의미 있는 공백이 있으면 분리
-
-            ## 첫 번째 질문 추출
-            - 가장 먼저 나오는 의문문 주제만 정확히 추출하세요.
-            - 불필요한 수식어는 제거하고 핵심 질문만 남기세요.
-
-            ## 예시
-            입력: "당신의 직업이 뭐냐 당신은 사건이 일어날 당시 어디에서 뭘하고 있었냐"
-            출력: {"questionCount": 2, "firstQuestion": "당신의 직업이 뭐냐"}
-
-            입력: "직업이 뭡니까? 그리고 짱구랑 어떤 사이죠?"
-            출력: {"questionCount": 2, "firstQuestion": "직업이 뭡니까?"}
-
-            입력: "직업이 뭐예요"
-            출력: {"questionCount": 1, "firstQuestion": "직업이 뭐예요"}
-
-            ## 중요: 반환 형식
-            - 절대 Markdown 코드 블록(백틱 3개)을 사용하지 마세요.
-            - JSON 객체만 출력하세요. 설명 없이 순수 JSON만 반환하세요.
-
-            ## 분석할 메시지
-            %s
-            """.formatted(userMessage);
-
-        try {
-            String response = chatClient.prompt()
-                    .user(analysisPrompt)
-                    .call()
-                    .content();
-
-            // Markdown 코드 블록 제거 (LLM이 ```json ... ``` 반환할 경우 대비)
-            String cleanedResponse = response.trim();
-            if (cleanedResponse.startsWith("```")) {
-                cleanedResponse = cleanedResponse.replaceAll("(?i)^```json\\s*", "");
-                cleanedResponse = cleanedResponse.replaceAll("^```\\s*", "");
-                cleanedResponse = cleanedResponse.replaceAll("```\\s*$", "");
-                cleanedResponse = cleanedResponse.trim();
-            }
-
-            // JSON 파싱
-            JsonNode json = objectMapper.readTree(cleanedResponse);
-            int questionCount = json.has("questionCount") ? json.get("questionCount").asInt() : 1;
-            String firstQuestion = json.has("firstQuestion") ? json.get("firstQuestion").asText() : userMessage;
-
-            return new QuestionAnalysisResult(questionCount >= 2, firstQuestion);
-
-        } catch (Exception e) {
-            // 분석 실패 시 원본 메시지 사용 (fallback)
-            log.warn("질문 분석 실패, 원본 메시지 사용: {}", e.getMessage());
-            return new QuestionAnalysisResult(false, userMessage);
-        }
-    }
-
-    /**
-     * VectorStore에서 특정 세션의 모든 용의자 데이터 삭제
-     *
-     * @param sessionId 세션 ID
-     */
-    private void clearVectorStoreBySession(long sessionId) {
-        try {
-            // 해당 세션의 모든 용의자 VectorStore 삭제
-            vectorStoreMap.entrySet().removeIf(entry -> {
-                String key = entry.getKey();
-                boolean shouldRemove = key.startsWith("session-" + sessionId + "-suspect-");
-                return shouldRemove;
-            });
-        } catch (Exception e) {
-            log.warn("VectorStore 정리 실패: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * DB의 채팅 내역을 VectorStore에 로드 (세션 재개 시 사용)
-     *
-     * @param sessionId 세션 ID
-     */
-    private void loadChatHistoryToVectorStore(long sessionId) {
-        try {
-            List<ChatMessage> chatMessages = chatMessageRepository
-                    .findBySessionIdWithSuspect(sessionId);
-
-            // 용의자별로 그룹화하여 VectorStore에 로드
-            Map<Long, List<ChatMessage>> messagesBySuspect = chatMessages.stream()
-                    .collect(Collectors.groupingBy(msg -> msg.getSuspect().getId()));
-
-            for (Map.Entry<Long, List<ChatMessage>> entry : messagesBySuspect.entrySet()) {
-                long suspectId = entry.getKey();
-                List<ChatMessage> suspectMessages = entry.getValue();
-                VectorStore sessionVectorStore = getOrCreateVectorStore(sessionId, suspectId);
-
-                for (ChatMessage message : suspectMessages) {
-                    String conversationId = "session-" + sessionId + "-suspect-" + suspectId;
-                    String documentId = conversationId + "-" + message.getRole() + "-" + message.getId();
-
-                    Document doc = Document.builder()
-                            .id(documentId)
-                            .text(message.getContent())
-                            .metadata(Map.of(
-                                "conversationId", conversationId,
-                                "role", message.getRole(),
-                                "suspectId", String.valueOf(suspectId)
-                            ))
-                            .build();
-
-                    sessionVectorStore.add(List.of(doc));
-                }
-            }
-        } catch (Exception e) {
-            log.warn("VectorStore 로드 실패: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * 세션별 용의자 VectorStore를 가져오거나 생성
-     *
-     * @param sessionId 세션 ID
-     * @param suspectId 용의자 ID
-     * @return 해당 세션의 해당 용의자 VectorStore
-     */
-    private VectorStore getOrCreateVectorStore(long sessionId, long suspectId) {
-        String key = "session-" + sessionId + "-suspect-" + suspectId;
-        return vectorStoreMap.computeIfAbsent(key,
-                id -> SimpleVectorStore.builder(embeddingModel).build());
     }
 
 }

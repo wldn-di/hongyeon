@@ -13,8 +13,10 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Getter
+@Setter
 @Entity
 @Table(name = "session_suspect_states")
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
