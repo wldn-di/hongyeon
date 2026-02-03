@@ -52,6 +52,9 @@ export function useGameRooms(scenarioId, options = {}) {
       // 백엔드 응답이 배열인 경우 직접 처리
       let mappedRooms
       if (Array.isArray(roomsResponse)) {
+        // 디버깅용 로그
+        console.log('[useGameRooms] Raw roomsResponse:', roomsResponse)
+        console.log('[useGameRooms] First room data:', roomsResponse[0])
         // 응답이 직접 배열인 경우
         mappedRooms = roomsResponse.map((room, idx) => ({
           id: room.roomId || room.id || idx,
@@ -62,13 +65,16 @@ export function useGameRooms(scenarioId, options = {}) {
           assistantComment: room.assistantComment || room.assistant_comment || '',
           objects: room.objects || null,
           unlocked: true,
-          image: `/images/rooms/room-${room.roomId || idx}.png`,
+          image: room.backgroundImageUrl || `/images/rooms/room-${room.roomId || idx}.png`,
         }))
+        console.log('[useGameRooms] Mapped rooms:', mappedRooms)
       } else {
+        console.log('[useGameRooms] Using mapRoomListResponse, response:', roomsResponse)
         mappedRooms = mapRoomListResponse(roomsResponse).map((room, idx) => ({
           ...room,
           floorNumber: clampFloor(room?.floorNumber, idx + 1),
         }))
+        console.log('[useGameRooms] Mapped rooms (via mapper):', mappedRooms)
       }
 
       setRooms(mappedRooms)

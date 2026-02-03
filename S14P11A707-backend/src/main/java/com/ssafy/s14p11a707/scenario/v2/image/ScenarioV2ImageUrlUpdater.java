@@ -3,10 +3,12 @@ package com.ssafy.s14p11a707.scenario.v2.image;
 import com.ssafy.s14p11a707.exception.BaseException;
 import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.scenario.entity.Clue;
+import com.ssafy.s14p11a707.scenario.entity.Room;
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.scenario.entity.Suspect;
 import com.ssafy.s14p11a707.scenario.entity.Victim;
 import com.ssafy.s14p11a707.scenario.repository.ClueRepository;
+import com.ssafy.s14p11a707.scenario.repository.RoomRepository;
 import com.ssafy.s14p11a707.scenario.repository.ScenarioRepository;
 import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
 import com.ssafy.s14p11a707.scenario.repository.VictimRepository;
@@ -19,7 +21,7 @@ import org.springframework.transaction.annotation.Transactional;
  * 시나리오 v2 이미지 URL 반영 컴포넌트
  * <p>
  * {@link com.ssafy.s14p11a707.scenario.v2.node.ImageBatchNode}가 업로드한 이미지 URL을
- * 도메인 엔티티({@link Scenario}, {@link Victim}, {@link Suspect}, {@link Clue})의 URL 필드에 기록한다.
+ * 도메인 엔티티({@link Scenario}, {@link Victim}, {@link Suspect}, {@link Clue}, {@link Room})의 URL 필드에 기록한다.
  * </p>
  * <p><b>트랜잭션</b></p>
  * <p>
@@ -36,6 +38,7 @@ import org.springframework.transaction.annotation.Transactional;
  * @see VictimRepository
  * @see SuspectRepository
  * @see ClueRepository
+ * @see RoomRepository
  */
 @Component
 @RequiredArgsConstructor
@@ -45,6 +48,7 @@ public class ScenarioV2ImageUrlUpdater {
     private final VictimRepository victimRepository;
     private final SuspectRepository suspectRepository;
     private final ClueRepository clueRepository;
+    private final RoomRepository roomRepository;
 
     /**
      * 업로드 결과(URL)를 엔티티에 반영
@@ -84,6 +88,13 @@ public class ScenarioV2ImageUrlUpdater {
             String clueUrl = urlByKey.get(key(ScenarioV2ImageJob.Target.CLUE_IMAGE, clue.getId()));
             if (clueUrl != null) {
                 clue.setDetailImageUrl(clueUrl);
+            }
+        }
+
+        for (Room room : roomRepository.findByScenarioIdOrderByFloorNumberAsc(scenarioId)) {
+            String roomUrl = urlByKey.get(key(ScenarioV2ImageJob.Target.ROOM_BACKGROUND, room.getId()));
+            if (roomUrl != null) {
+                room.setBackgroundImageUrl(roomUrl);
             }
         }
     }

@@ -225,7 +225,7 @@ export const mapRoom = (room) => {
     objects: room.objects || null,
     // 프론트엔드에서 사용하는 추가 필드
     unlocked: true, // 기본값 - 필요시 game state에서 계산
-    image: `/images/rooms/room-${room.roomId}.png`, // 기본 이미지 경로
+    image: room.backgroundImageUrl || `/images/rooms/room-${room.roomId}.png`, // 백엔드 이미지 또는 기본 경로
   }
 }
 

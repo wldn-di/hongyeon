@@ -3,10 +3,12 @@ package com.ssafy.s14p11a707.scenario.v2.node;
 import com.ssafy.s14p11a707.exception.BaseException;
 import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.scenario.entity.Clue;
+import com.ssafy.s14p11a707.scenario.entity.Room;
 import com.ssafy.s14p11a707.scenario.entity.Scenario;
 import com.ssafy.s14p11a707.scenario.entity.Suspect;
 import com.ssafy.s14p11a707.scenario.entity.Victim;
 import com.ssafy.s14p11a707.scenario.repository.ClueRepository;
+import com.ssafy.s14p11a707.scenario.repository.RoomRepository;
 import com.ssafy.s14p11a707.scenario.repository.ScenarioRepository;
 import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
 import com.ssafy.s14p11a707.scenario.repository.VictimRepository;
@@ -26,14 +28,14 @@ import org.springframework.transaction.annotation.Transactional;
 /**
  * 이미지 생성 프롬프트/작업 목록 구성 노드
  * <p>
- * 영속화된 도메인 엔티티({@link Scenario}, {@link Victim}, {@link Suspect}, {@link Clue})를 조회하여,
+ * 영속화된 도메인 엔티티({@link Scenario}, {@link Victim}, {@link Suspect}, {@link Clue}, {@link Room})를 조회하여,
  * 생성해야 할 이미지 목록({@link ScenarioV2ImageJob})을 구성한다.
  * </p>
  * <p><b>이미지 정책</b></p>
  * <ul>
  *   <li>고정 장수(예: 30장) 방식이 아닌, 실제 URL 필드가 존재하는 엔티티만 대상으로 생성한다.</li>
  *   <li>대상 필드: {@link Scenario#setThumbnailUrl(String)}, {@link Victim#setPortraitUrl(String)},
- *       {@link Suspect#setPortraitUrl(String)}, {@link Clue#setDetailImageUrl(String)}</li>
+ *       {@link Suspect#setPortraitUrl(String)}, {@link Clue#setDetailImageUrl(String)}, {@link Room#setBackgroundImageUrl(String)}</li>
  * </ul>
  * <p><b>트랜잭션</b></p>
  * <p>
@@ -52,12 +54,13 @@ public class ImagePromptNode implements ScenarioV2Node {
     private final VictimRepository victimRepository;
     private final SuspectRepository suspectRepository;
     private final ClueRepository clueRepository;
+    private final RoomRepository roomRepository;
     private final ScenarioV2EventPublisher eventPublisher;
 
     /**
      * 이미지 작업 목록을 생성하여 상태에 저장
      * <p>
-     * 시나리오/인물/단서 정보를 바탕으로 objectKey와 프롬프트를 구성한 뒤,
+     * 시나리오/인물/단서/방 정보를 바탕으로 objectKey와 프롬프트를 구성한 뒤,
      * {@link ScenarioV2State#setImageJobs(List)}에 저장한다.
      * </p>
      *
@@ -89,6 +92,7 @@ public class ImagePromptNode implements ScenarioV2Node {
         List<Clue> clues = clueRepository.findByScenarioId(state.getScenarioId()).stream()
                 .sorted(Comparator.comparingLong(Clue::getId))
                 .toList();
+        List<Room> rooms = roomRepository.findByScenarioIdOrderByFloorNumberAsc(state.getScenarioId());
 
         List<ScenarioV2ImageJob> jobs = new ArrayList<>();
 
@@ -154,13 +158,35 @@ public class ImagePromptNode implements ScenarioV2Node {
             ));
         }
 
+        for (Room room : rooms) {
+            jobs.add(new ScenarioV2ImageJob(
+                    ScenarioV2ImageJob.Target.ROOM_BACKGROUND,
+                    room.getId(),
+                    "scenarios/%d/rooms/%d.png".formatted(scenario.getId(), room.getId()),
+                    """
+                    Background image of a room interior for a mystery detective game.
+                    Floor: %d
+                    Room Type: %s
+                    Room Name: %s
+                    Description: %s
+                    Style: first-person view, atmospheric, noir, cinematic, realistic
+                    """.formatted(
+                            room.getFloorNumber(),
+                            safe(room.getRoomType()),
+                            safe(room.getRoomName()),
+                            safe(room.getDescription())
+                    )
+            ));
+        }
+
         state.setImageJobs(jobs);
         log.info(
-                "[v2] ImagePromptNode completed. scenarioId={}, jobs={}, suspects={}, clues={}",
+                "[v2] ImagePromptNode completed. scenarioId={}, jobs={}, suspects={}, clues={}, rooms={}",
                 state.getScenarioId(),
                 jobs.size(),
                 suspects.size(),
-                clues.size()
+                clues.size(),
+                rooms.size()
         );
         return state;
     }
