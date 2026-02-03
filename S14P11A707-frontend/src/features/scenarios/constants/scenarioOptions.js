@@ -3,9 +3,6 @@ export const GENRES = [
   { value: "crime", label: "범죄/수사" },
   { value: "mystery", label: "미스터리" },
   { value: "horror", label: "공포/스릴러" },
-  { value: "historical", label: "시대극" },
-  { value: "romance", label: "로맨스" },
-  { value: "sf", label: "SF/판타지" },
 ];
 
 export const DIFFICULTIES = [

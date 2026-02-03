@@ -7,6 +7,7 @@ import { toast } from "sonner";
 import { useCreateScenario } from "@/features/scenarios/hooks/useCreateScenario";
 import { useScenarioGeneration } from "@/features/scenarios/generation/ScenarioGenerationContext";
 import ScenarioGenerationStatusPanel from "@/components/ui/ScenarioGenerationStatusPanel";
+import { useAuth } from "@/contexts/AuthContext";
 
 // 장르 옵션
 const genreOptions = [
@@ -20,6 +21,9 @@ const suspectCountOptions = [4, 5];
 
 export default function CreateScenario() {
   const [, setLocation] = useLocation();
+  const { state, actions } = useAuth();
+  const user = state.user;
+  const authLoading = state.loading;
   const { generation } = useScenarioGeneration();
   const { createScenario, isGenerating } = useCreateScenario();
 
@@ -81,15 +85,32 @@ export default function CreateScenario() {
             <p className="text-muted-foreground">AI가 당신만의 추리 시나리오를 생성해드립니다</p>
           </div>
 
-          <ScenarioGenerationStatusPanel />
-            {locked && (
-              <p className="mt-3 text-sm text-muted-foreground">
-                생성 중에는 새 시나리오 생성이 불가합니다. <span className="text-primary">🔔</span>에서 진행 상황을 확인하세요.
-              </p>
-            )}
+          {authLoading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-muted-foreground">로그인 상태를 확인하는 중...</p>
+              </div>
+            </div>
+          ) : !user ? (
+            <div className="bg-card/40 border border-border rounded-xl p-10 text-center mb-6">
+              <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
+              <p className="text-muted-foreground mb-6">시나리오를 만들려면 Google 로그인이 필요해요.</p>
+              <Button variant="neon" onClick={() => actions.login()}>
+                구글 로그인
+              </Button>
+            </div>
+          ) : (
+            <>
+              <ScenarioGenerationStatusPanel />
+              {locked && (
+                <p className="mt-3 text-sm text-muted-foreground">
+                  생성 중에는 새 시나리오 생성이 불가합니다. <span className="text-primary">🔔</span>에서 진행 상황을 확인하세요.
+                </p>
+              )}
 
-          {/* 폼 */}
-          <form onSubmit={handleSubmit} className="space-y-6">
+              {/* 폼 */}
+              <form onSubmit={handleSubmit} className="space-y-6">
             {/* 제목 */}
             <div className="bg-card border border-border rounded-lg p-6">
               <label className="flex items-center gap-2 font-bold mb-3">
@@ -104,7 +125,7 @@ export default function CreateScenario() {
                 className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-lg focus:outline-none focus:ring-2 focus:ring-primary"
                 disabled={locked}
               />
-              <p className="text-xs text-muted-foreground mt-2">* 제목은 AI에 의해 바뀔 수 있습니다.ㅂㅈ</p>
+              <p className="text-xs text-muted-foreground mt-2">* 제목은 AI에 의해 바뀔 수 있습니다.</p>
             </div>
 
             {/* 시놉시스 */}
@@ -195,7 +216,9 @@ export default function CreateScenario() {
                 )}
               </Button>
             </div>
-          </form>
+              </form>
+            </>
+          )}
         </div>
       </main>
     </div>

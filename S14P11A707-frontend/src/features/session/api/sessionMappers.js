@@ -26,6 +26,13 @@ const clampFloor = (value, fallback = 1) => {
   return Math.min(6, Math.max(1, Math.trunc(num)))
 }
 
+const pickString = (...values) => {
+  for (const value of values) {
+    if (typeof value === 'string' && value.length > 0) return value
+  }
+  return ''
+}
+
 // ========================================
 // Bookshelf Mappers
 // ========================================
@@ -208,7 +215,13 @@ export const normalizeClue = (clue) => {
     name: clue.name || '',
     importance: clue.importance || '',
     description: clue.description || '',
-    detailImageUrl: clue.detailImageUrl || '',
+    detailImageUrl: pickString(
+      clue.detailImageUrl,
+      clue.detail_image_url,
+      clue.imageUrl,
+      clue.image_url,
+      clue.image,
+    ),
     assistantComment: clue.assistantComment || '',
     transform: clue.transform || null,
     discovered: clue.discovered || false,
@@ -558,7 +571,7 @@ export const createBoardItem = (node, suspectsMap, cluesMap) => {
       type: 'evidence',
       name: clue.name,
       note: clue.importance || '',
-      image: '', // Clues don't have images in the current schema
+      image: clue.detailImageUrl || '',
       targetId: node.targetId,
     }
   }
@@ -867,7 +880,13 @@ export const normalizeClueDetail = (clue) => {
   return {
     ...normalizeClue(clue),
     description: clue.description || '',
-    detailImageUrl: clue.detailImageUrl || '',
+    detailImageUrl: pickString(
+      clue.detailImageUrl,
+      clue.detail_image_url,
+      clue.imageUrl,
+      clue.image_url,
+      clue.image,
+    ),
     assistantComment: clue.assistantComment || '',
     clueDetail: clue.clueDetail || null,
     transform: clue.transform || null,

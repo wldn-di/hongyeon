@@ -46,6 +46,17 @@ function safeJsonParse(data) {
   }
 }
 
+function normalizeScenarioId(raw) {
+  const num = Number(raw);
+  return Number.isFinite(num) && num > 0 ? num : null;
+}
+
+function normalizeStatus(raw) {
+  if (raw == null) return null;
+  const str = String(raw).trim();
+  return str ? str.toUpperCase() : null;
+}
+
 function normalizeMessage(message) {
   if (message == null) return "";
   const str = String(message);
@@ -53,16 +64,34 @@ function normalizeMessage(message) {
 }
 
 export function ScenarioGenerationProvider({ children, enabled = true, sseUrl }) {
+  console.log("[ScenarioGenerationProvider] LOADED FILE VERSION = conditional-close");
+
   const { state: authState } = useAuth();
   const user = authState.user;
   const userId = useMemo(() => getUserId(user), [user]);
 
   const [, setLocation] = useLocation();
+  const setLocationRef = useRef(setLocation);
+  useEffect(() => {
+    setLocationRef.current = setLocation;
+  }, [setLocation]);
 
   const [generation, setGeneration] = useState(initialState);
 
   const eventSourceRef = useRef(null);
   const bootstrappedUserIdRef = useRef(null);
+  const statusCheckInFlightRef = useRef(false);
+
+  const sseDebugEnabled =
+    import.meta.env.DEV || window?.localStorage?.getItem("debug:sse") === "1";
+  const sseLog = (...args) => {
+    if (!sseDebugEnabled) return;
+    console.log("[SSE]", ...args);
+  };
+  const sseDebug = (...args) => {
+    if (!sseDebugEnabled) return;
+    console.debug("[SSE]", ...args);
+  };
 
   // 외부(예: 생성 요청)에서 즉시 스냅샷으로 상태 갱신할 수 있게 액션 제공
   const actions = useMemo(
@@ -71,9 +100,8 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
         const idNum = Number(scenarioId);
         if (!Number.isFinite(idNum)) return;
 
-        setGeneration((prev) => ({
+        setGeneration(() => ({
           ...initialState,
-          sseConnected: prev.sseConnected,
           isScenarioGenerating: true,
           scenarioId: idNum,
           progress: Number.isFinite(Number(progress)) ? Number(progress) : 0,
@@ -81,7 +109,7 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
           errorMessage: null,
         }));
       },
-      clearGenerating: () => setGeneration((prev) => ({ ...initialState, sseConnected: prev.sseConnected })),
+      clearGenerating: () => setGeneration(initialState),
     }),
     [],
   );
@@ -109,7 +137,7 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
         const generating = items.find((item) => item?.status === "GENERATING");
 
         if (!generating) {
-          setGeneration((prev) => ({ ...initialState, sseConnected: prev.sseConnected }));
+          setGeneration(initialState);
           return;
         }
 
@@ -118,9 +146,8 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
         const generationMessage =
           normalizeMessage(generating.generationMessage) || "시나리오 생성 중입니다...";
 
-        setGeneration((prev) => ({
+        setGeneration(() => ({
           ...initialState,
-          sseConnected: prev.sseConnected,
           isScenarioGenerating: true,
           scenarioId: Number.isFinite(scenarioId) ? scenarioId : null,
           progress,
@@ -154,27 +181,160 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
     };
   }, [enabled, userId]);
 
-  // 2) 전역 SSE 연결 유지 (단일 연결)
+  // 2) 시나리오 생성 중에만 SSE 연결 (COMPLETED/FAILED 시 반드시 close)
   useEffect(() => {
     if (!enabled || !userId) return;
 
-    const url = buildV2StreamUrl(sseUrl);
-    const es = new EventSource(url); //일단 표준형태로 
-    eventSourceRef.current = es;
+    const expectedScenarioId = normalizeScenarioId(generation.scenarioId);
+    if (!generation.isScenarioGenerating || !expectedScenarioId) {
+      if (eventSourceRef.current) {
+        sseLog("cleanup", { reason: "not_generating" });
+        try {
+          eventSourceRef.current.close();
+        } finally {
+          eventSourceRef.current = null;
+        }
+      }
+      // 상태값만 정리 (deps에 포함되지 않아 1회만 실행됨)
+      setGeneration((prev) => (prev.sseConnected ? { ...prev, sseConnected: false } : prev));
+      return;
+    }
 
-    es.addEventListener("open", () => setGeneration((prev) => ({ ...prev, sseConnected: true })));
+    const url = buildV2StreamUrl(sseUrl);
+    const prev = eventSourceRef.current;
+    if (prev) {
+      sseLog("cleanup", { reason: "replace_connection" });
+      try {
+        prev.close();
+      } catch {
+        // ignore
+      } finally {
+        if (eventSourceRef.current === prev) eventSourceRef.current = null;
+      }
+    }
+
+    const es = new EventSource(url);
+    eventSourceRef.current = es;
+    sseLog("open", { url, scenarioId: expectedScenarioId });
+
+    let closed = false;
+    const close = (reason, extra) => {
+      if (closed) return;
+      closed = true;
+      sseLog("closing", { reason, scenarioId: expectedScenarioId, ...extra });
+      try {
+        es.close();
+      } finally {
+        if (eventSourceRef.current === es) eventSourceRef.current = null;
+      }
+    };
+
+    es.addEventListener("open", () => {
+      sseLog("open.connected", { scenarioId: expectedScenarioId });
+      setGeneration((prevGen) => {
+        if (!prevGen?.isScenarioGenerating) return prevGen;
+        if (normalizeScenarioId(prevGen.scenarioId) !== expectedScenarioId) return prevGen;
+        return { ...prevGen, sseConnected: true };
+      });
+    });
+
+    const getPayloadScenarioId = (payload) =>
+      normalizeScenarioId(payload?.scenarioId ?? payload?.scenario_id ?? payload?.id ?? null);
+
+    const shouldHandlePayload = (payload) => {
+      const payloadScenarioId = getPayloadScenarioId(payload);
+      // global stream일 수 있으므로 현재 생성 중인 scenarioId만 처리
+      if (payloadScenarioId && payloadScenarioId !== expectedScenarioId) return false;
+      return true;
+    };
+
+    const getPayloadStatus = (payload) =>
+      (() => {
+        const type = normalizeStatus(payload?.type ?? null);
+        if (type === "COMPLETE") return "COMPLETED";
+        if (type === "ERROR") return "FAILED";
+
+        return normalizeStatus(
+          payload?.status ??
+            payload?.scenarioStatus ??
+            payload?.scenario_status ??
+            payload?.scenarioState ??
+            payload?.scenario_state ??
+            payload?.state ??
+            null,
+        );
+      })();
+
+    const resolveScenarioIdForToast = (payload) => {
+      const payloadScenarioId = getPayloadScenarioId(payload);
+      return payloadScenarioId || expectedScenarioId;
+    };
+
+    const handleComplete = (payload, { sourceEvent = "complete" } = {}) => {
+      if (closed) return;
+      if (!shouldHandlePayload(payload)) return;
+      close("complete", { sourceEvent });
+      const scenarioId = resolveScenarioIdForToast(payload);
+
+      setGeneration({
+        ...initialState,
+        sseConnected: false,
+      });
+
+      toast.success("시나리오 생성 완료!", {
+        action: {
+          label: "바로 보기",
+          onClick: () => setLocationRef.current(`/scenario/${scenarioId}`),
+        },
+      });
+    };
+
+    const handleFail = (payload, { sourceEvent = "error" } = {}) => {
+      if (closed) return;
+      if (!shouldHandlePayload(payload)) return;
+      const message = normalizeMessage(payload?.message) || "시나리오 생성에 실패했습니다.";
+      close("failed", { sourceEvent });
+
+      setGeneration({
+        ...initialState,
+        scenarioId: expectedScenarioId,
+        errorMessage: message,
+        sseConnected: false,
+      });
+
+      toast.error(message);
+    };
 
     const onProgress = (event) => {
       const payload = safeJsonParse(event?.data);
       if (!payload) return;
 
-      const scenarioId = Number(payload.scenarioId);
-      if (!Number.isFinite(scenarioId) || scenarioId <= 0) return;
+      if (!shouldHandlePayload(payload)) {
+        sseDebug("message.ignored", { event: "progress", payload });
+        return;
+      }
+
+      const status = getPayloadStatus(payload);
+      sseLog("message", {
+        event: "progress",
+        type: payload?.type ?? null,
+        status,
+        scenarioId: getPayloadScenarioId(payload),
+        progress: payload?.progress ?? null,
+      });
+      if (status === "COMPLETED") {
+        handleComplete(payload, { sourceEvent: "progress.status" });
+        return;
+      }
+      if (status === "FAILED") {
+        handleFail(payload, { sourceEvent: "progress.status" });
+        return;
+      }
 
       setGeneration(() => ({
         ...initialState,
         isScenarioGenerating: true,
-        scenarioId,
+        scenarioId: expectedScenarioId,
         progress: Number.isFinite(Number(payload.progress)) ? Number(payload.progress) : 0,
         generationMessage: normalizeMessage(payload.message) || "시나리오 생성 중입니다...",
         errorMessage: null,
@@ -187,35 +347,22 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
 
     const onComplete = (event) => {
       const payload = safeJsonParse(event?.data);
-      const scenarioId = Number(payload?.scenarioId);
-
-      setGeneration((prev) => ({ ...initialState, sseConnected: prev.sseConnected }));
-
-      if (Number.isFinite(scenarioId) && scenarioId > 0) {
-        toast.success("시나리오 생성 완료!", {
-          action: {
-            label: "바로 보기",
-            onClick: () => setLocation(`/scenario/${scenarioId}`),
-          },
-        });
-      } else {
-        toast.success("시나리오 생성 완료!");
-      }
+      sseLog("message", {
+        event: "complete",
+        status: normalizeStatus(payload?.status) || "COMPLETED",
+        scenarioId: getPayloadScenarioId(payload),
+      });
+      handleComplete(payload, { sourceEvent: "complete.event" });
     };
 
     const onServerErrorEvent = (event) => {
       const payload = safeJsonParse(event?.data);
-      const scenarioId = Number(payload?.scenarioId);
-      const message = normalizeMessage(payload?.message) || "시나리오 생성에 실패했습니다.";
-
-      setGeneration((prev) => ({
-        ...initialState,
-        sseConnected: prev.sseConnected,
-        scenarioId: Number.isFinite(scenarioId) ? scenarioId : prev.scenarioId,
-        errorMessage: message,
-      }));
-
-      toast.error(message);
+      sseLog("message", {
+        event: "error",
+        status: normalizeStatus(payload?.status) || "FAILED",
+        scenarioId: getPayloadScenarioId(payload),
+      });
+      handleFail(payload, { sourceEvent: "error.event" });
     };
 
     // connect/ping은 상태 갱신 없이 무시
@@ -224,29 +371,113 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
     // 서버 이벤트
     es.addEventListener("connect", noop);
     es.addEventListener("ping", noop);
+    // 기본 message 이벤트로 status(COMPLETED/FAILED) 등을 보내는 서버 대응
+    es.addEventListener("message", (event) => {
+      const payload = safeJsonParse(event?.data);
+      if (!payload) return;
+      if (!shouldHandlePayload(payload)) {
+        sseDebug("message.ignored", { event: "message", payload });
+        return;
+      }
+
+      const status = getPayloadStatus(payload);
+      sseLog("message", {
+        event: "message",
+        type: payload?.type ?? null,
+        status,
+        scenarioId: getPayloadScenarioId(payload),
+        progress: payload?.progress ?? null,
+      });
+      if (status === "COMPLETED") {
+        handleComplete(payload, { sourceEvent: "message.status" });
+        return;
+      }
+      if (status === "FAILED") {
+        handleFail(payload, { sourceEvent: "message.status" });
+        return;
+      }
+    });
     es.addEventListener("progress", onProgress);
     es.addEventListener("complete", onComplete);
 
     // 서버에서 event: error 를 보내는 경우 + 연결 오류도 동일 타입으로 옴
     es.addEventListener("error", (event) => {
+      if (closed) return;
       // server-sent "error" 이벤트(MessageEvent)는 data를 가진다.
       if (typeof event?.data === "string" && event.data.length > 0) {
         onServerErrorEvent(event);
         return;
       }
-      // 연결 오류는 EventSource가 자동 재연결하므로 여기서는 상태만 유지
-      setGeneration((prev) => ({ ...prev, sseConnected: false }));
-    // EventSource는 자동 재연결하므로 여기서 clearGenerating 같은 건 하지 않음
+      // 연결 오류: 즉시 실패 처리 금지. 1회 status 조회로 완료/실패 여부 판정.
+      sseLog("message", { event: "connection.error", scenarioId: expectedScenarioId });
+
+      setGeneration((prevGen) => {
+        if (!prevGen?.isScenarioGenerating) return prevGen;
+        if (normalizeScenarioId(prevGen.scenarioId) !== expectedScenarioId) return prevGen;
+        return { ...prevGen, sseConnected: false };
+      });
+
+      if (statusCheckInFlightRef.current) return;
+      statusCheckInFlightRef.current = true;
+
+      (async () => {
+        try {
+          const statusRes = await fetchScenarioStatus(expectedScenarioId);
+          const status = normalizeStatus(
+            statusRes?.status ??
+              statusRes?.scenarioStatus ??
+              statusRes?.scenario_status ??
+              statusRes?.state ??
+              null,
+          );
+
+          sseLog("message", {
+            event: "status.check",
+            scenarioId: expectedScenarioId,
+            status,
+            progress: statusRes?.progress ?? null,
+          });
+
+          if (status === "COMPLETED") {
+            handleComplete({ scenarioId: expectedScenarioId, status: "COMPLETED" }, { sourceEvent: "status.check" });
+            return;
+          }
+          if (status === "FAILED") {
+            handleFail(
+              { scenarioId: expectedScenarioId, status: "FAILED", message: statusRes?.message ?? null },
+              { sourceEvent: "status.check" },
+            );
+            return;
+          }
+
+          // GENERATING이면: 자동 재연결 대기(실패 토스트/상태 초기화 금지)
+          setGeneration((prevGen) => {
+            if (!prevGen?.isScenarioGenerating) return prevGen;
+            if (normalizeScenarioId(prevGen.scenarioId) !== expectedScenarioId) return prevGen;
+            const nextProgress = Number(statusRes?.progress);
+            return {
+              ...prevGen,
+              progress: Number.isFinite(nextProgress) ? nextProgress : prevGen.progress,
+              generationMessage: normalizeMessage(statusRes?.message) || prevGen.generationMessage,
+            };
+          });
+        } catch (err) {
+          sseLog("message", {
+            event: "status.check.error",
+            scenarioId: expectedScenarioId,
+            message: err?.message || String(err),
+          });
+        } finally {
+          statusCheckInFlightRef.current = false;
+        }
+      })();
     });
 
     return () => {
-      try {
-        es.close();
-      } finally {
-        if (eventSourceRef.current === es) eventSourceRef.current = null;
-      }
+      sseLog("cleanup", { reason: "effect_cleanup", scenarioId: expectedScenarioId });
+      close("cleanup");
     };
-  }, [enabled, userId, sseUrl, setLocation]);
+  }, [enabled, userId, sseUrl, generation.isScenarioGenerating, generation.scenarioId]);
 
   const value = useMemo(
     () => ({ generation, actions }),

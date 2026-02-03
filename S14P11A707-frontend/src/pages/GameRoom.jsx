@@ -17,6 +17,7 @@ import { useGameRooms } from '@/features/game/hooks/useGameRooms'
 import { useGameLogs } from '@/features/game/hooks/useGameLogs'
 import { useGameSubmission } from '@/features/game/hooks/useGameSubmission'
 import { useGameReport } from '@/features/game/hooks/useGameReport'
+import { useAuth } from '@/contexts/AuthContext'
 import { startGame, endGame, saveGame, fetchResume, moveFloor, submitAnswer } from '@/features/session/api/sessionApi'
 import { fetchClues, discoverClue } from '@/features/session/api/cluesApi'
 import { normalizeGameStartResponse, normalizeResumeResponse, normalizeGameEndResponse, normalizeClueListResponse, normalizeDiscoveredClueResponse } from '@/features/session/api/sessionMappers'
@@ -256,6 +257,9 @@ const getCluePosition = (roomIndex, clueId) => {
 
 
 export default function GameRoom() {
+  const { state, actions } = useAuth()
+  const user = state.user
+  const authLoading = state.loading
   const [, setLocation] = useLocation()
 
   // /game/:scenarioId 경로 (새 게임)
@@ -283,10 +287,10 @@ export default function GameRoom() {
   }, [initialScenarioId])
 
   // 시나리오 정보 조회 (API) - 이어하기가 아닐 때만 조회
-  const { scenario, loading: scenarioLoading, error: scenarioError } = useScenarioById(activeScenarioId)
+  const { scenario, loading: scenarioLoading, error: scenarioError } = useScenarioById(activeScenarioId, { enabled: !!user })
 
   // 방 데이터 조회 (API) - activeScenarioId 사용
-  const { rooms, loading: roomsLoading } = useGameRooms(activeScenarioId)
+  const { rooms, loading: roomsLoading } = useGameRooms(activeScenarioId, { enabled: !!user })
 
   // 게임 세션 ID (API 호출용)
   const [sessionId, setSessionId] = useState(null)
@@ -485,6 +489,9 @@ export default function GameRoom() {
 
   // 게임 초기화 (새로 시작)
   const initializeNewGame = useCallback(async () => {
+    if (!user) {
+      return
+    }
     // 이미 초기화 중이면 스킵 (ref로 동기 체크)
     if (isInitializedRef.current) {
       console.log('[GameRoom] initializeNewGame: 이미 초기화 중 - 스킵')
@@ -567,9 +574,12 @@ export default function GameRoom() {
       gameInitInFlightRef.current = false
       setGameInitializing(false)
     }
-  }, [activeScenarioId, addLog, clearBoardLocalStorage, getRoomIndexFromFloor, loadCluesForSession, setLocation])
+  }, [activeScenarioId, addLog, clearBoardLocalStorage, getRoomIndexFromFloor, loadCluesForSession, setLocation, user])
 
   const resumeGame = useCallback(async (resumeId) => {
+    if (!user) {
+      return
+    }
     if (!resumeId) return
 
     if (gameInitInFlightRef.current) {
@@ -692,7 +702,7 @@ export default function GameRoom() {
       gameInitInFlightRef.current = false
       setGameInitializing(false)
     }
-  }, [activeScenarioId, addLog, clearBoardLocalStorage, collectEvidence, getRoomIndexFromFloor, loadCluesForSession, scenario?.suspects])
+  }, [activeScenarioId, addLog, clearBoardLocalStorage, collectEvidence, getRoomIndexFromFloor, loadCluesForSession, scenario?.suspects, user])
 
   // 함수 ref 업데이트 (useEffect에서 최신 함수 사용)
   resumeGameRef.current = resumeGame
@@ -700,6 +710,9 @@ export default function GameRoom() {
 
   // 컴포넌트 마운트 시 게임 초기화
   useEffect(() => {
+    if (!user) {
+      return
+    }
     // 이미 세션이 있거나 초기화 중이거나 에러 상태면 스킵
     if (sessionId || gameInitializing || gameInitError) {
       return
@@ -713,7 +726,7 @@ export default function GameRoom() {
       initializeNewGameRef.current?.()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError])
+  }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError, !!user])
 
   // 시나리오 시작/변경 시 세션 초기화 (로그 추가는 initializeNewGame/resumeGame에서만)
   useEffect(() => {
@@ -1244,6 +1257,32 @@ export default function GameRoom() {
   const handleVictimComplete = useCallback(() => {
     setGamePhase('main')
   }, [])
+
+  // 로그인 필요 (게임 플레이는 로그인 사용자만)
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">로그인 상태를 확인하는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (!user) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="bg-card/40 border border-border rounded-xl p-10 text-center">
+          <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
+          <p className="text-muted-foreground mb-6">게임을 시작하려면 Google 로그인이 필요해요.</p>
+          <Button variant="neon" onClick={() => actions.login()}>
+            구글 로그인
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   // 로딩 상태 렌더링
   if (isLoading) {

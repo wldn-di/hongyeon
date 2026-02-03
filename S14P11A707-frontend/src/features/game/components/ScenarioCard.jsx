@@ -5,6 +5,9 @@ import { Star, Clock, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export function ScenarioCard({ scenario, className }) {
+  const status = scenario?.status
+  const isPlayable = !status || status === 'COMPLETED'
+
   return (
     <div 
       className={cn(
@@ -41,6 +44,21 @@ export function ScenarioCard({ scenario, className }) {
             {scenario.difficulty}
           </span>
         </div>
+
+        {/* 생성 상태 배지 (내 시나리오 등에서 표시) */}
+        {!isPlayable && (
+          <div className="absolute top-3 right-3">
+            <span
+              className={cn(
+                "px-2 py-1 rounded text-xs font-bold uppercase tracking-wider",
+                status === 'GENERATING' && "bg-blue-500/90 text-white",
+                status === 'FAILED' && "bg-red-500/90 text-white",
+              )}
+            >
+              {status === 'GENERATING' ? '생성중' : '실패'}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* 오른쪽: 콘텐츠 */}
@@ -57,11 +75,15 @@ export function ScenarioCard({ scenario, className }) {
         
         {/* 중앙: 버튼 (가운데 정렬) */}
         <div className="flex-1 flex items-end justify-center pb-2">
-          <Link href={`/scenario/${scenario.id}`}>
-            <Button variant="neon">
-              자세히
+          {isPlayable ? (
+            <Link href={`/scenario/${scenario.id}`}>
+              <Button variant="neon">자세히</Button>
+            </Link>
+          ) : (
+            <Button variant="outline" disabled>
+              {status === 'GENERATING' ? '생성 중...' : '생성 실패'}
             </Button>
-          </Link>
+          )}
         </div>
 
         {/* 하단: 메타 정보 */}

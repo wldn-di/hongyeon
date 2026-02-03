@@ -19,7 +19,7 @@ function buildStageMessage({ stageType, progress, message, meta }) {
   const total = getNum("total");
   const p = typeof progress === "number" ? progress : 0;
 
-  if (!stageType && p <= 0) return "새 알림이 없어요.";
+  if (!stageType && p <= 0) return "시나리오 생성 요청 전입니다";
 
   switch (stageType) {
     case "TIMELINE":

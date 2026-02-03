@@ -7,6 +7,7 @@ import { ReplayConfirmModal } from '@/components/ui/ReplayConfirmModal'
 import { fetchMyReport } from '@/features/session/api/sessionApi'
 import { normalizeInvestigationReportResponse } from '@/features/session/api/sessionMappers'
 import { useBookshelf } from '@/features/user/hooks/useBookshelf'
+import { useAuth } from '@/contexts/AuthContext'
 import {
   ChevronLeft, ChevronRight, Clock, Award,
   FileText, BookOpen, RotateCcw
@@ -330,6 +331,9 @@ function BookShelf({ books, mode, title, onViewReport, onReplay }) {
 // 메인 페이지
 // =========================
 export default function MyBookshelf() {
+  const { state, actions } = useAuth()
+  const user = state.user
+
   const [, setLocation] = useLocation()
   const [reportModalOpen, setReportModalOpen] = useState(false)
   const [selectedReport, setSelectedReport] = useState(null)
@@ -350,7 +354,8 @@ export default function MyBookshelf() {
     sRankCount,
     loading,
     error,
-  } = useBookshelf()
+  } = useBookshelf({ enabled: !!user })
+  const authLoading = state.loading
 
   const handleViewReport = useCallback(async (book) => {
     if (!book?.sessionId) return
@@ -394,7 +399,22 @@ export default function MyBookshelf() {
           </div>
 
           {/* 로딩 상태 */}
-          {loading ? (
+          {authLoading ? (
+            <div className="flex justify-center items-center py-20">
+              <div className="text-center">
+                <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+                <p className="text-muted-foreground">로그인 상태를 확인하는 중...</p>
+              </div>
+            </div>
+          ) : !user ? (
+            <div className="bg-card/40 border border-border rounded-xl p-10 text-center mb-6">
+              <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
+              <p className="text-muted-foreground mb-6">내 수사록을 보려면 Google 로그인을 해주세요.</p>
+              <Button variant="neon" onClick={() => actions.login()}>
+                구글 로그인
+              </Button>
+            </div>
+          ) : loading ? (
             <div className="flex justify-center items-center py-20">
               <div className="text-center">
                 <div className="inline-block w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>

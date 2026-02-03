@@ -9,6 +9,7 @@ import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.BindException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestTimeoutException;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
 
 @Slf4j
@@ -26,6 +27,10 @@ public class GlobalExceptionHandler {
             logError(e.getErrorCode(), request, e.getMessage(), e);
         } else {
             logWarn(e.getErrorCode(), request, e.getMessage());
+        }
+
+        if (isSseRequest(request)) {
+            return ResponseEntity.status(httpStatus).body(null);
         }
 
         ErrorResponse response = new ErrorResponse(e.getErrorCode(), request.getRequestURI());
@@ -60,12 +65,32 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleException(Exception e, HttpServletRequest request) {
+        if (isSseRequest(request)) {
+            if (e instanceof AsyncRequestTimeoutException) {
+                log.info(REQUEST_LOG_FORMAT, "SSE_TIMEOUT", request.getMethod(), request.getRequestURI(), "async timeout");
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).body(null);
+            }
+            logWarn(ErrorCode.INTERNAL_SERVER_ERROR, request, e.getMessage());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(null);
+        }
+
         logError(ErrorCode.INTERNAL_SERVER_ERROR, request, e.getMessage(), e);
 
         ErrorResponse response = new ErrorResponse(ErrorCode.INTERNAL_SERVER_ERROR, request.getRequestURI());
         return ResponseEntity
                 .status(HttpStatus.INTERNAL_SERVER_ERROR)
                 .body(response);
+    }
+
+
+    private static boolean isSseRequest(HttpServletRequest request) {
+        String accept = request.getHeader("Accept");
+        if (accept != null && accept.contains("text/event-stream")) {
+            return true;
+        }
+
+        String uri = request.getRequestURI();
+        return uri != null && uri.contains("/stream");
     }
 
     private static String summarizeInvalidInput(Exception e) {

@@ -80,6 +80,7 @@ public class ScenarioV2RedisSubscriber implements MessageListener {
         try {
             emitter.send(SseEmitter.event().name(sseName).data(event));
         } catch (IOException e) {
+            emitter.complete();
             emitterRepository.remove(eventMessage.userId());
             return;
         }

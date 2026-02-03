@@ -4,6 +4,36 @@
  */
 
 /**
+ * Backend generation status normalize helper
+ * - Backend: GENERATING | COMPLETED | FAILED
+ * - Unknown/empty values are treated as COMPLETED (legacy data / backward compatibility)
+ * @param {any} raw
+ * @returns {'GENERATING'|'COMPLETED'|'FAILED'}
+ */
+export const normalizeStatus = (raw) => {
+  const value = String(raw ?? '').trim().toUpperCase()
+  if (value === 'GENERATING' || value === 'COMPLETED' || value === 'FAILED') return value
+  return 'COMPLETED'
+}
+
+/**
+ * Public/All lists visibility rule
+ * @param {Object} scenario
+ * @returns {boolean}
+ */
+export const isVisibleInAll = (scenario) => normalizeStatus(scenario?.status) === 'COMPLETED'
+
+/**
+ * Mine list visibility rule
+ * @param {Object} scenario
+ * @returns {boolean}
+ */
+export const isVisibleInMine = (scenario) => {
+  const status = normalizeStatus(scenario?.status)
+  return status === 'COMPLETED' || status === 'GENERATING'
+}
+
+/**
  * ScenarioListResponse → 시나리오 배열
  * @param {ScenarioListResponse} response
  * @returns {Array} 시나리오 배열

@@ -51,7 +51,7 @@ function sortScenarios(scenarios, sortBy) {
         return bTime - aTime;
       });
     case "popular":
-      return sorted.sort((a, b) => b.playCount - a.playCount);
+      return sorted.sort((a, b) => (b.playCount ?? 0) - (a.playCount ?? 0)); // playCount가 undefined일 때 정렬 흔들림 방지를 위해 수정됨.
     case "rating":
       return sorted.sort(
         (a, b) =>

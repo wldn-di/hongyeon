@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchTopScenariosByPlayCount, fetchTopScenariosByRating } from '../api/scenariosApi'
-import { mapScenarioListResponseFull } from '../api/scenarioMappers'
+import { isVisibleInAll, mapScenarioListResponseFull } from '../api/scenarioMappers'
 
 /**
  * TOP 시나리오(평점/플레이수) 조회 Hook
@@ -30,14 +30,14 @@ export function useTopScenarios(options = {}) {
 
       if (ratingRes.status === 'fulfilled') {
         const mapped = mapScenarioListResponseFull(ratingRes.value)
-        setTopByRating((mapped.content || []).slice(0, 10))
+        setTopByRating((mapped.content || []).filter(isVisibleInAll).slice(0, 10))
       } else {
         setTopByRating(null)
       }
 
       if (playRes.status === 'fulfilled') {
         const mapped = mapScenarioListResponseFull(playRes.value)
-        setTopByPlayCount((mapped.content || []).slice(0, 10))
+        setTopByPlayCount((mapped.content || []).filter(isVisibleInAll).slice(0, 10))
       } else {
         setTopByPlayCount(null)
       }
@@ -54,4 +54,3 @@ export function useTopScenarios(options = {}) {
 }
 
 export default useTopScenarios
-

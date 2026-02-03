@@ -9,9 +9,12 @@ import { toast } from "sonner";
 /**
  * 내 책장 데이터 조회 Hook
  * COMPLETED, PLAYING, FAILED 상태의 모든 세션을 반환
+ * @param {Object} [options]
+ * @param {boolean} [options.enabled=true]
  * @returns {Object} { sessions, stats, loading, error, refetch }
  */
-export function useBookshelf() {
+export function useBookshelf(options = {}) {
+  const { enabled = true } = options;
   const [sessions, setSessions] = useState({
     completed: [],
     playing: [],
@@ -27,6 +30,11 @@ export function useBookshelf() {
   const [error, setError] = useState(null);
 
   const fetch = async () => {
+    if (!enabled) {
+      setLoading(false);
+      setError(null);
+      return;
+    }
     try {
       setLoading(true);
       setError(null);
@@ -62,7 +70,7 @@ export function useBookshelf() {
 
   useEffect(() => {
     fetch();
-  }, []);
+  }, [enabled]);
 
   return {
     // 세션 데이터 (상태별 분류)

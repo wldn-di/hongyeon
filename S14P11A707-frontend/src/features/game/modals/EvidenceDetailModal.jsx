@@ -7,7 +7,7 @@ export default function EvidenceDetailModal({ evidence, onClose }) {
   if (!evidence) return null
 
   // 이미지 URL (detailImageUrl 또는 image 필드 사용)
-  const imageUrl = evidence.detailImageUrl || evidence.image || null
+  const imageUrl = evidence.detailImageUrl || evidence.imageUrl || evidence.image || null
 
   // 발견 장소 (floorNumber가 있으면 "n층", 없으면 location 또는 기본값)
   const locationText = evidence.floorNumber
