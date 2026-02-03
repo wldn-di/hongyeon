@@ -137,7 +137,7 @@ export function Turntable() {
     const currentTrack = currentPlaylist[trackIndex] || currentPlaylist[0];
 
     return (
-        <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end">
+        <div data-board-safe-area="true" className="fixed bottom-6 right-6 z-[220] flex flex-col items-end">
 
             {/* ▼▼▼ 기본적으로 이 부분이 보임 (Open 상태) ▼▼▼ */}
             {!isMinimized && (

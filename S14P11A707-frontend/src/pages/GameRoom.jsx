@@ -6,7 +6,7 @@ import { DoorOpen, Heart, Clock, Lightbulb, Send, MessageCircle, MapPin, Smartph
 import LeftEvidencePanel from "@/features/game/panels/LeftEvidencePanel"
 import RightLogSidebar from "@/features/game/panels/RightLogSidebar"
 import BottomBoardPanel from "@/features/game/panels/BottomBoardPanel"
-import { ReportModal, EvidenceDetailModal, SubmitAnswerModal, ReviewModal, GameEndModal } from '@/features/game/modals'
+import { ReportModal, EvidenceDetailModal, SubmitAnswerModal, ReviewModal, GameEndModal, SuspectDetailModal, LocationDetailModal } from '@/features/game/modals'
 import PhoneUI from '@/features/game/components/PhoneUI'
 import AgitRoom from '@/features/game/engine/AgitRoom'
 import TypingText from '@/features/tutorial/components/TypingText'
@@ -27,6 +27,7 @@ import { chatWithSuspect, fetchChatHistory } from '@/features/session/api/sessio
 
 import { toast } from 'sonner'
 import { alertError } from '@/components/ui/AlertModal'
+import { confirmDialog } from '@/components/ui/ConfirmModal'
 import { cn } from '@/lib/utils'
 
 const START_GAME_DEDUP_MS = 5000
@@ -320,6 +321,8 @@ export default function GameRoom() {
   const [boardPanelOpen, setBoardPanelOpen] = useState(false)
   const [pendingAddItem, setPendingAddItem] = useState(null)
   const [selectedEvidence, setSelectedEvidence] = useState(null)
+  const [selectedSuspect, setSelectedSuspect] = useState(null)
+  const [selectedLocation, setSelectedLocation] = useState(null)
   const [currentRoomIndex, setCurrentRoomIndex] = useState(0)
   const [gameInitializing, setGameInitializing] = useState(false)
   const [gameInitError, setGameInitError] = useState(null)
@@ -652,7 +655,12 @@ export default function GameRoom() {
       }
 
       // 4. 기타 상태 복원
-      setHealth(normalized.health || 100)
+      const resumeHealthRaw = normalized.health
+      const resumeHealth =
+        typeof resumeHealthRaw === 'number' || typeof resumeHealthRaw === 'string'
+          ? Number(resumeHealthRaw)
+          : Number.NaN
+      setHealth(Number.isFinite(resumeHealth) ? resumeHealth : 100)
       setPlayTimeSeconds(normalized.playTime || 0)
       setRemainingAttempts(normalized.remainingAttempts ?? 3)
 
@@ -750,6 +758,8 @@ export default function GameRoom() {
     resetSession()
     setCurrentRoomIndex(0)
     setSelectedEvidence(null)
+    setSelectedSuspect(null)
+    setSelectedLocation(null)
 
     setPhoneOpen(false)
     setCurrentChat(null)
@@ -767,6 +777,15 @@ export default function GameRoom() {
     const timer = setTimeout(() => setPhoneNotification(null), 3000)
     return () => clearTimeout(timer)
   }, [activeScenarioId, scenario?.title, resetSession])
+
+  useEffect(() => {
+  if (!discoveredEvidence?.length) return
+  const e = discoveredEvidence[0]
+  console.log('sample evidence:', e)
+  console.log('location:', e.location)
+  console.log('floorNumber:', e.floorNumber)
+  console.log('keys:', Object.keys(e))
+}, [discoveredEvidence])
 
   // 플레이 시간 타이머
   useEffect(() => {
@@ -1013,10 +1032,12 @@ export default function GameRoom() {
         })
 
         // 심문 응답 직후 health UI 즉시 동기화 (API 응답의 health가 source of truth)
-        const nextHealth = Number(response?.health)
-        if (Number.isFinite(nextHealth)) {
-          setHealth(nextHealth)
-        }
+        const nextHealthRaw = response?.health
+        const nextHealth =
+          typeof nextHealthRaw === 'number' || typeof nextHealthRaw === 'string'
+            ? Number(nextHealthRaw)
+            : Number.NaN
+        if (Number.isFinite(nextHealth)) setHealth(nextHealth)
 
         const elapsed = Date.now() - typingStartedAt
         const waitMs = Math.max(0, minTypingMs - elapsed)
@@ -1130,8 +1151,15 @@ export default function GameRoom() {
     }
   }
 
-  const handleExit = useCallback(() => {
-    if (!window.confirm('정말 종료하시겠습니까?')) return
+  const handleExit = useCallback(async () => {
+    const ok = await confirmDialog({
+      title: '게임 종료',
+      message: '정말 종료하시겠습니까?',
+      confirmText: '종료',
+      cancelText: '취소',
+      confirmVariant: 'destructive',
+    })
+    if (!ok) return
     setLocation('/scenarios')
   }, [setLocation])
 
@@ -1403,7 +1431,7 @@ export default function GameRoom() {
       {/* 상단 바 */}
       <div className="fixed top-0 left-0 right-0 z-40 bg-card/80 backdrop-blur border-b border-border">
         <div className="container h-16">
-          <div className="flex items-center justify-between h-full">
+          <div className="relative flex items-center justify-between h-full">
             <div className="flex items-center gap-6">
               <div className="flex items-center gap-2">
                 <Heart className="w-5 h-5 text-red-500 fill-red-500" />
@@ -1417,7 +1445,12 @@ export default function GameRoom() {
                 <span className="font-mono text-lg">{playTime}</span>
               </div>
             </div>
-
+              {/* 중앙 시나리오명 (항상 정중앙) */}
+              <div className="pointer-events-none absolute left-1/2 -translate-x-1/2 hidden md:block">
+              <div className="max-w-[40vw] text-center">
+                <span className="block text-sm md:text-base font-bold gold-glow truncate">{scenario?.title || ''}</span>
+                </div>
+                </div>
             <div className="flex items-center gap-3">
               <Button variant="outline" size="sm" onClick={handleExit}>
                 <DoorOpen className="w-4 h-4 mr-2" />
@@ -1452,24 +1485,24 @@ export default function GameRoom() {
         }}
       >
         <div className="w-full h-full bg-card/50 border border-border overflow-hidden">
-          <div className="flex items-center justify-between gap-3 px-3 h-10 border-b border-white/10 bg-card/40">
-            <div className="flex items-center gap-2 min-w-0">
-              <MapPin className="w-4 h-4 text-primary" />
-              <span className="text-sm font-semibold text-gray-300 truncate">
-                {currentRoom?.name || "발견 장소"}
-              </span>
-            </div>
-            <div className="flex items-center gap-2 min-w-0">
-              <span className="flex items-center gap-1 text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 to-yellow-300/10 border border-amber-400/40 text-amber-200 shadow-[0_0_8px_rgba(251,191,36,0.25)]">
-                <span className="w-1.5 h-1.5 rounded-full bg-amber-300 animate-pulse" />
-                FLOOR {currentFloorNumber}
-              </span>
-              <span className="text-sm font-bold gold-glow truncate">{scenario?.title || '시나리오'}</span>
-            </div>
-          </div>
-
-	          <div className="w-full h-[calc(100%-40px)] bg-black/40 relative">
-
+          <div className="grid grid-cols-3 items-center gap-3 px-3 h-10 border-b border-white/10 bg-card/40">
+ 
+  {/* LEFT (비워둠) */}
+  <div />
+  {/* CENTER */}
+  <div className="justify-self-center flex items-center gap-4 min-w-0">
+    <span className="flex items-center gap-1 text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-gradient-to-r from-amber-500/25 to-yellow-300/10 border border-amber-400/40 text-amber-200 shadow-[0_0_8px_rgba(251,191,36,0.25)]">
+      <span className="w-1.5 h-1.5 rounded-full bg-amber-300 animate-pulse" />
+      FLOOR {currentFloorNumber}
+      </span>
+      <span className="text-sm font-semibold text-gray-300 truncate max-w-[40vw]">
+       {currentRoom?.name || "발견 장소"}
+      </span>
+    </div>
+  {/* RIGHT (비워둠) */}
+  <div />
+  </div>
+  <div className="w-full h-[calc(100%-40px)] bg-black/40 relative">
 	            {sessionId ? (
 	              <AgitRoom
 	                key={`${activeScenarioId}-${sessionId}`}
@@ -1507,8 +1540,13 @@ export default function GameRoom() {
             suspects={suspects}
             rooms={rooms}
             onItemClick={(item, type) => {
-              if (type === 'evidence') handleEvidenceClick(item)  // ← 여기만 바꿈
-            }}
+               if (type === 'evidence') { handleEvidenceClick(item) 
+                return }
+              if (type === 'suspect') { setSelectedSuspect(item)
+                return }
+              if (type === 'location') { setSelectedLocation(item)
+                return }
+              }}
             onDragStart={handleDragStart}
             onAddToBoard={handleAddToBoard}
           />
@@ -1537,7 +1575,7 @@ export default function GameRoom() {
 	      />
 
       {/* 오른쪽 하단: 방 이동 + 휴대폰 */}
-      <div className="fixed right-28 bottom-6 z-40 flex items-center gap-3">
+      <div data-board-safe-area="true" className="fixed right-28 bottom-6 z-[200] flex items-center gap-3">
         {/* 휴대폰 아이콘 */}
         <div className="relative">
           <button
@@ -1582,6 +1620,8 @@ export default function GameRoom() {
 
       {/* 모달들 */}
       <EvidenceDetailModal evidence={selectedEvidence} onClose={() => setSelectedEvidence(null)} />
+      <SuspectDetailModal suspect={selectedSuspect} onClose={() => setSelectedSuspect(null)} />
+      <LocationDetailModal location={selectedLocation} onClose={() => setSelectedLocation(null)} />
 	      <SubmitAnswerModal
 	        isOpen={submitAnswerOpen}
 	        onClose={() => setSubmitAnswerOpen(false)}

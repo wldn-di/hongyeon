@@ -72,6 +72,8 @@ services:
     restart: always
     env_file:
       - ./.env.dev
+    environment:
+      - SPRING_DOCKER_COMPOSE_ENABLED=false
     volumes:
       - ${HOME:-/home/ubuntu}/.gcp:/home/ubuntu/.gcp:ro
     ports:

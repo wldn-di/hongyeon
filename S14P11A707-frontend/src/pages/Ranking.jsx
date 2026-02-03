@@ -295,7 +295,7 @@ export default function Ranking() {
           {!currentUserId && (
             <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg text-center">
               <p className="text-sm text-blue-400">
-                로그인하고 사건을 해결하여 랭킹에 도전하세요!
+                로그인하고 사건을 해결해 랭킹에 도전하세요!
               </p>
             </div>
           )}
@@ -313,7 +313,7 @@ export default function Ranking() {
       <footer className="border-t border-border py-8 bg-card/30">
         <div className="container text-center">
           <p className="error-code">
-            [SYSTEM_STATUS: OPERATIONAL] | HONG-YEON v2.0 | [COPYRIGHT_2024]
+             | HONG-YEON | COPYRIGHT_2026 |
           </p>
         </div>
       </footer>

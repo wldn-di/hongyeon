@@ -8,6 +8,8 @@ import { ScenarioGenerationProvider } from "@/features/scenarios/generation/Scen
 import { useAuth } from "@/contexts/AuthContext"; // ✅ 추가
 import { Turntable } from "@/components/ui/Turntable";
 import { Atmosphere } from "@/components/ui/Atmosphere";
+import { AlertModal } from "@/components/ui/AlertModal";
+import { ConfirmModal } from "@/components/ui/ConfirmModal";
 
 function AppShellInner() {
     const [location] = useLocation();
@@ -39,6 +41,8 @@ function AppShellInner() {
             {!hideHeader && <Header />}
             <AppRoutes />
             <Turntable />
+            <AlertModal />
+            <ConfirmModal />
         </div>
     );
 }

@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react'
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/Button'
 import { X, Pin, Save, Check, Plus, Minus, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MemoInputModal } from '@/features/game/modals'
+import { BoardItemHoverDetail } from '@/features/game/components/BoardItemHoverDetail'
 import { fetchBoard, saveBoard } from '@/features/session/api/sessionApi'
 import { toast } from 'sonner'
 
@@ -63,6 +64,7 @@ export function InvestigationBoard({
 
   const boardRef = useRef(null)
   const hoverTimeoutRef = useRef(null) // 호버 1초 딜레이용
+  const prevViewportSizeRef = useRef({ w: null, h: null }) // 우측 패널 토글 작동 시 화면 움직임 없는 증상 해결
   const autosaveTimerRef = useRef(null)
   const pendingConnectFromRef = useRef(null)
   const isLoadedRef = useRef(false)  // 로드 중복 방지
@@ -98,13 +100,42 @@ export function InvestigationBoard({
     didMove: false,
   })
 
+  useEffect(() => {
+  const el = boardRef.current
+  if (!el) return
+
+  const ro = new ResizeObserver(() => {
+    const rect = el.getBoundingClientRect()
+    const nextW = rect.width
+    const nextH = rect.height
+
+    const prev = prevViewportSizeRef.current
+    if (prev.w == null) {
+      prevViewportSizeRef.current = { w: nextW, h: nextH }
+      return
+    }
+
+    const dw = nextW - prev.w
+    const dh = nextH - prev.h
+
+    if (dw !== 0) el.scrollLeft += (-dw / 2)
+    if (dh !== 0) el.scrollTop  += (-dh / 2)
+
+    prevViewportSizeRef.current = { w: nextW, h: nextH }
+  })
+
+  ro.observe(el)
+  return () => ro.disconnect()
+}, [])
+
+
   // ========================================
   // 유틸리티 함수
   // ========================================
   const clamp = (value, min, max) => Math.max(min, Math.min(max, value))
 
-  const BOARD_BASE_WIDTH = 1600
-  const BOARD_BASE_HEIGHT = 1200
+  const BOARD_BASE_WIDTH = 2400 
+  const BOARD_BASE_HEIGHT = 1400 
   const CARD_WIDTH = 176
   const CARD_HEIGHT = 200
   const CARD_HALF_WIDTH = CARD_WIDTH / 2
@@ -913,6 +944,9 @@ export function InvestigationBoard({
     const item = boardItems.find(it => it.id === itemId)
     if (!item) return
 
+    // 이미지 기본 드래그(ghost image) / 텍스트 선택 등 브라우저 기본 동작 방지
+    e.preventDefault()
+
     dragRef.current = {
       isDragging: true,
       itemId,
@@ -947,10 +981,19 @@ export function InvestigationBoard({
   }, [readOnly])
 
   const handleMouseUp = useCallback(() => {
+    const didMove = dragRef.current.didMove
     dragRef.current.isDragging = false
     dragRef.current.itemId = null
-    dragRef.current.didMove = false
     document.body.style.cursor = ''
+
+    // mouseup 직후 click 이벤트에서도 드래그 여부를 감지할 수 있도록 한 틱 뒤 리셋
+    if (didMove) {
+      window.setTimeout(() => {
+        dragRef.current.didMove = false
+      }, 0)
+      return
+    }
+    dragRef.current.didMove = false
   }, [])
 
   const toggleLineMode = useCallback((nextMode) => {
@@ -1114,6 +1157,20 @@ export function InvestigationBoard({
     if (isSubmitMode) setFilter('all')
   }, [isSubmitMode])
 
+  // 필터(강조) 상태에서 "강조와 무관한 연결선" 숨김 규칙
+  // - 전체보기(all) 외에는: 양 끝(from/to) 중 1개 이상이 강조 대상(type === filter)일 때만 표시
+  const highlightedItemIdSet = useMemo(() => {
+    if (filter === 'all') return null
+
+    const set = new Set()
+    boardItems.forEach((item) => {
+      if (!item) return
+      if (item.type !== filter) return
+      set.add(item.id)
+    })
+    return set
+  }, [filter, boardItems])
+
   // 필터링된 아이템
   const filteredItems = boardItems.filter(item => {
     if (isSubmitMode && item.type === 'note') return false
@@ -1167,7 +1224,10 @@ export function InvestigationBoard({
                       : "bg-muted/30 border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  확정
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-3 h-[2px] bg-red-500 rounded" />
+                    확정
+                    </span>
                 </button>
               )}
               {effectiveAllowedLineModes.includes('suspected') && (
@@ -1181,26 +1241,17 @@ export function InvestigationBoard({
                       : "bg-muted/30 border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  의심
+                  <span className="inline-flex items-center gap-1">
+                    <span className="w-3 h-[2px] bg-amber-500 rounded" />
+                    의심
+                    </span>
                 </button>
               )}
-              {lineMode && (
-                <span className="text-[11px] text-muted-foreground whitespace-nowrap">
-                  {pendingConnectFrom ? '1/2 선택' : '2개 클릭'}
-                </span>
-              )}
-            </div>
-          )}
-
-          {!readOnly && !isSubmitMode && allowMemo && (
-            <Button variant="outline" size="sm" onClick={() => setMemoModalOpen(true)}>
-              <Plus className="w-4 h-4 mr-2" />
-              메모
-            </Button>
+     </div>
           )}
 
           {!isSubmitMode && (
-            <div className="flex items-center gap-1">
+            <div className="show-on-touch items-center gap-1">
               <Button
                 type="button"
                 variant="outline"
@@ -1268,7 +1319,9 @@ export function InvestigationBoard({
 
       {/* 필터 */}
       {!hideFilter && (
-        <div className="p-3 border-b border-border bg-muted/20 flex gap-2 overflow-x-auto">
+        <div className="p-3 border-b border-border bg-muted/20 flex items-center gap-3">
+          {/* 왼쪽: 필터 버튼들 (가로 스크롤) */}
+          <div className="flex gap-2 overflow-x-auto no-scrollbar flex-1 min-w-0">
           {filterOptions.map(opt => (
             <button
               key={opt.value}
@@ -1284,6 +1337,19 @@ export function InvestigationBoard({
             </button>
           ))}
         </div>
+      {/* 오른쪽: 메모 추가 버튼 (고정) */}
+      {!readOnly && !isSubmitMode && allowMemo && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => setMemoModalOpen(true)}
+          className="shrink-0"
+        >
+          <Plus className="w-4 h-4 mr-2" />
+          메모 추가
+        </Button>
+      )}
+    </div>
       )}
 
       {/* 보드 영역 */}
@@ -1298,6 +1364,11 @@ export function InvestigationBoard({
         style={{
           height: fullHeight ? undefined : (isModal ? '65vh' : (isSubmitMode ? 'min(420px, 45vh)' : '500px')),
           overscrollBehavior: 'contain',
+          // (7) 줌 최소화 시 배경 공백/잘림 방지: 배경은 viewport wrapper에 고정
+          backgroundImage: 'url(/board/board.jpg)',
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
         }}
         onDragOver={handleExternalDragOver}
         onDrop={handleExternalDrop}
@@ -1332,14 +1403,14 @@ export function InvestigationBoard({
               height: `${BOARD_BASE_HEIGHT}px`,
               transform: `scale(${zoom})`,
               transformOrigin: '0 0',
-              backgroundImage: 'url(/board/board.jpg)',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
             }}
           >
             {/* 연결선 - 확정은 실 이미지, 의심은 점선 */}
             {connections.map(conn => {
               if (!conn?.from || !conn?.to) return null
+              if (highlightedItemIdSet && !highlightedItemIdSet.has(conn.from) && !highlightedItemIdSet.has(conn.to)) {
+                return null
+              }
               const fromItem = boardItems.find(item => item.id === conn.from)
               const toItem = boardItems.find(item => item.id === conn.to)
               if (!fromItem || !toItem) return null
@@ -1396,56 +1467,83 @@ export function InvestigationBoard({
                 )
               }
 
-              // 의심 연결선: 기존 SVG 점선 유지
-              const hash = hashString(key)
-              const controlX = midX + ((hash % 7) - 3) * 10
-              const controlY = midY - 50 + ((hash % 5) - 2) * 5
-              const pathD = `M ${fromX} ${fromY} Q ${controlX} ${controlY} ${toX} ${toY}`
-
+              // 의심 연결선: 노란 실 텍스처 이미지로 교체
+              const sag = Math.min(distance * 0.07, 22)
               return (
-                <svg key={key} className="absolute inset-0 w-full h-full pointer-events-none" style={{ minWidth: '100%', minHeight: '100%', zIndex: isSelected ? 10 : 1 }}>
-                  <path
-                    d={pathD}
-                    stroke="transparent"
-                    strokeWidth={20}
-                    fill="none"
-                    style={{ pointerEvents: 'stroke', cursor: 'pointer' }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setPendingConnectFromWithRef(null)
-                      setSelectedItem(null)
-                      setSelectedConnectionPos({ x: controlX, y: controlY })
-                      setSelectedConnectionKey(prev => prev === key ? null : key)
+                <div
+                  key={key}
+                  className={cn("absolute cursor-pointer", isSelected && "z-10")}
+                  style={{
+                    left: midX,
+                    top: midY,
+                    width: distance,
+                    height: 36,
+                    transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+                    transformOrigin: 'center center',
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setPendingConnectFromWithRef(null)
+                    setSelectedItem(null)
+                    setSelectedConnectionPos({ x: midX, y: midY })
+                    setSelectedConnectionKey(prev => prev === key ? null : key)
+                  }}
+                >
+                  <div
+                    className="w-full h-full relative"
+                    style={{
+                      backgroundImage: 'url(/board/thread_yellow.png)',
+                      backgroundSize: 'auto 100%',
+                      backgroundRepeat: 'repeat-x',
+                      backgroundPosition: 'center',
+                      filter: isSelected
+                        ? 'brightness(1.4) drop-shadow(0 0 4px rgba(245, 158, 11, 0.9))'
+                        : 'drop-shadow(1px 2px 2px rgba(0,0,0,0.35))',
+                      borderRadius: `0 0 ${sag}px ${sag}px`,
+                      transform: `scaleY(${1 + sag / 50})`,
                     }}
                   />
-                  <path
-                    d={pathD}
-                    stroke="#f59e0b"
-                    strokeWidth={3}
-                    strokeDasharray="8 8"
-                    fill="none"
-                    style={{ pointerEvents: 'none', filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(3px 3px 6px rgba(0,0,0,0.4))' }}
-                  />
-                </svg>
+                  {isSelected && (
+                    <div className="absolute inset-0 bg-white/20 rounded animate-pulse" />
+                  )}
+                </div>
               )
             })}
 
             {/* 연결선 삭제 버튼 */}
-            {!readOnly && selectedConnectionKey && selectedConnectionPos && (
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  removeConnectionByKey(selectedConnectionKey)
-                  setSelectedConnectionKey(null)
-                  setSelectedConnectionPos(null)
-                }}
-                className="absolute w-9 h-9 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 flex items-center justify-center text-base font-bold border-2 border-white/50 transition-transform hover:scale-110"
-                style={{ left: selectedConnectionPos.x, top: selectedConnectionPos.y, transform: 'translate(-50%, -50%)', zIndex: 200 }}
-              >
-                ✕
-              </button>
-            )}
+           {!readOnly && selectedConnectionKey && selectedConnectionPos && (
+            <button
+              type="button"
+              onPointerDown={(e) => {
+                // 클릭 시작 단계에서 보드의 선택 해제 트리거를 차단
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+              onMouseDown={(e) => {
+                // 일부 브라우저/환경에서 pointerdown 대신 mousedown만 타는 케이스도 방어
+                e.preventDefault()
+                e.stopPropagation()
+              }}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+
+                removeConnectionByKey(selectedConnectionKey)
+                setSelectedConnectionKey(null)
+                setSelectedConnectionPos(null)
+              }}
+              className="absolute w-9 h-9 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 flex items-center justify-center text-base font-bold border-2 border-white/50 transition-transform hover:scale-110"
+              style={{
+                left: selectedConnectionPos.x,
+                top: selectedConnectionPos.y,
+                transform: 'translate(-50%, -50%)',
+                zIndex: 9999, // 혹시 선/카드에 가려지는 것까지 방지
+              }}
+            >
+              ✕
+            </button>
+          )}
+
 
             {/* 아이템 카드 - 폴라로이드 스타일 */}
             {filteredItems.map(item => {
@@ -1487,41 +1585,7 @@ export function InvestigationBoard({
                 >
               {/* 호버 툴팁 - 상세정보 (1초 딜레이, 튜토리얼 스타일 그대로) */}
               {hoveredItem === item.id && item.type !== 'note' && (
-                <div
-                  className="absolute left-full ml-3 top-0 w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 pointer-events-none animate-in fade-in duration-150"
-                  style={{ zIndex: 100 }}
-                >
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className={cn("px-2 py-0.5 text-xs font-bold text-white rounded", config.color)}>
-                      {config.label}
-                    </span>
-                    <span className="font-bold text-sm text-white">{item.name}</span>
-                  </div>
-                  {item.type === 'victim' && (
-                    <div className="text-xs space-y-1 text-gray-300">
-                      {item.occupation && <p>직업: {item.occupation}</p>}
-                      {item.note && <p>배경: {item.note}</p>}
-                    </div>
-                  )}
-                  {item.type === 'suspect' && (
-                    <div className="text-xs space-y-1 text-gray-300">
-                      {item.role && <p>역할: {item.role}</p>}
-                      {item.note && <p className="italic">"{item.note}"</p>}
-                    </div>
-                  )}
-                  {item.type === 'evidence' && (
-                    <div className="text-xs text-gray-300">
-                      {item.note && <p className="whitespace-pre-line">{item.note}</p>}
-                    </div>
-                  )}
-                  {item.type === 'location' && (
-                    <div className="text-xs text-gray-300">
-                      {item.floorNumber && <p>층: {item.floorNumber}층</p>}
-                      <p>장소명: {item.name}</p>
-                      {item.note && <p className="mt-1">{item.note}</p>}
-                    </div>
-                  )}
-                </div>
+                <BoardItemHoverDetail item={item} type={item.type} position="right" />
               )}
 
               {/* 핀 */}
@@ -1547,7 +1611,7 @@ export function InvestigationBoard({
                       <img
                         src={item.image}
                         alt={item.name}
-                        className="w-full h-28 object-cover bg-gray-200"
+                        className="w-full h-28 object-cover bg-gray-200 pointer-events-none select-none"
                         draggable={false}
                         onDragStart={(e) => e.preventDefault()}
                         onError={(e) => {
@@ -1640,22 +1704,6 @@ export function InvestigationBoard({
           </div>
         </div>
       </div>
-
-      {/* 범례 */}
-      {!isSubmitMode && (
-        <div className="p-4 flex gap-6 justify-center items-center text-sm border-t border-border">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-1 bg-red-600 rounded" />
-            <span className="text-muted-foreground">확정</span>
-          </div>
-          {effectiveAllowedLineModes.includes('suspected') && (
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-1 rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #f59e0b 0, #f59e0b 4px, transparent 4px, transparent 8px)' }} />
-              <span className="text-muted-foreground">의심</span>
-            </div>
-          )}
-        </div>
-      )}
 
       <MemoInputModal isOpen={memoModalOpen} onClose={() => setMemoModalOpen(false)} onSubmit={addNoteItem} />
     </div>
