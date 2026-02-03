@@ -30,6 +30,9 @@ export function InvestigationBoard({
   hideSave = false,
   onBoardStateChange = null,
   fullHeight = false, // 전체 높이 사용 여부
+  clues = [],      // 단서 목록 (API 응답에서 상세정보 조회용)
+  suspects = [],   // 용의자 목록 (API 응답에서 상세정보 조회용)
+  rooms = [],      // 장소 목록 (API 응답에서 상세정보 조회용)
 }) {
   const isSubmitMode = mode === 'submit'
   const effectiveAllowedLineModes =
@@ -234,38 +237,72 @@ export function InvestigationBoard({
         return false
       }
 
-      // API 데이터를 UI 형식으로 변환
+      // API 데이터를 UI 형식으로 변환 (상세정보 조회)
       const uiItems = response.nodes.map(node => {
         const nodeId = node.nodeId
         let type = 'note'
         let id = `note-${nodeId}`
         let extraProps = {}
+        let name = node.memoContent || ''
+        let image = null
+        let note = node.memoContent || ''
 
         if (node.type === 'CLUE') {
           type = 'evidence'
           id = `evidence-${node.targetId}`
           extraProps = { evidenceId: node.targetId }
+          // clues 목록에서 상세정보 조회
+          const clueData = clues.find(c => c.id === node.targetId)
+          if (clueData) {
+            name = clueData.name || clueData.title || name
+            image = clueData.image || clueData.detailImageUrl || clueData.imageUrl || null
+            note = clueData.description || clueData.location || note
+          }
         } else if (node.type === 'SUSPECT') {
           type = 'suspect'
           id = `suspect-${node.targetId}`
           extraProps = { suspectId: node.targetId }
+          // suspects 목록에서 상세정보 조회
+          const suspectData = suspects.find(s => s.id === node.targetId)
+          if (suspectData) {
+            name = suspectData.name || name
+            image = suspectData.image || suspectData.portraitUrl || null
+            extraProps.role = suspectData.role || suspectData.occupation || ''
+            note = suspectData.oneLiner || note
+          }
         } else if (node.type === 'VICTIM') {
           type = 'victim'
           id = `victim-${node.targetId}`
           extraProps = { victimId: node.targetId }
+          // victim prop에서 상세정보 조회
+          if (victim && (victim.id === node.targetId || !node.targetId)) {
+            name = victim.name || '피해자'
+            image = victim.portraitUrl || victim.image || null
+            extraProps.occupation = victim.occupation || ''
+            note = victim.background || note
+          }
         } else if (node.type === 'LOCATION') {
           type = 'location'
           id = `location-${node.targetId}`
           extraProps = { locationId: node.targetId }
+          // rooms 목록에서 상세정보 조회
+          const roomData = rooms.find(r => r.id === node.targetId || r.floor === node.targetId)
+          if (roomData) {
+            name = roomData.name || name
+            image = roomData.image || null
+            extraProps.floorNumber = roomData.floorNumber || roomData.floor || roomData.id
+            note = roomData.description || note
+          }
         }
 
         return {
           id,
           type,
-          name: node.memoContent || type,
+          name: name || type,
           x: node.x || 0,
           y: node.y || 0,
-          note: node.memoContent || '',
+          image,
+          note,
           nodeId,
           ...extraProps,
         }
@@ -307,7 +344,7 @@ export function InvestigationBoard({
     } finally {
       setIsLoading(false)
     }
-  }, [sessionId, loadFromLocalStorage, saveToLocalStorage])
+  }, [sessionId, loadFromLocalStorage, saveToLocalStorage, clues, suspects, rooms, victim])
 
   // ========================================
   // 초기 데이터 로드
@@ -332,6 +369,74 @@ export function InvestigationBoard({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, initialBoardItems, initialConnections])
+
+  // ========================================
+  // 보드 아이템 상세정보 보강 (clues/suspects/rooms가 늦게 로드될 경우)
+  // ========================================
+  useEffect(() => {
+    if (boardItems.length === 0) return
+    // 상세정보가 누락된 아이템이 있는지 확인
+    const needsEnrichment = boardItems.some(item => {
+      if (item.type === 'evidence' && item.evidenceId && !item.image && clues.length > 0) return true
+      if (item.type === 'suspect' && item.suspectId && !item.image && suspects.length > 0) return true
+      if (item.type === 'location' && item.locationId && !item.image && rooms.length > 0) return true
+      if (item.type === 'victim' && item.victimId && !item.image && victim) return true
+      return false
+    })
+
+    if (!needsEnrichment) return
+
+    // 상세정보 보강
+    setBoardItems(prev => prev.map(item => {
+      if (item.type === 'evidence' && item.evidenceId) {
+        const clueData = clues.find(c => c.id === item.evidenceId)
+        if (clueData && !item.image) {
+          return {
+            ...item,
+            name: clueData.name || clueData.title || item.name,
+            image: clueData.image || clueData.detailImageUrl || clueData.imageUrl || null,
+            note: clueData.description || clueData.location || item.note,
+          }
+        }
+      }
+      if (item.type === 'suspect' && item.suspectId) {
+        const suspectData = suspects.find(s => s.id === item.suspectId)
+        if (suspectData && !item.image) {
+          return {
+            ...item,
+            name: suspectData.name || item.name,
+            image: suspectData.image || suspectData.portraitUrl || null,
+            role: suspectData.role || suspectData.occupation || item.role || '',
+            note: suspectData.oneLiner || item.note,
+          }
+        }
+      }
+      if (item.type === 'location' && item.locationId) {
+        const roomData = rooms.find(r => r.id === item.locationId || r.floor === item.locationId)
+        if (roomData && !item.image) {
+          return {
+            ...item,
+            name: roomData.name || item.name,
+            image: roomData.image || null,
+            floorNumber: roomData.floorNumber || roomData.floor || roomData.id,
+            note: roomData.description || item.note,
+          }
+        }
+      }
+      if (item.type === 'victim' && item.victimId && victim) {
+        if (!item.image) {
+          return {
+            ...item,
+            name: victim.name || item.name,
+            image: victim.portraitUrl || victim.image || null,
+            occupation: victim.occupation || item.occupation || '',
+            note: victim.background || item.note,
+          }
+        }
+      }
+      return item
+    }))
+  }, [clues, suspects, rooms, victim, boardItems.length])
 
   // ========================================
   // 보드 상태 변경 콜백

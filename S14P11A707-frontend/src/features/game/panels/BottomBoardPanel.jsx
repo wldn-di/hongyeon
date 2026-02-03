@@ -14,6 +14,9 @@ export default function BottomBoardPanel({
   pendingAddItem = null,
   onConsumePendingAddItem = null,
   victim = null,
+  clues = [],
+  suspects = [],
+  rooms = [],
 }) {
   const containerRef = useRef(null)
 
@@ -75,6 +78,9 @@ export default function BottomBoardPanel({
               pendingAddItem={pendingAddItem}
               onConsumePendingAddItem={onConsumePendingAddItem}
               fullHeight={true}
+              clues={clues}
+              suspects={suspects}
+              rooms={rooms}
             />
           </div>
         </div>

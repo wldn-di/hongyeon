@@ -1512,6 +1512,9 @@ export default function GameRoom() {
 	        rightOffsetPx={rightLogOpen ? SIDE_PANEL_WIDTH_PX : 0}
 	        pendingAddItem={pendingAddItem}
 	        onConsumePendingAddItem={() => setPendingAddItem(null)}
+	        clues={discoveredEvidence}
+	        suspects={suspects}
+	        rooms={rooms}
 	      />
 
       {/* 오른쪽 하단: 방 이동 + 휴대폰 */}
