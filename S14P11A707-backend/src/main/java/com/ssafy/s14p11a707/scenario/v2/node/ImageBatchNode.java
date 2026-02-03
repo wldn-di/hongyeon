@@ -125,8 +125,8 @@ public class ImageBatchNode implements ScenarioV2Node {
     }
 
     private String runJobWithRetry(ScenarioV2ImageJob job) {
-        int maxAttempts = 6;
-        long[] backoffMillis = {0L, 300L, 1000L, 2000L, 5000L};
+        int maxAttempts = 3; // 2 retries max (total 3 attempts)
+        long[] backoffMillis = {0L, 300L, 1000L};
 
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             try {

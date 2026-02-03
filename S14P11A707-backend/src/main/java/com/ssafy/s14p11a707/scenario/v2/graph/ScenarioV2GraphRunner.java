@@ -98,22 +98,59 @@ public class ScenarioV2GraphRunner {
         state = runNode("CharactersCluesTruthNode", charactersCluesTruthNode, state);
         state = runNode("RoomsNode", roomsNode, state);
 
+        int fixAttempts = 0;
         while (true) {
             state = runNode("ValidateNode", validateNode, state);
+
+            String report = state.getValidationReport();
+            boolean validationOk = "OK".equals(report);
+            if (!validationOk) {
+                log.info(
+                        "[v2] validation checkpoint. scenarioId={}, attempts={}/{}, report={}",
+                        scenarioId,
+                        fixAttempts,
+                        MAX_RETRY,
+                        summarize(report, 160)
+                );
+
+                if (fixAttempts >= MAX_RETRY) {
+                    throw new IllegalStateException("validation failed after retries: " + summarize(report, 500));
+                }
+
+                fixAttempts++;
+                state = repairForValidationIssues(state, report);
+                continue;
+            }
+
             state = runNode("CritiqueNode", critiqueNode, state);
+            boolean scoreOk = state.getCritiqueScore() >= PASS_SCORE;
 
             log.info(
-                    "[v2] critique checkpoint. scenarioId={}, score={}, retryCount={}, validationReport={}",
+                    "[v2] critique checkpoint. scenarioId={}, score={}, retryCount={}, attempts={}/{}, validationReport={}",
                     scenarioId,
                     state.getCritiqueScore(),
                     state.getRetryCount(),
-                    summarize(state.getValidationReport(), 160)
+                    fixAttempts,
+                    MAX_RETRY,
+                    summarize(report, 160)
             );
 
-            if (state.getCritiqueScore() >= PASS_SCORE || state.getRetryCount() >= MAX_RETRY) {
+            if (scoreOk) {
                 break;
             }
 
+            if (fixAttempts >= MAX_RETRY) {
+                log.warn(
+                        "[v2] critique did not reach pass score, but validation OK. proceeding. scenarioId={}, score={}, retryCount={}, attempts={}",
+                        scenarioId,
+                        state.getCritiqueScore(),
+                        state.getRetryCount(),
+                        fixAttempts
+                );
+                break;
+            }
+
+            fixAttempts++;
             state = runNode("RefineNode", refineNode, state);
         }
 
@@ -163,6 +200,48 @@ public class ScenarioV2GraphRunner {
             );
             throw e;
         }
+    }
+
+    private ScenarioV2State repairForValidationIssues(ScenarioV2State state, String report) {
+        String safeReport = report == null ? "" : report;
+        log.warn(
+                "[v2] validation failed. running targeted regeneration. scenarioId={}, report={}",
+                state.getScenarioId(),
+                summarize(safeReport, 200)
+        );
+
+        boolean scenarioMetaIssue = safeReport.contains("scenario.title") || safeReport.contains("scenario.synopsisDetail");
+        boolean suspectsOrCulpritIssue = safeReport.contains("suspects")
+                || safeReport.contains("suspect must")
+                || safeReport.contains("is_culprit")
+                || safeReport.contains("weakness_clue")
+                || safeReport.contains("ai_config_json");
+        boolean cluesIssue = safeReport.contains("clues") || safeReport.contains("truth_config_json");
+        boolean roomsIssue = safeReport.contains("rooms");
+
+        if (scenarioMetaIssue) {
+            state = runNode("ScenarioBaseNode", scenarioBaseNode, state);
+            state = runNode("CharactersCluesTruthNode", charactersCluesTruthNode, state);
+            state = runNode("RoomsNode", roomsNode, state);
+            state.setDraftJson(null);
+            return state;
+        }
+
+        if (suspectsOrCulpritIssue || cluesIssue) {
+            state = runNode("CharactersCluesTruthNode", charactersCluesTruthNode, state);
+            state = runNode("RoomsNode", roomsNode, state);
+            state.setDraftJson(null);
+            return state;
+        }
+
+        if (roomsIssue) {
+            state = runNode("RoomsNode", roomsNode, state);
+            state.setDraftJson(null);
+            return state;
+        }
+
+        log.warn("[v2] validation issues not categorized. falling back to RefineNode. scenarioId={}", state.getScenarioId());
+        return runNode("RefineNode", refineNode, state);
     }
 
     private static String safe(String value) {

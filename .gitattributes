@@ -1,0 +1,2 @@
+.gitlab-ci.yml text eol=lf
+infra/*.yml text eol=lf

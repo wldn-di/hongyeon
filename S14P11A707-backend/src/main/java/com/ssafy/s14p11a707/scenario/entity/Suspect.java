@@ -87,4 +87,8 @@ public class Suspect {
         this.aiConfigJson = aiConfigJson;
     }
 
+    public void setAiConfigJson(JsonNode aiConfigJson) {
+        this.aiConfigJson = aiConfigJson;
+    }
+
 }
