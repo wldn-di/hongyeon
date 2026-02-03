@@ -73,6 +73,9 @@ public class SecurityConfig {
             // Scenarios: list (read-only)
             "/api/scenarios",
             "/api/scenarios/",
+            // Scenarios: top 10 (read-only)
+            "/api/scenarios/top/rating",
+            "/api/scenarios/top/play-count",
             // Reviews: list by scenario (read-only)
             "/api/reviews/*/reviews",
             // Global rankings (read-only)
