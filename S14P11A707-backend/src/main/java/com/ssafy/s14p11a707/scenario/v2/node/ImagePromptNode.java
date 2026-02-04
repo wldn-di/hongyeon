@@ -96,6 +96,9 @@ public class ImagePromptNode implements ScenarioV2Node {
         List<Room> rooms = roomRepository.findByScenarioIdOrderByFloorNumberAsc(state.getScenarioId());
 
         List<ScenarioV2ImageJob> jobs = new ArrayList<>();
+        String visualBiblePrefix = buildVisualBiblePrefix(scenario, state);
+        String incidentTime = scenario.getStoryConfigJson() != null ? safe(scenario.getStoryConfigJson().path("incident_time").asText(null)) : "";
+        String twist = scenario.getStoryConfigJson() != null ? safe(scenario.getStoryConfigJson().path("twist").asText(null)) : "";
 
         jobs.add(new ScenarioV2ImageJob(
                 ScenarioV2ImageJob.Target.SCENARIO_THUMBNAIL,
@@ -103,11 +106,25 @@ public class ImagePromptNode implements ScenarioV2Node {
                 "scenarios/%d/thumbnail.png".formatted(scenario.getId()),
                 """
                 Create a cinematic thumbnail image for a mystery detective game.
-                Genre: %s
-                Title: %s
-                Synopsis: %s
-                Style: %s
-                """.formatted(scenario.getGenre(), scenario.getTitle(), scenario.getSynopsis(), safe(state.getRequest().style()))
+
+                %s
+
+                SCENARIO CONTEXT:
+                - Genre: %s
+                - Title: %s
+                - Synopsis: %s
+                - Synopsis Detail: %s
+                - Incident time: %s
+                - Twist: %s
+                """.formatted(
+                        visualBiblePrefix,
+                        safe(scenario.getGenre()),
+                        safe(scenario.getTitle()),
+                        safe(scenario.getSynopsis()),
+                        safe(scenario.getSynopsisDetail()),
+                        incidentTime,
+                        twist
+                )
         ));
 
         // Victim portrait
@@ -129,6 +146,8 @@ public class ImagePromptNode implements ScenarioV2Node {
                 victim.getId(),
                 "scenarios/%d/victim/%d.png".formatted(scenario.getId(), victim.getId()),
                 """
+                %s
+
                 MUST CREATE a photorealistic portrait for a mystery detective game victim.
 
                 REQUIRED GENDER:
@@ -147,6 +166,7 @@ public class ImagePromptNode implements ScenarioV2Node {
                 - dramatic shadows, professional photography
                 - Atmosphere: mysterious, crime scene victim, tragic mood
                 """.formatted(
+                visualBiblePrefix,
                 victimGender, victimGenderInst,
                 victim.getName(),
                 safe(victim.getOccupation()),
@@ -175,6 +195,8 @@ public class ImagePromptNode implements ScenarioV2Node {
                     suspect.getId(),
                     "scenarios/%d/suspects/%d.png".formatted(scenario.getId(), suspect.getId()),
                     """
+                    %s
+
                     MUST CREATE a photorealistic portrait for a mystery detective game suspect.
 
                     REQUIRED GENDER:
@@ -193,6 +215,7 @@ public class ImagePromptNode implements ScenarioV2Node {
                     - dramatic shadows, professional photography
                     - Atmosphere: suspicious, hiding something, interrogation room mood
                     """.formatted(
+                    visualBiblePrefix,
                     suspectGender, suspectGenderInst,
                     suspect.getName(),
                     safe(suspect.getOccupation()),
@@ -204,16 +227,36 @@ public class ImagePromptNode implements ScenarioV2Node {
         }
 
         for (Clue clue : clues) {
+            Room foundIn = clue.getRoom();
+            String foundInText = foundIn == null
+                    ? ""
+                    : "Found in: floor %d, %s (%s)".formatted(
+                            foundIn.getFloorNumber(),
+                            safe(foundIn.getRoomName()),
+                            safe(foundIn.getRoomType())
+                    );
+
             jobs.add(new ScenarioV2ImageJob(
                     ScenarioV2ImageJob.Target.CLUE_IMAGE,
                     clue.getId(),
                     "scenarios/%d/clues/%d.png".formatted(scenario.getId(), clue.getId()),
                     """
                     Close-up evidence photo for a mystery detective game.
+
+                    %s
+
                     Clue name: %s
                     Description: %s
+                    Importance: %s
+                    %s
                     Tone: realistic, cinematic, detailed
-                    """.formatted(clue.getName(), safe(clue.getDescription()))
+                    """.formatted(
+                            visualBiblePrefix,
+                            clue.getName(),
+                            safe(clue.getDescription()),
+                            clue.getImportance() == null ? "" : clue.getImportance().name(),
+                            foundInText
+                    )
             ));
         }
 
@@ -224,12 +267,16 @@ public class ImagePromptNode implements ScenarioV2Node {
                     "scenarios/%d/rooms/%d.png".formatted(scenario.getId(), room.getId()),
                     """
                     Background image of a room interior for a mystery detective game.
+
+                    %s
+
                     Floor: %d
                     Room Type: %s
                     Room Name: %s
                     Description: %s
                     Style: first-person view, atmospheric, noir, cinematic, realistic
                     """.formatted(
+                            visualBiblePrefix,
                             room.getFloorNumber(),
                             safe(room.getRoomType()),
                             safe(room.getRoomName()),
@@ -255,6 +302,7 @@ public class ImagePromptNode implements ScenarioV2Node {
     }
 
     private String buildAppearanceText(JsonNode appearance) {
+        String ethnicity = safe(appearance.path("ethnicity").asText());
         String hairStyle = safe(appearance.path("hair_style").asText());
         String hairColor = safe(appearance.path("hair_color").asText());
         String eyeColor = safe(appearance.path("eye_color").asText());
@@ -265,6 +313,10 @@ public class ImagePromptNode implements ScenarioV2Node {
         String distinctiveTrait = safe(appearance.path("distinctive_trait").asText());
 
         StringBuilder sb = new StringBuilder();
+
+        if (!ethnicity.isEmpty()) {
+            sb.append("- Ethnicity: ").append(ethnicity).append("\n");
+        }
 
         String hair = hairStyle.isEmpty() ? "realistic style" : hairStyle;
         if (!hairColor.isEmpty()) hair += ", " + hairColor;
@@ -280,6 +332,63 @@ public class ImagePromptNode implements ScenarioV2Node {
             sb.append("- Distinctive: ").append(distinctiveTrait).append("\n");
         }
 
+        return sb.toString();
+    }
+
+    private String buildVisualBiblePrefix(Scenario scenario, ScenarioV2State state) {
+        StringBuilder sb = new StringBuilder();
+        sb.append("VISUAL CONSISTENCY (apply to all images):\n");
+
+        JsonNode storyConfig = scenario.getStoryConfigJson();
+        JsonNode visualBible = storyConfig == null ? null : storyConfig.path("visual_bible_json");
+        if (visualBible != null && visualBible.isObject()) {
+            appendIfPresent(sb, "Era", safe(visualBible.path("era").asText(null)));
+            appendIfPresent(sb, "Locale", safe(visualBible.path("locale").asText(null)));
+            appendIfPresent(sb, "Season", safe(visualBible.path("season").asText(null)));
+            appendIfPresent(sb, "Time of day", safe(visualBible.path("time_of_day").asText(null)));
+            appendIfPresent(sb, "Lighting", safe(visualBible.path("lighting").asText(null)));
+            appendIfPresent(sb, "Color palette", safe(visualBible.path("color_palette").asText(null)));
+            appendIfPresent(sb, "Visual style", safe(visualBible.path("visual_style").asText(null)));
+            appendIfPresent(sb, "Camera", safe(visualBible.path("camera").asText(null)));
+
+            String avoid = joinArray(visualBible.path("avoid"));
+            if (!avoid.isEmpty()) {
+                sb.append("- Avoid: ").append(avoid).append("\n");
+            }
+        }
+
+        String styleKeywords = safe(state.getRequest().style());
+        if (!styleKeywords.isEmpty()) {
+            sb.append("- Style keywords: ").append(styleKeywords).append("\n");
+        }
+
+        sb.append("- Do NOT add any text, watermark, logo, UI overlay.\n");
+        return sb.toString();
+    }
+
+    private void appendIfPresent(StringBuilder sb, String label, String value) {
+        if (value == null || value.isBlank()) {
+            return;
+        }
+        sb.append("- ").append(label).append(": ").append(value.trim()).append("\n");
+    }
+
+    private String joinArray(JsonNode node) {
+        if (node == null || !node.isArray()) {
+            return "";
+        }
+
+        StringBuilder sb = new StringBuilder();
+        for (JsonNode item : node) {
+            String text = safe(item.asText(null)).trim();
+            if (text.isEmpty()) {
+                continue;
+            }
+            if (!sb.isEmpty()) {
+                sb.append(", ");
+            }
+            sb.append(text);
+        }
         return sb.toString();
     }
 }

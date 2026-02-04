@@ -8,9 +8,9 @@ import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
 import java.util.ArrayList;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,12 +31,21 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class CharactersCluesTruthNode implements ScenarioV2Node {
 
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
+
+    public CharactersCluesTruthNode(
+            @Qualifier("scenarioGenChatClient") ChatClient chatClient,
+            ObjectMapper objectMapper,
+            ScenarioV2EventPublisher eventPublisher
+    ) {
+        this.chatClient = chatClient;
+        this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
+    }
 
     /**
      * 인물/단서/진실 JSON을 생성하고 상태에 반영
@@ -90,8 +99,9 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 - clues는 반드시 배열이며 길이는 8~12
 
                 외모 정보(appearance 필드):
-                - hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
+                - ethnicity, hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
                 - 모든 값은 구체적이고 생생하게 작성 (빈 문자열 금지)
+                - ethnicity는 시나리오의 시대/지역/배경에 어울리도록 설정한다(단, 편견/차별적 묘사는 금지).
 
                 피해자 추가 정보:
                 - personality(성격), last_known_action(마지막 행동), physical_condition(신체 상태)
@@ -126,6 +136,7 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                     "last_known_action": string,
                     "physical_condition": string,
                     "appearance": {
+                      "ethnicity": string,
                       "hair_style": string,
                       "hair_color": string,
                       "eye_color": string,
@@ -159,6 +170,7 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                     "deflection_strategy": { "target_name": string, "suspicion_point": string, "dialogue_hint": string },
                     "timeline_alibi": [ { "time": "HH:MM", "location": string, "activity": string, "is_verified": false } ],
                     "appearance": {
+                      "ethnicity": string,
                       "hair_style": string,
                       "hair_color": string,
                       "eye_color": string,

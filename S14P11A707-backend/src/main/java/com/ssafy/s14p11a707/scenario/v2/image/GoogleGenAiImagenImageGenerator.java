@@ -2,6 +2,8 @@ package com.ssafy.s14p11a707.scenario.v2.image;
 
 import com.google.common.util.concurrent.RateLimiter;
 import com.google.genai.Client;
+import com.google.genai.types.PersonGeneration;
+import com.google.genai.types.SafetyFilterLevel;
 import com.google.genai.types.GenerateImagesConfig;
 import com.google.genai.types.GenerateImagesResponse;
 import com.google.genai.types.Image;
@@ -10,6 +12,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
 
 /**
  * Google GenAI(Imagen) 기반 시나리오 v2 PNG 이미지 생성기
@@ -38,6 +41,30 @@ public class GoogleGenAiImagenImageGenerator {
 
     @Value("${app.scenario.v2.image.max-requests-per-minute:10}")
     private double maxRequestsPerMinute;
+
+    @Value("${app.scenario.v2.image.aspect-ratio:1:1}")
+    private String aspectRatio;
+
+    @Value("${app.scenario.v2.image.output-mime-type:image/png}")
+    private String outputMimeType;
+
+    @Value("${app.scenario.v2.image.negative-prompt:}")
+    private String negativePrompt;
+
+    @Value("${app.scenario.v2.image.guidance-scale:0}")
+    private float guidanceScale;
+
+    @Value("${app.scenario.v2.image.enhance-prompt:}")
+    private String enhancePrompt;
+
+    @Value("${app.scenario.v2.image.seed:0}")
+    private int seed;
+
+    @Value("${app.scenario.v2.image.person-generation:}")
+    private String personGeneration;
+
+    @Value("${app.scenario.v2.image.safety-filter-level:}")
+    private String safetyFilterLevel;
 
     private RateLimiter rateLimiter;
 
@@ -82,11 +109,39 @@ public class GoogleGenAiImagenImageGenerator {
                 Math.round(waitedSeconds * 1000.0)
         );
 
-        GenerateImagesConfig config = GenerateImagesConfig.builder()
+        var configBuilder = GenerateImagesConfig.builder()
                 .numberOfImages(1)
-                .aspectRatio("1:1")
-                .outputMimeType("image/png")
-                .build();
+                .aspectRatio(StringUtils.hasText(aspectRatio) ? aspectRatio : "1:1")
+                .outputMimeType(StringUtils.hasText(outputMimeType) ? outputMimeType : "image/png");
+
+        if (StringUtils.hasText(negativePrompt)) {
+            configBuilder.negativePrompt(negativePrompt);
+        }
+        if (guidanceScale > 0) {
+            configBuilder.guidanceScale(guidanceScale);
+        }
+        if (StringUtils.hasText(enhancePrompt)) {
+            configBuilder.enhancePrompt(Boolean.parseBoolean(enhancePrompt));
+        }
+        if (seed > 0) {
+            configBuilder.seed(seed);
+        }
+
+        if (StringUtils.hasText(personGeneration)) {
+            PersonGeneration parsed = parsePersonGeneration(personGeneration);
+            if (parsed != null && parsed.knownEnum() != PersonGeneration.Known.PERSON_GENERATION_UNSPECIFIED) {
+                configBuilder.personGeneration(parsed);
+            }
+        }
+
+        if (StringUtils.hasText(safetyFilterLevel)) {
+            SafetyFilterLevel parsed = parseSafetyFilterLevel(safetyFilterLevel);
+            if (parsed != null && parsed.knownEnum() != SafetyFilterLevel.Known.SAFETY_FILTER_LEVEL_UNSPECIFIED) {
+                configBuilder.safetyFilterLevel(parsed);
+            }
+        }
+
+        GenerateImagesConfig config = configBuilder.build();
 
         try {
             GenerateImagesResponse response = googleGenAiClient.models.generateImages(model, safePrompt, config);
@@ -106,6 +161,36 @@ public class GoogleGenAiImagenImageGenerator {
         } catch (Exception e) {
             log.error("[v2] google imagen generate failed. model={}, error={}", model, e.getMessage(), e);
             throw new IllegalStateException("failed to generate image via google imagen", e);
+        }
+    }
+
+    private PersonGeneration parsePersonGeneration(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return new PersonGeneration(PersonGeneration.Known.valueOf(value.trim().toUpperCase()));
+        } catch (Exception ignored) {
+            try {
+                return new PersonGeneration(value.trim());
+            } catch (Exception e) {
+                return null;
+            }
+        }
+    }
+
+    private SafetyFilterLevel parseSafetyFilterLevel(String value) {
+        if (!StringUtils.hasText(value)) {
+            return null;
+        }
+        try {
+            return new SafetyFilterLevel(SafetyFilterLevel.Known.valueOf(value.trim().toUpperCase()));
+        } catch (Exception ignored) {
+            try {
+                return new SafetyFilterLevel(value.trim());
+            } catch (Exception e) {
+                return null;
+            }
         }
     }
 }

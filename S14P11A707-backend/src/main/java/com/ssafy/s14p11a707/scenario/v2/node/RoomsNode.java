@@ -4,9 +4,9 @@ import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,11 +28,15 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class RoomsNode implements ScenarioV2Node {
 
     private final ChatClient chatClient;
     private final ScenarioV2EventPublisher eventPublisher;
+
+    public RoomsNode(@Qualifier("scenarioGenChatClient") ChatClient chatClient, ScenarioV2EventPublisher eventPublisher) {
+        this.chatClient = chatClient;
+        this.eventPublisher = eventPublisher;
+    }
 
     /**
      * 방/나레이션 JSON을 생성하고 상태에 반영
