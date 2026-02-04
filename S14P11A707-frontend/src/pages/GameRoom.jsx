@@ -1510,6 +1510,7 @@ export default function GameRoom() {
 	                onClueInspected={handleClueInspected}
 	                onRoomChanged={handleRoomChanged}
                 initialRoomIndex={currentRoomIndex}
+                enableRushers={true}
 	              />
 	            ) : gameInitError ? (
 	              <div className="w-full h-full flex items-center justify-center">

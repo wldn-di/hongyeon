@@ -1442,6 +1442,7 @@ const handlePhoneClose = () => {
               isDialogActive={isDialogActive}
               inputFocused={phoneOpen && selectedContact !== null}
               canUseElevator={['waitElevator'].includes(storyStep)}
+              enableRushers={true}
             />
 
             {isDialogActive && (
