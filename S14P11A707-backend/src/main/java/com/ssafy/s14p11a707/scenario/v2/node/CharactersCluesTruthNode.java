@@ -98,6 +98,15 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 - suspects에서 is_culprit=true 인 용의자는 정확히 1명
                 - clues는 반드시 배열이며 길이는 8~12
 
+                단서 조수 코멘트(assistant_comment) 규칙(HARD):
+                - assistant_comment는 단서의 분위기/감각적 인상만 1문장으로 말한다.
+                - 정답/범인/수법/동기/알리바이/흉기/타임라인/진실(revealed_truth) 또는 그에 준하는 결론·추론을 절대 말하지 않는다.
+                - 특정 인물(피해자/용의자)의 이름이나 지칭(예: "범인", "용의자")을 사용하지 않는다.
+                - 다른 단서/방/증언과 연결하거나, 다음 수사 행동을 지시하지 않는다.
+                - 길이는 60자 이내.
+                - (좋은 예) "마치 급히 숨기려다 놓친 듯한 어수선한 흔적이 남아 있다."
+                - (나쁜 예) "이 단서는 A의 알리바이를 깨는 결정적 증거다."
+
                 외모 정보(appearance 필드):
                 - ethnicity, hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
                 - 모든 값은 구체적이고 생생하게 작성 (빈 문자열 금지)
