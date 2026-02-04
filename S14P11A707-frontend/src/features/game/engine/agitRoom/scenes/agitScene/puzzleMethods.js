@@ -1,5 +1,12 @@
 import Phaser from "phaser";
 
+const PUZZLE_HINT_STYLE = {
+    fontSize: "14px",
+    color: "#d6e8ff",
+    fontStyle: "bold",
+    fontFamily: '"Apple SD Gothic Neo","Malgun Gothic",-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif',
+};
+
 export const puzzleMethods = {
     openWirePuzzle(target) {
         this.openCluePuzzle(target);
@@ -8,6 +15,13 @@ export const puzzleMethods = {
     openCluePuzzle(target) {
         if (!target || this.isPuzzleActive) return;
         if (!this.ENABLE_PUZZLES) {
+            if (target?.active) this.openInspect(target);
+            return;
+        }
+
+        const rawChance = Number(this.CLUE_PUZZLE_CHANCE);
+        const chance = Number.isFinite(rawChance) ? Phaser.Math.Clamp(rawChance, 0, 1) : 0.5;
+        if (Math.random() >= chance) {
             if (target?.active) this.openInspect(target);
             return;
         }
@@ -135,7 +149,8 @@ export const puzzleMethods = {
             .setOrigin(0.5);
         title.setShadow(0, 1, "#000", 2, true, true);
     
-        const hint = this.add.text(0, 96, "CONNECT MATCHING COLORS", { fontSize: "9px", color: "#7f90a8" }).setOrigin(0.5);
+        const hint = this.add.text(0, 96, "이어라", PUZZLE_HINT_STYLE).setOrigin(0.5);
+        hint.setShadow(0, 1, "#000", 2, true, true);
     
         container.add([bg, title, hint]);
     
@@ -209,7 +224,8 @@ export const puzzleMethods = {
             .setOrigin(0.5);
         title.setShadow(0, 1, "#000", 2, true, true);
     
-        const hint = this.add.text(0, 96, "CLICK / SPACE TO STOP", { fontSize: "9px", color: "#7f90a8" }).setOrigin(0.5);
+        const hint = this.add.text(0, 96, "눌러라", PUZZLE_HINT_STYLE).setOrigin(0.5);
+        hint.setShadow(0, 1, "#000", 2, true, true);
     
         const barW = 220;
         const barH = 10;
@@ -354,8 +370,9 @@ export const puzzleMethods = {
         title.setShadow(0, 1, "#000", 2, true, true);
     
         const hint = this.add
-            .text(0, 98, "ARROWS/WASD + SPACE", { fontSize: "9px", color: "#7f90a8" })
+            .text(0, 98, "따라라", PUZZLE_HINT_STYLE)
             .setOrigin(0.5);
+        hint.setShadow(0, 1, "#000", 2, true, true);
     
         const timerText = this.add
             .text(150, -108, "", { fontSize: "10px", color: "#9cc2ff", fontStyle: "bold" })
@@ -460,7 +477,8 @@ export const puzzleMethods = {
             .setOrigin(0.5);
         title.setShadow(0, 1, "#000", 2, true, true);
     
-        const hint = this.add.text(0, 98, "A/←  D/→  HOLD CENTER", { fontSize: "9px", color: "#7f90a8" }).setOrigin(0.5);
+        const hint = this.add.text(0, 98, "유지해라", PUZZLE_HINT_STYLE).setOrigin(0.5);
+        hint.setShadow(0, 1, "#000", 2, true, true);
     
         const timerText = this.add
             .text(150, -108, "", { fontSize: "10px", color: "#9cc2ff", fontStyle: "bold" })
@@ -558,7 +576,8 @@ export const puzzleMethods = {
         const title = this.add.text(0, -112, "SAFE DIAL", { fontSize: "12px", color: "#d6e8ff", fontStyle: "bold" }).setOrigin(0.5);
         title.setShadow(0, 1, "#000", 2, true, true);
     
-        const hint = this.add.text(0, 108, "A/←  D/→  SPACE CONFIRM", { fontSize: "9px", color: "#7f90a8" }).setOrigin(0.5);
+        const hint = this.add.text(0, 108, "맞춰라", PUZZLE_HINT_STYLE).setOrigin(0.5);
+        hint.setShadow(0, 1, "#000", 2, true, true);
     
         const timerText = this.add
             .text(150, -118, "", { fontSize: "10px", color: "#9cc2ff", fontStyle: "bold" })
