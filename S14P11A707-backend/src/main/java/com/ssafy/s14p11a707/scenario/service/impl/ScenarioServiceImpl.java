@@ -746,6 +746,7 @@ public class ScenarioServiceImpl implements ScenarioService {
                         room.getRoomName(),
                         room.getDescription(),
                         room.getAssistantComment(),
+                        room.getBackgroundImageUrl(),
                         room.getObjectJson()
                 ))
                 .toList();

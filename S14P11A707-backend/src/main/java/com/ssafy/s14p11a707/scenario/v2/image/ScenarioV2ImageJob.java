@@ -33,6 +33,7 @@ public record ScenarioV2ImageJob(
      *   <li>{@link #VICTIM_PORTRAIT}: {@link com.ssafy.s14p11a707.scenario.entity.Victim#setPortraitUrl(String)}</li>
      *   <li>{@link #SUSPECT_PORTRAIT}: {@link com.ssafy.s14p11a707.scenario.entity.Suspect#setPortraitUrl(String)}</li>
      *   <li>{@link #CLUE_IMAGE}: {@link com.ssafy.s14p11a707.scenario.entity.Clue#setDetailImageUrl(String)}</li>
+     *   <li>{@link #ROOM_BACKGROUND}: {@link com.ssafy.s14p11a707.scenario.entity.Room#setBackgroundImageUrl(String)}</li>
      * </ul>
      *
      * @see ScenarioV2ImageUrlUpdater
@@ -41,6 +42,7 @@ public record ScenarioV2ImageJob(
         SCENARIO_THUMBNAIL,
         VICTIM_PORTRAIT,
         SUSPECT_PORTRAIT,
-        CLUE_IMAGE
+        CLUE_IMAGE,
+        ROOM_BACKGROUND
     }
 }
