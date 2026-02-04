@@ -1,9 +1,17 @@
-import React from "react"
+import React, { useEffect } from "react"
 import { MapPin, X } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 
 export default function LocationDetailModal({ location, onClose }) {
   if (!location) return null
+
+  useEffect(() => {
+    const onKeyDown = (e) => {
+      if (e.key === "Escape") onClose?.()
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [onClose])
 
   const imageUrl = location.image || null
   const floor = location.floorNumber ?? location.floor ?? location.id

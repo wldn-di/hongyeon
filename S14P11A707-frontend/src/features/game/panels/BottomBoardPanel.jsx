@@ -32,15 +32,6 @@ export default function BottomBoardPanel({
     return () => document.removeEventListener("mousedown", handleMouseDown)
   }, [isOpen, onOpenChange])
 
-  useEffect(() => {
-    if (!isOpen) return
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") onOpenChange?.(false)
-    }
-    document.addEventListener("keydown", handleKeyDown)
-    return () => document.removeEventListener("keydown", handleKeyDown)
-  }, [isOpen, onOpenChange])
-
   const handleToggle = () => onOpenChange?.(!isOpen)
 
   return (
