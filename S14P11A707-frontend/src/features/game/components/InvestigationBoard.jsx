@@ -1157,20 +1157,6 @@ export function InvestigationBoard({
     if (isSubmitMode) setFilter('all')
   }, [isSubmitMode])
 
-  // 필터(강조) 상태에서 "강조와 무관한 연결선" 숨김 규칙
-  // - 전체보기(all) 외에는: 양 끝(from/to) 중 1개 이상이 강조 대상(type === filter)일 때만 표시
-  const highlightedItemIdSet = useMemo(() => {
-    if (filter === 'all') return null
-
-    const set = new Set()
-    boardItems.forEach((item) => {
-      if (!item) return
-      if (item.type !== filter) return
-      set.add(item.id)
-    })
-    return set
-  }, [filter, boardItems])
-
   // 필터링된 아이템
   const filteredItems = boardItems.filter(item => {
     if (isSubmitMode && item.type === 'note') return false
@@ -1178,6 +1164,15 @@ export function InvestigationBoard({
     if (filter === 'all') return true
     return item.type === filter
   })
+
+  // 현재 화면에 보이는 아이템 집합 (연결선 렌더링 필터링용)
+  const visibleItemIdSet = useMemo(() => {
+    const set = new Set()
+    filteredItems.forEach((item) => {
+      if (item?.id) set.add(item.id)
+    })
+    return set
+  }, [filteredItems])
 
   const filterOptions = [
     { value: 'all', label: '전체 보기' },
@@ -1408,9 +1403,8 @@ export function InvestigationBoard({
             {/* 연결선 - 확정은 실 이미지, 의심은 점선 */}
             {connections.map(conn => {
               if (!conn?.from || !conn?.to) return null
-              if (highlightedItemIdSet && !highlightedItemIdSet.has(conn.from) && !highlightedItemIdSet.has(conn.to)) {
-                return null
-              }
+              // 필터링 상태에서는 from/to가 모두 현재 화면에 보일 때만 연결선을 렌더링
+              if (!visibleItemIdSet.has(conn.from) || !visibleItemIdSet.has(conn.to)) return null
               const fromItem = boardItems.find(item => item.id === conn.from)
               const toItem = boardItems.find(item => item.id === conn.to)
               if (!fromItem || !toItem) return null
@@ -1431,7 +1425,7 @@ export function InvestigationBoard({
                 return (
                   <div
                     key={key}
-                    className={cn("absolute cursor-pointer", isSelected && "z-10")}
+                    className="absolute"
                     style={{
                       left: midX,
                       top: midY,
@@ -1440,16 +1434,9 @@ export function InvestigationBoard({
                       transform: `translate(-50%, -50%) rotate(${angle}deg)`,
                       transformOrigin: 'center center',
                     }}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setPendingConnectFromWithRef(null)
-                      setSelectedItem(null)
-                      setSelectedConnectionPos({ x: midX, y: midY })
-                      setSelectedConnectionKey(prev => prev === key ? null : key)
-                    }}
                   >
                     <div
-                      className="w-full h-full relative"
+                      className="w-full h-full relative pointer-events-none"
                       style={{
                         backgroundImage: 'url(/board/thread.png)',
                         backgroundSize: 'auto 100%',
@@ -1458,11 +1445,35 @@ export function InvestigationBoard({
                         filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(1px 2px 2px rgba(0,0,0,0.3))',
                         borderRadius: `0 0 ${sag}px ${sag}px`,
                         transform: `scaleY(${1 + sag/50})`,
+                        pointerEvents: 'none',
+                        zIndex: 1,
                       }}
                     />
                     {isSelected && (
-                      <div className="absolute inset-0 bg-white/30 rounded animate-pulse" />
+                      <div className="absolute inset-0 bg-white/30 rounded animate-pulse pointer-events-none" style={{ zIndex: 2 }} />
                     )}
+                    <button
+                      type="button"
+                      data-no-board-pan="true"
+                      className="absolute inset-0 bg-transparent"
+                      style={{ zIndex: 30 }}
+                      onPointerDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      onMouseDown={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                      }}
+                      onClick={(e) => {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        setPendingConnectFromWithRef(null)
+                        setSelectedItem(null)
+                        setSelectedConnectionPos({ x: midX, y: midY })
+                        setSelectedConnectionKey(prev => prev === key ? null : key)
+                      }}
+                    />
                   </div>
                 )
               }
@@ -1472,7 +1483,7 @@ export function InvestigationBoard({
               return (
                 <div
                   key={key}
-                  className={cn("absolute cursor-pointer", isSelected && "z-10")}
+                  className="absolute"
                   style={{
                     left: midX,
                     top: midY,
@@ -1481,16 +1492,9 @@ export function InvestigationBoard({
                     transform: `translate(-50%, -50%) rotate(${angle}deg)`,
                     transformOrigin: 'center center',
                   }}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setPendingConnectFromWithRef(null)
-                    setSelectedItem(null)
-                    setSelectedConnectionPos({ x: midX, y: midY })
-                    setSelectedConnectionKey(prev => prev === key ? null : key)
-                  }}
                 >
                   <div
-                    className="w-full h-full relative"
+                    className="w-full h-full relative pointer-events-none"
                     style={{
                       backgroundImage: 'url(/board/thread_yellow.png)',
                       backgroundSize: 'auto 100%',
@@ -1501,11 +1505,35 @@ export function InvestigationBoard({
                         : 'drop-shadow(1px 2px 2px rgba(0,0,0,0.35))',
                       borderRadius: `0 0 ${sag}px ${sag}px`,
                       transform: `scaleY(${1 + sag / 50})`,
+                      pointerEvents: 'none',
+                      zIndex: 1,
                     }}
                   />
                   {isSelected && (
-                    <div className="absolute inset-0 bg-white/20 rounded animate-pulse" />
+                    <div className="absolute inset-0 bg-white/20 rounded animate-pulse pointer-events-none" style={{ zIndex: 2 }} />
                   )}
+                  <button
+                    type="button"
+                    data-no-board-pan="true"
+                    className="absolute inset-0 bg-transparent"
+                    style={{ zIndex: 30 }}
+                    onPointerDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault()
+                      e.stopPropagation()
+                      setPendingConnectFromWithRef(null)
+                      setSelectedItem(null)
+                      setSelectedConnectionPos({ x: midX, y: midY })
+                      setSelectedConnectionKey(prev => prev === key ? null : key)
+                    }}
+                  />
                 </div>
               )
             })}
