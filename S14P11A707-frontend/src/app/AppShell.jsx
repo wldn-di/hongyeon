@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect } from "react";
 import { useLocation } from "wouter";
 import { AppRoutes } from "./routes";
 import { Header } from "@/components/layout/Header";
@@ -12,12 +12,42 @@ import { AlertModal } from "@/components/ui/AlertModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LoginRequiredModal } from "@/components/ui/LoginRequiredModal";
 
+const POST_LOGIN_REDIRECT_KEY = "post_login_redirect";
+
 function AppShellInner() {
-    const [location] = useLocation();
+    const [location, setLocation] = useLocation();
+    const { state: auth } = useAuth();
     const hideHeader =
         location.startsWith("/room/") ||
         location.startsWith("/game/") ||
         location.startsWith("/tutorial");
+
+    useEffect(() => {
+        if (auth.loading || !auth.user) return;
+
+        let redirectTo = null;
+        try {
+            redirectTo = window.sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
+        } catch {
+            // ignore
+        }
+
+        if (!redirectTo) return;
+
+        try {
+            window.sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
+        } catch {
+            // ignore
+        }
+
+        if (
+            typeof redirectTo === "string" &&
+            redirectTo.startsWith("/") &&
+            redirectTo !== location
+        ) {
+            setLocation(redirectTo);
+        }
+    }, [auth.loading, auth.user, location, setLocation]);
 
     return (
         <div className="dark">

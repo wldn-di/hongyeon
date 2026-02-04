@@ -1,10 +1,9 @@
-import React from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { InlineEdit } from './InlineEdit'
 import { Camera, Check, X, ChevronDown, ChevronUp, LogOut } from 'lucide-react'
 import { alertSuccess } from '@/components/ui/AlertModal'
-import { LogOut } from 'lucide-react'
 
 /**
  * ProfileCard - 프로필 정보 카드 (사진 기능 제거 버전)

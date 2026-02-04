@@ -12,8 +12,8 @@ export function ScenarioGrid({ scenarios }) {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {scenarios.map((scenario) => (
-        <ScenarioCard key={scenario.id} scenario={scenario} />
+      {scenarios.map((scenario, index) => (
+        <ScenarioCard key={scenario.id} scenario={scenario} index={index} />
       ))}
     </div>
   )

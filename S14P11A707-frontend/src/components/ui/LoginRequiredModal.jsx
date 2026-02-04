@@ -2,11 +2,14 @@ import React, { useEffect, useState } from 'react'
 import { useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { LogIn, User } from 'lucide-react'
+import { ROUTES } from '@/app/routePaths'
 
 /**
  * 로그인 필요 안내 모달
  * 인증이 필요한 API 호출 시 자동으로 표시됨
  */
+
+const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect'
 
 // 전역 상태 관리
 let setModalVisible = null
@@ -30,7 +33,7 @@ export function LoginRequiredModal() {
 
   const handleGoToProfile = () => {
     setIsOpen(false)
-    setLocation('/profile')
+    setLocation(ROUTES.PROFILE)
   }
 
   if (!isOpen) return null
@@ -79,7 +82,23 @@ export function LoginRequiredModal() {
 /**
  * 로그인 필요 모달 표시 함수
  */
-export const showLoginRequired = () => {
+export const showLoginRequired = (options) => {
+  const redirectTo =
+    typeof options === 'string'
+      ? options
+      : (options?.redirectTo ?? null)
+
+  try {
+    const fallback =
+      typeof window !== 'undefined'
+        ? window.location.pathname + window.location.search + window.location.hash
+        : null
+
+    window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, redirectTo || fallback || ROUTES.HOME)
+  } catch {
+    // ignore
+  }
+
   if (setModalVisible) {
     setModalVisible(true)
   }

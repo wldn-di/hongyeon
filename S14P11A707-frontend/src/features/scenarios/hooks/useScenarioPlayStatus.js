@@ -5,15 +5,26 @@ import { mapBookshelfSessionResponse } from '@/features/session/api/sessionMappe
 /**
  * 특정 시나리오의 플레이 상태를 확인하는 Hook
  * @param {number} scenarioId - 확인할 시나리오 ID
+ * @param {Object} [options]
+ * @param {boolean} [options.enabled=true] - 로그인 상태 등 조건에 따라 비활성화 가능
  * @returns {Object} { status, session, loading, error, refetch }
  */
-export function useScenarioPlayStatus(scenarioId) {
+export function useScenarioPlayStatus(scenarioId, options = {}) {
+  const { enabled = true } = options
   const [status, setStatus] = useState(null) // 'COMPLETED' | 'PLAYING' | 'FAILED' | null
   const [session, setSession] = useState(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState(null)
 
   const fetch = useCallback(async () => {
+    if (!enabled) {
+      setStatus(null)
+      setSession(null)
+      setError(null)
+      setLoading(false)
+      return
+    }
+
     if (!scenarioId) {
       setLoading(false)
       return
@@ -47,11 +58,11 @@ export function useScenarioPlayStatus(scenarioId) {
     } finally {
       setLoading(false)
     }
-  }, [scenarioId])
+  }, [scenarioId, enabled])
 
   useEffect(() => {
     fetch()
-  }, [fetch])
+  }, [fetch, enabled])
 
   return {
     // 상태

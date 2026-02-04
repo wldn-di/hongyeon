@@ -3,6 +3,8 @@ import { Redirect } from 'wouter'
 import { useAuth } from '../contexts/AuthContext'
 import { ROUTES } from '../app/routePaths'
 
+const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect'
+
 /**
  * 인증이 필요한 라우트를 보호하는 컴포넌트
  *
@@ -29,6 +31,16 @@ export default function ProtectedRoute({ component: Component, ...rest }) {
 
   // 미인증 상태 → 프로필(로그인) 페이지로 리다이렉트
   if (!user) {
+    try {
+      const currentPath =
+        window.location.pathname + window.location.search + window.location.hash
+
+      if (currentPath && currentPath !== ROUTES.PROFILE) {
+        window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, currentPath)
+      }
+    } catch {
+      // ignore
+    }
     return <Redirect to={ROUTES.PROFILE} />
   }
 

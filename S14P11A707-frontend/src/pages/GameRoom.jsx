@@ -27,7 +27,7 @@ import { chatWithSuspect, fetchChatHistory } from '@/features/session/api/sessio
 
 import { toast } from 'sonner'
 import { alertError } from '@/components/ui/AlertModal'
-import { confirmDialog } from '@/components/ui/ConfirmModal'
+import { showConfirm } from '@/components/ui/ConfirmModal'
 import { cn } from '@/lib/utils'
 
 const START_GAME_DEDUP_MS = 5000
@@ -1152,12 +1152,12 @@ export default function GameRoom() {
   }
 
   const handleExit = useCallback(async () => {
-    const ok = await confirmDialog({
+    const ok = await showConfirm({
       title: '게임 종료',
       message: '정말 종료하시겠습니까?',
       confirmText: '종료',
       cancelText: '취소',
-      confirmVariant: 'destructive',
+      tone: 'destructive',
     })
     if (!ok) return
     setLocation('/scenarios')

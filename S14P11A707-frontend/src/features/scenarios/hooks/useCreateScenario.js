@@ -32,7 +32,6 @@ export function useCreateScenario() {
           genre: formData.genre,
           suspectCount: formData.suspectCount,
           userSynopsis: formData.synopsis,
-          style: null,
         });
 
         const scenarioId = Number(response?.scenarioId);
