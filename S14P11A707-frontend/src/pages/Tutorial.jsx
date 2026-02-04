@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/Button'
 import {
   Heart, Clock, Lightbulb, Send, Users, X, FileText, Search,
   ChevronUp, ChevronDown, Smartphone, ArrowRight, MapPin,
-  Play, Home, Sparkles, DoorOpen, Plus, Link2, StickyNote,
+  Play, Home, Sparkles, DoorOpen, Plus, Minus, Link2, StickyNote,
   ArrowLeft, Check, AlertTriangle, Trophy, Target, Gamepad2, Pin, Save
 } from 'lucide-react'
 
@@ -16,6 +16,7 @@ import TypingText from '@/features/tutorial/components/TypingText'
 import WatsonDialog from '@/features/tutorial/components/WatsonDialog'
 import BottomBoardPanel from '@/features/game/panels/BottomBoardPanel'
 import { ReviewModal, ReportModal } from '@/features/game/modals'
+import { InvestigationBoard } from '@/features/game/components/InvestigationBoard'
 import {
   tutorialStory,
   tutorialVictim,
@@ -145,14 +146,15 @@ function VictimIntroPhase({ onComplete }) {
     </div>
   )
 }
-
-// ========================================
+    
+// ====================     ====================
 // Phase 3: 메인 게임 (상호작용 기반 튜토리얼)
 // ========================================
 function MainGamePhase({ onComplete }) {
    // 스토리 진행 단계 (대폭 축소: 1개 증거 + 1명 대화 + 엘베이동)
    // welcome → movement → firstClue → waitEvidenceClick → evidenceListIntro → logIntro
-   // → suggestChat1 → waitChat1 (이영희 대화)
+   // → suggestChat1 → clueTagIntro1 (첫 멘트) → highlightClueBtn (+ 버튼 강조)
+   // → waitClueSelect (단서 선택 대기) → clueTagIntro2 (나머지 멘트) → waitChat1 (이영희 대화)
    // → secondClue → waitElevator (2층 이동하면 바로 추리보드로)
    // → boardIntro → waitBoardOpen → boardDetail
    // → boardPractice → waitBoardPractice → boardConnect → waitBoardConnect → boardSave → waitBoardSave
@@ -172,7 +174,6 @@ function MainGamePhase({ onComplete }) {
   const [boardPanelOpen, setBoardPanelOpen] = useState(false)
   const [phoneOpen, setPhoneOpen] = useState(false)
   const [selectedContact, setSelectedContact] = useState(null)
-  const [roomSelectorOpen, setRoomSelectorOpen] = useState(false)
   const [currentRoom, setCurrentRoom] = useState(tutorialRooms[0])
   const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [message, setMessage] = useState('')
@@ -196,7 +197,6 @@ function MainGamePhase({ onComplete }) {
     }
   ])
   const [connections, setConnections] = useState([])
-  const [isConnecting, setIsConnecting] = useState(false)
   const [connectStart, setConnectStart] = useState(null)
   const [connectEnd, setConnectEnd] = useState(null) // 두 번째 선택된 카드
   const [selectedConnection, setSelectedConnection] = useState(null) // 선택된 연결선 (제거용)
@@ -213,25 +213,57 @@ function MainGamePhase({ onComplete }) {
   // 추적용 상태
   const [chattedSuspects, setChattedSuspects] = useState([]) // 대화한 용의자 목록
   const [hasOpenedBoard, setHasOpenedBoard] = useState(false)
+  const [hasSavedBoard, setHasSavedBoard] = useState(false) // 보드 저장 여부
   const [hoveredBoardItem, setHoveredBoardItem] = useState(null) // 호버된 보드 카드
   const hoverTimeoutRef = useRef(null) // 호버 툴팁 1초 딜레이용
-  const [boardPracticeComplete, setBoardPracticeComplete] = useState(false) // 보드 연습 완료 여부
-  const [hasSavedBoard, setHasSavedBoard] = useState(false) // 보드 저장 여부
 
-  // 용의자별 대화 내용 (증거별 질문 포함)
+  // 추리보드 줌 상태 (GameRoom과 동일)
+  const [boardZoom, setBoardZoom] = useState(1)
+  const boardZoomRef = useRef(1)
+  const BOARD_WIDTH = 1600
+  const BOARD_HEIGHT = 1200
+  const MIN_ZOOM = 0.6
+  const MAX_ZOOM = 1.8
+
+  // 추리보드 팬(이동) 상태
+  const [isPanning, setIsPanning] = useState(false)
+  const panStartRef = useRef({ x: 0, y: 0, scrollLeft: 0, scrollTop: 0 })
+  const ZOOM_STEP = 0.1
+
+  // 추리보드 필터 상태 (InvestigationBoard와 동일)
+  const [boardFilter, setBoardFilter] = useState('all')
+
+  // 왼쪽 패널 호버링 상태 (증거/용의자/장소)
+  const [hoveredPanelItem, setHoveredPanelItem] = useState(null)
+  const [hoveredPanelType, setHoveredPanelType] = useState(null) // 'evidence' | 'suspect' | 'location'
+  const [hoveredPanelData, setHoveredPanelData] = useState(null) // 호버된 아이템 데이터
+  const [tooltipPosition, setTooltipPosition] = useState({ top: 0 }) // 툴팁 위치
+  const panelHoverTimeoutRef = useRef(null)
+
+  // 단서 태그 관련 상태 (PhoneUI와 동일)
+  const [selectedClue, setSelectedClue] = useState(null) // 선택된 단서
+  const [clueModalOpen, setClueModalOpen] = useState(false) // 단서 선택 모달
+
+  // 용의자별 대화 내용 (증거별 질문 포함 + 단서 태그 정보)
   const suspectChats = {
     'suspect-1': { // 김철수 (집사)
       greeting: '탐정님이시군요. 무엇이든 물어보세요.',
+      clueId: 2, // 구겨진 편지
+      clueName: '구겨진 편지',
       question: '이 구겨진 편지에 대해 아시는 게 있나요? 이영희 씨 필적과 일치한다던데요.',
       response: '그 편지요? 이영희 아가씨가 회장님께 드리려던 거예요. 근데 회장님이 읽기도 전에 찢어버리셨죠. 아가씨가 얼마나 울었는지... 유산 얘기였던 것 같아요.',
     },
     'suspect-2': { // 이영희 (딸) - 범인
       greeting: '...뭐예요? 왜 저한테 자꾸 물어보는 거죠?',
+      clueId: 1, // 혈흔이 묻은 식칼
+      clueName: '혈흔이 묻은 식칼',
       question: '이 식칼에서 당신 옷의 섬유가 발견됐어요. 설명해주시겠어요?',
       response: '그 식칼은 제가 요리할 때 쓴 거예요! 섬유라고요? 말도 안 돼요! 저는 그날 밤 방에만 있었다고요! 왜 자꾸 의심하는 거예요?!',
     },
     'suspect-3': { // 박민수 (경호원)
       greeting: '탐정님, 협조하겠습니다.',
+      clueId: 3, // 낡은 열쇠
+      clueName: '낡은 열쇠',
       question: '이 열쇠에 대해 아시는 게 있나요? 숫자 3이 새겨져 있던데요.',
       response: '그 열쇠... 3번 금고 열쇠 맞습니다. 회장님 유언장이 들어있는 곳이죠. 이영희 씨가 그날 밤 서재 근처를 서성이는 걸 봤어요. CCTV 기록은 왜인지 삭제됐더군요.',
     },
@@ -346,17 +378,22 @@ function MainGamePhase({ onComplete }) {
         setIsDialogActive(true)
       }, 300)
     } else if (storyStep === 'firstClue') {
-      // 첫 번째 증거 발견 후 → 자동으로 상세화면 열기 (2초 유지)
+      // 첫 번째 증거 발견 후 → 자동으로 호버 툴팁 표시 (2초 유지)
       const firstEvidence = discoveredEvidence.find(e => e.id === 1) || tutorialEvidence[0]
-      setSelectedEvidence(firstEvidence)
+      setHoveredPanelItem(firstEvidence.id)
+      setHoveredPanelType('evidence')
+      setHoveredPanelData(firstEvidence)
+      setTooltipPosition({ top: 150 }) // 적절한 위치에 표시
       setTimeout(() => {
         setStoryStep('evidenceListIntro')
         setShowDialog(true)
         setIsDialogActive(true)
-      }, 2000) // 2초 동안 상세화면 보여주기
+      }, 2000) // 2초 동안 호버 툴팁 보여주기
     } else if (storyStep === 'evidenceListIntro') {
-      // 상세화면 닫고 다음 단계
-      setSelectedEvidence(null)
+      // 호버 툴팁 닫고 다음 단계
+      setHoveredPanelItem(null)
+      setHoveredPanelType(null)
+      setHoveredPanelData(null)
       setTimeout(() => {
         setStoryStep('logIntro')
         setShowDialog(true)
@@ -370,16 +407,33 @@ function MainGamePhase({ onComplete }) {
         setIsDialogActive(true)
       }, 300)
     } else if (storyStep === 'suggestChat1') {
-      // 자동으로 휴대폰 열고 이영희 선택 (1초 후 폰 열기, 0.5초 후 이영희 선택)
+      // 자동으로 휴대폰 열고 단서 태그 설명 시작
       setTimeout(() => {
         setPhoneOpen(true)
         addLog('system', '휴대폰을 열었습니다.')
+        // 이영희 선택 후 첫 번째 멘트 표시
         setTimeout(() => {
           const youngHee = tutorialSuspects.find(s => s.id === 'suspect-2')
           setSelectedContact(youngHee)
-          setStoryStep('waitChat1')
-        }, 800) // 폰 열린 후 0.8초 뒤 이영희 선택
-      }, 500) // 0.5초 후 폰 열기
+          // 첫 번째 멘트 (대화해볼게요!)
+          setTimeout(() => {
+            setStoryStep('clueTagIntro1')
+            setShowDialog(true)
+            setIsDialogActive(true)
+          }, 500)
+        }, 800)
+      }, 500)
+    } else if (storyStep === 'clueTagIntro1') {
+      // 첫 멘트 후 → + 버튼 강조 (0.5초) → 단서 목록 자동 오픈
+      setStoryStep('highlightClueBtn')
+      setTimeout(() => {
+        // 단서 선택 모달 자동 오픈
+        setClueModalOpen(true)
+        setStoryStep('waitClueSelect')
+      }, 500)
+    } else if (storyStep === 'clueTagIntro2') {
+      // 나머지 멘트 후 → 대화 대기
+      setStoryStep('waitChat1')
     } else if (storyStep === 'secondClue') {
       // 엘리베이터 이동 안내 후 → 이동 기다림
       setStoryStep('waitElevator')
@@ -438,11 +492,21 @@ function MainGamePhase({ onComplete }) {
         case 'firstClue':
         case 'waitEvidenceClick':
         case 'evidenceListIntro':
-          guidanceMessage = '왼쪽 증거 목록에서 첫 번째 증거를 클릭해서 상세 정보를 확인하세요!'
+          guidanceMessage = '왼쪽 증거 목록에서 첫 번째 증거에 마우스를 올려 상세 정보를 확인하세요!'
           break
         case 'logIntro':
         case 'suggestChat1':
           guidanceMessage = '오른쪽 수사 로그를 확인한 후, 용의자와 대화하세요!'
+          break
+        case 'clueTagIntro1':
+        case 'highlightClueBtn':
+          guidanceMessage = '단서 태그 기능을 확인하세요! + 버튼으로 단서를 선택할 수 있어요.'
+          break
+        case 'waitClueSelect':
+          guidanceMessage = '단서를 클릭해서 선택하세요!'
+          break
+        case 'clueTagIntro2':
+          guidanceMessage = '단서 태그 설명을 확인하세요!'
           break
         case 'waitChat1':
           guidanceMessage = '오른쪽 하단의 휴대폰으로 용의자와 대화하세요!'
@@ -524,16 +588,25 @@ function MainGamePhase({ onComplete }) {
     // 대화 기록 추가
     if (!chattedSuspects.includes(selectedContact.id)) {
       setChattedSuspects(prev => [...prev, selectedContact.id])
-      addLog('chat', `[${selectedContact.name}]와 대화했습니다.`)
+      // 단서를 태그해서 대화했는지 로그에 표시
+      if (selectedClue) {
+        addLog('chat', `[${selectedContact.name}]에게 @${selectedClue.name} 단서로 심문했습니다.`)
+      } else {
+        addLog('chat', `[${selectedContact.name}]와 대화했습니다.`)
+      }
     }
 
     setMessage('')
+    setSelectedClue(null) // 전송 후 단서 선택 초기화
     setChatResponseShown(true)
     setWaitingForChatConfirm(true)
   }
 
 
 const handlePhoneClose = () => {
+  // 단서 선택 초기화
+  setSelectedClue(null)
+
   // 대화 응답을 봤고 확인 대기 중이었다면 → 대화 완료 처리
   if (waitingForChatConfirm && selectedContact && !selectedContact.isHelper) {
     setWaitingForChatConfirm(false)
@@ -862,6 +935,8 @@ const handlePhoneClose = () => {
       'evidenceListIntro': 'evidenceListIntro',
       'logIntro': 'logIntro',
       'suggestChat1': 'suggestChat1',
+      'clueTagIntro1': 'clueTagIntro1',
+      'clueTagIntro2': 'clueTagIntro2',
       'secondClue': 'secondClue',
       'boardIntro': 'boardIntro',
       'boardDetail': 'boardDetail',
@@ -998,6 +1073,22 @@ const handlePhoneClose = () => {
                     onDragStart={(e) => {
                       e.dataTransfer.setData('text/plain', JSON.stringify({ item, type: 'evidence' }))
                     }}
+                    onMouseEnter={(e) => {
+                      if (panelHoverTimeoutRef.current) clearTimeout(panelHoverTimeoutRef.current)
+                      const rect = e.currentTarget.getBoundingClientRect()
+                      panelHoverTimeoutRef.current = setTimeout(() => {
+                        setHoveredPanelItem(item.id)
+                        setHoveredPanelType('evidence')
+                        setHoveredPanelData(item)
+                        setTooltipPosition({ top: rect.top })
+                      }, 500)
+                    }}
+                    onMouseLeave={() => {
+                      if (panelHoverTimeoutRef.current) clearTimeout(panelHoverTimeoutRef.current)
+                      setHoveredPanelItem(null)
+                      setHoveredPanelType(null)
+                      setHoveredPanelData(null)
+                    }}
                     className={cn(
                       "bg-muted/30 border rounded-lg p-3 transition-all relative cursor-grab active:cursor-grabbing",
                       shouldHighlightForClick || shouldHighlightForPractice ? "border-2 border-red-500 ring-4 ring-red-500/60" : "border-border",
@@ -1007,7 +1098,7 @@ const handlePhoneClose = () => {
                   >
                     {shouldHighlightForClick && (
                       <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-red-500 text-white text-xs px-3 py-1 rounded-full font-bold whitespace-nowrap animate-bounce">
-                        👆 클릭해서 상세보기!
+                        👆 마우스를 올려보세요!
                       </div>
                     )}
                     {shouldHighlightForPractice && (
@@ -1015,13 +1106,13 @@ const handlePhoneClose = () => {
                         ✨ 드래그하세요!
                       </div>
                     )}
-                    <div onClick={() => handleEvidenceClick(item)} className="flex items-start gap-3 cursor-pointer hover:opacity-80">
+                    <div className="flex items-start gap-3">
                       <div className="w-12 h-12 rounded bg-muted flex items-center justify-center flex-shrink-0">
                         <Search className="w-5 h-5 text-muted-foreground" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="font-bold text-sm">{item.name}</p>
-                        <p className="text-xs text-muted-foreground">{item.location}</p>
+                        <p className="text-xs text-muted-foreground">{item.floor || 1}층에서 발견</p>
                         {item.storyHint && <p className="text-xs text-primary mt-1 italic">💡 {item.storyHint}</p>}
                       </div>
                     </div>
@@ -1052,6 +1143,22 @@ const handlePhoneClose = () => {
                   draggable
                   onDragStart={(e) => {
                     e.dataTransfer.setData('text/plain', JSON.stringify({ item: suspect, type: 'suspect' }))
+                  }}
+                  onMouseEnter={(e) => {
+                    if (panelHoverTimeoutRef.current) clearTimeout(panelHoverTimeoutRef.current)
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    panelHoverTimeoutRef.current = setTimeout(() => {
+                      setHoveredPanelItem(suspect.id)
+                      setHoveredPanelType('suspect')
+                      setHoveredPanelData(suspect)
+                      setTooltipPosition({ top: rect.top })
+                    }, 500)
+                  }}
+                  onMouseLeave={() => {
+                    if (panelHoverTimeoutRef.current) clearTimeout(panelHoverTimeoutRef.current)
+                    setHoveredPanelItem(null)
+                    setHoveredPanelType(null)
+                    setHoveredPanelData(null)
                   }}
                   className={cn(
                     "bg-muted/30 border rounded-lg p-3 cursor-grab active:cursor-grabbing relative",
@@ -1099,6 +1206,22 @@ const handlePhoneClose = () => {
                   onDragStart={(e) => {
                     e.dataTransfer.setData('text/plain', JSON.stringify({ item: room, type: 'location' }))
                   }}
+                  onMouseEnter={(e) => {
+                    if (panelHoverTimeoutRef.current) clearTimeout(panelHoverTimeoutRef.current)
+                    const rect = e.currentTarget.getBoundingClientRect()
+                    panelHoverTimeoutRef.current = setTimeout(() => {
+                      setHoveredPanelItem(`location-${room.id}`)
+                      setHoveredPanelType('location')
+                      setHoveredPanelData(room)
+                      setTooltipPosition({ top: rect.top })
+                    }, 500)
+                  }}
+                  onMouseLeave={() => {
+                    if (panelHoverTimeoutRef.current) clearTimeout(panelHoverTimeoutRef.current)
+                    setHoveredPanelItem(null)
+                    setHoveredPanelType(null)
+                    setHoveredPanelData(null)
+                  }}
                   className={cn(
                     "bg-muted/30 border rounded-lg p-3 cursor-grab active:cursor-grabbing relative",
                     shouldHighlight ? "border-2 border-red-500 ring-4 ring-red-500/50 animate-pulse" : "border-border"
@@ -1115,7 +1238,7 @@ const handlePhoneClose = () => {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-bold text-sm">{room.name}</p>
-                      <p className="text-xs text-muted-foreground">사건 장소</p>
+                      <p className="text-xs text-muted-foreground">{room.floor}층</p>
                     </div>
                   </div>
                   <div className="mt-2 pt-2 border-t border-border/50">
@@ -1133,6 +1256,77 @@ const handlePhoneClose = () => {
             })
           )}
         </div>
+
+        {/* 호버 툴팁 - 조사 팔레트 (overflow 바깥에 렌더링) */}
+        {hoveredPanelData && hoveredPanelType && (
+          <div
+            className="fixed w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 pointer-events-none animate-in fade-in duration-150 z-[100]"
+            style={{
+              left: '330px',
+              top: Math.min(Math.max(tooltipPosition.top, 80), window.innerHeight - 250),
+            }}
+          >
+            {/* 증거 툴팁 */}
+            {hoveredPanelType === 'evidence' && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 text-xs font-bold text-white rounded bg-red-500">증거</span>
+                  <span className="font-bold text-sm text-white">{hoveredPanelData.name}</span>
+                </div>
+                <div className="text-xs space-y-1 text-gray-300">
+                  <p>🏢 발견 층: {hoveredPanelData.floor || 1}층</p>
+                  {hoveredPanelData.description && (
+                    <p className="mt-1">📝 {hoveredPanelData.description}</p>
+                  )}
+                  {hoveredPanelData.assistantComment && (
+                    <div className="mt-2 p-2 bg-red-500/20 rounded border border-red-500/30">
+                      <p className="text-red-300 italic">🔍 "{hoveredPanelData.assistantComment}"</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+            {/* 용의자 툴팁 */}
+            {hoveredPanelType === 'suspect' && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 text-xs font-bold text-white rounded bg-amber-500">용의자</span>
+                  <span className="font-bold text-sm text-white">{hoveredPanelData.name}</span>
+                </div>
+                <div className="text-xs space-y-1 text-gray-300">
+                  <p>👤 나이: {hoveredPanelData.age}세</p>
+                  <p>⚧ 성별: {hoveredPanelData.gender}</p>
+                  <p>💼 직업: {hoveredPanelData.occupation}</p>
+                  {hoveredPanelData.oneLiner && (
+                    <div className="mt-2 p-2 bg-amber-500/20 rounded border border-amber-500/30">
+                      <p className="text-amber-300 italic">💬 "{hoveredPanelData.oneLiner}"</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+            {/* 장소 툴팁 */}
+            {hoveredPanelType === 'location' && (
+              <>
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="px-2 py-0.5 text-xs font-bold text-white rounded bg-green-500">장소</span>
+                  <span className="font-bold text-sm text-white">{hoveredPanelData.name}</span>
+                </div>
+                <div className="text-xs space-y-1 text-gray-300">
+                  <p>🏢 층: {hoveredPanelData.floor}층</p>
+                  {hoveredPanelData.description && (
+                    <p className="mt-1">📍 {hoveredPanelData.description}</p>
+                  )}
+                  {hoveredPanelData.assistantComment && (
+                    <div className="mt-2 p-2 bg-green-500/20 rounded border border-green-500/30">
+                      <p className="text-green-300 italic">🔍 "{hoveredPanelData.assistantComment}"</p>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {!leftPanelOpen && (
@@ -1340,57 +1534,8 @@ const handlePhoneClose = () => {
         </button>
       </div>
 
-      {/* ===== 오른쪽 하단 버튼들 (GameRoom과 동일) ===== */}
-      <div className="fixed right-6 bottom-6 z-40 flex items-center gap-3">
-        <div className="relative">
-          <button
-            onClick={() => !isDialogActive && setRoomSelectorOpen(!roomSelectorOpen)}
-            disabled={isDialogActive}
-            className={cn(
-              "w-14 h-14 bg-card/95 border-2 border-purple-500 rounded-full shadow-lg hover:scale-105 transition-transform flex items-center justify-center text-2xl",
-              isDialogActive && "opacity-50 pointer-events-none"
-            )}
-          >🚪</button>
-
-          {roomSelectorOpen && !isDialogActive && (
-            <div className="absolute bottom-16 right-0 w-56 bg-card border border-border rounded-xl shadow-2xl overflow-hidden">
-              <div className="p-3 border-b border-border bg-muted/30">
-                <p className="text-sm font-bold flex items-center gap-2"><DoorOpen className="w-4 h-4 text-primary" />방 이동</p>
-              </div>
-              <div className="max-h-48 overflow-y-auto">
-                {tutorialRooms.map(room => {
-                  // 현재 층에서만 선택 가능 (튜토리얼 제한)
-                  const canSelectRoom = room.unlocked && (roomIndex === currentRoomIndex || ['waitElevator'].includes(storyStep))
-
-                  return (
-                    <button
-                      key={room.id}
-                      onClick={() => {
-                        if (canSelectRoom) {
-                          setCurrentRoom(room)
-                          setCurrentRoomIndex(roomIndex)
-                          setRoomSelectorOpen(false)
-                        }
-                      }}
-                      disabled={!canSelectRoom}
-                      className={cn(
-                        "w-full p-3 flex items-center justify-between text-left transition-colors",
-                        canSelectRoom ? "hover:bg-muted/50" : "opacity-50 cursor-not-allowed",
-                        currentRoom.id === room.id && "bg-primary/10"
-                      )}
-                    >
-                      <span className="text-sm">{room.name}</span>
-                      {!room.unlocked && <span className="text-xs">🔒</span>}
-                      {!canSelectRoom && room.unlocked && <span className="text-xs text-red-400">잠김</span>}
-                      {currentRoom.id === room.id && <span className="text-xs text-primary">현재</span>}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-
+      {/* ===== 오른쪽 하단 버튼들 (GameRoom과 동일 - 음악 아이콘과 안겹치게 right-28) ===== */}
+      <div className="fixed right-28 bottom-6 z-40 flex items-center gap-3">
         <div className="relative">
           {/* 휴대폰 안내 문구 */}
           {(storyStep === 'waitChat1') && !isDialogActive && !phoneOpen && (
@@ -1439,45 +1584,9 @@ const handlePhoneClose = () => {
             right: rightPanelOpen ? '288px' : '0px',
           }}
         >
-          <div className="flex items-center justify-between p-3 border-b border-border">
-            <div className="flex items-center gap-4">
-              <h3 className="font-bold flex items-center gap-2">
-                <Link2 className="w-5 h-5 text-primary" />개인 추리보드
-              </h3>
-              {/* 연결 모드 버튼 (GameRoom 스타일) */}
-              <div className="flex items-center gap-1 bg-muted/30 rounded-lg p-1">
-                <button
-                  onClick={() => toggleLineMode('red')}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
-                    lineMode === 'red'
-                      ? "bg-red-500/20 text-red-400 ring-1 ring-red-500"
-                      : "text-muted-foreground hover:bg-muted/50",
-                    // 연결 안내 단계에서 확정 버튼 강조 (빨간 박스만)
-                    storyStep === 'waitBoardConnect' && !lineMode && "ring-4 ring-red-500 bg-red-500/30 text-red-400"
-                  )}
-                >
-                  <div className="w-4 h-0.5 bg-red-500 rounded" />
-                  확정
-                </button>
-                <button
-                  onClick={() => toggleLineMode('yellow')}
-                  className={cn(
-                    "flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all",
-                    lineMode === 'yellow'
-                      ? "bg-yellow-500/20 text-yellow-400 ring-1 ring-yellow-500"
-                      : "text-muted-foreground hover:bg-muted/50"
-                  )}
-                >
-                  <div className="w-4 h-0.5 bg-yellow-500 rounded" />
-                  의심
-                </button>
-                {lineMode && (
-                  <span className="text-[11px] text-muted-foreground whitespace-nowrap ml-1">
-                    {connectStart ? '1/2 선택' : '2개 클릭'}
-                  </span>
-                )}
-              </div>
+          <div className="flex items-center justify-between p-4 border-b border-border">
+            <div className="flex items-center gap-3">
+              <h2 className="text-xl font-bold gold-glow">추리 보드</h2>
               {/* 연결 모드 안내 (GameRoom 스타일) */}
               {lineMode && connectStart && (
                 <div className={cn(
@@ -1495,13 +1604,10 @@ const handlePhoneClose = () => {
                   </button>
                 </div>
               )}
-              {/* 선택된 연결선 제거 버튼 */}
+              {/* 연결선 선택 시 안내 (X 버튼은 연결선 위에 직접 표시) */}
               {selectedConnection !== null && (
                 <div className="flex items-center gap-2 bg-red-500/10 px-3 py-1.5 rounded-lg border border-red-500/30">
-                  <span className="text-xs text-red-400">🔗 연결선 선택됨</span>
-                  <Button variant="outline" size="sm" onClick={handleDeleteConnection} className="h-7 px-3 border-red-500 text-red-400 hover:bg-red-500/20">
-                    <X className="w-3 h-3 mr-1" />제거하기
-                  </Button>
+                  <span className="text-xs text-red-400">🔗 연결선의 X 버튼을 클릭해 제거하세요</span>
                   <button
                     onClick={() => setSelectedConnection(null)}
                     className="text-xs text-muted-foreground hover:text-white px-2"
@@ -1512,9 +1618,84 @@ const handlePhoneClose = () => {
               )}
             </div>
             <div className="flex items-center gap-2">
+              {/* 연결 모드 버튼 (+메모 옆으로 이동) */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => toggleLineMode('red')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-bold border transition-colors",
+                    lineMode === 'red'
+                      ? "bg-red-500/15 border-red-500/50 text-red-400"
+                      : "bg-muted/30 border-border text-muted-foreground hover:text-foreground",
+                    // 연결 안내 단계에서 확정 버튼 강조
+                    storyStep === 'waitBoardConnect' && !lineMode && "ring-4 ring-red-500 bg-red-500/30 text-red-400 border-red-500"
+                  )}
+                >
+                  확정
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleLineMode('yellow')}
+                  className={cn(
+                    "px-3 py-1.5 rounded-full text-xs font-bold border transition-colors",
+                    lineMode === 'yellow'
+                      ? "bg-amber-500/15 border-amber-500/50 text-amber-400"
+                      : "bg-muted/30 border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  의심
+                </button>
+                {lineMode && (
+                  <span className="text-[11px] text-muted-foreground whitespace-nowrap">
+                    {connectStart ? '1/2 선택' : '2개 클릭'}
+                  </span>
+                )}
+              </div>
               <Button variant="outline" size="sm" onClick={() => setMemoModalOpen(true)}>
                 <Plus className="w-4 h-4 mr-1" />메모
               </Button>
+              {/* 줌 컨트롤 (GameRoom 스타일) */}
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newZoom = Math.max(MIN_ZOOM, boardZoom - ZOOM_STEP)
+                    setBoardZoom(newZoom)
+                    boardZoomRef.current = newZoom
+                  }}
+                  className="h-8 w-8 p-0"
+                  title="축소"
+                >
+                  <Minus className="w-4 h-4" />
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-3 font-mono text-xs"
+                  onClick={() => {
+                    setBoardZoom(1)
+                    boardZoomRef.current = 1
+                  }}
+                  title="줌 리셋"
+                >
+                  {Math.round(boardZoom * 100)}%
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    const newZoom = Math.min(MAX_ZOOM, boardZoom + ZOOM_STEP)
+                    setBoardZoom(newZoom)
+                    boardZoomRef.current = newZoom
+                  }}
+                  className="h-8 w-8 p-0"
+                  title="확대"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
               {/* 저장 버튼 (GameRoom 스타일) */}
               <Button
                 variant="outline"
@@ -1563,22 +1744,81 @@ const handlePhoneClose = () => {
             </div>
           </div>
 
+          {/* 필터 바 (InvestigationBoard와 동일) */}
+          <div className="p-3 border-b border-border bg-muted/20 flex gap-2 overflow-x-auto">
+            {[
+              { value: 'all', label: '전체 보기' },
+              { value: 'suspect', label: '용의자' },
+              { value: 'evidence', label: '증거' },
+              { value: 'location', label: '장소' },
+              { value: 'memo', label: '메모' },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={() => setBoardFilter(opt.value)}
+                className={cn(
+                  "px-4 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-colors",
+                  boardFilter === opt.value
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/50 text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+
           <div
             ref={boardAreaRef}
-            className="relative h-[calc(100vh-120px)] overflow-auto"
-            style={{
-              backgroundImage: 'url(/board/board.jpg)',
-              backgroundSize: 'cover',
-              backgroundPosition: 'center',
+            className={cn(
+              "relative h-[calc(100vh-300px)] overflow-auto no-scrollbar",
+              isPanning && "cursor-grabbing"
+            )}
+            style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+            onWheel={(e) => {
+              if (!e.ctrlKey && !e.metaKey) {
+                // 마우스 휠로 줌 (GameRoom과 동일)
+                e.preventDefault()
+                const direction = e.deltaY < 0 ? 1 : -1
+                const newZoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, boardZoomRef.current + direction * ZOOM_STEP))
+                setBoardZoom(newZoom)
+                boardZoomRef.current = newZoom
+              }
             }}
+            onMouseDown={(e) => {
+              // 카드나 연결선이 아닌 빈 공간 클릭 시에만 패닝 시작
+              // 카드([data-board-card])나 연결선 위에서는 패닝 비활성화
+              if (e.target.closest('[data-board-card]') || e.target.closest('[data-connection]')) {
+                return // 카드나 연결선 클릭 시 패닝 안함
+              }
+              if (e.target === e.currentTarget || e.target.closest('[data-board-bg]')) {
+                setIsPanning(true)
+                panStartRef.current = {
+                  x: e.clientX,
+                  y: e.clientY,
+                  scrollLeft: boardAreaRef.current.scrollLeft,
+                  scrollTop: boardAreaRef.current.scrollTop
+                }
+              }
+            }}
+            onMouseMove={(e) => {
+              if (!isPanning) return
+              const dx = e.clientX - panStartRef.current.x
+              const dy = e.clientY - panStartRef.current.y
+              boardAreaRef.current.scrollLeft = panStartRef.current.scrollLeft - dx
+              boardAreaRef.current.scrollTop = panStartRef.current.scrollTop - dy
+            }}
+            onMouseUp={() => setIsPanning(false)}
+            onMouseLeave={() => setIsPanning(false)}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault()
               try {
                 const data = JSON.parse(e.dataTransfer.getData('text/plain'))
                 const rect = boardAreaRef.current.getBoundingClientRect()
-                const x = e.clientX - rect.left - 88
-                const y = e.clientY - rect.top - 80
+                // 줌 적용된 좌표 계산
+                const x = (e.clientX - rect.left) / boardZoom - 88
+                const y = (e.clientY - rect.top) / boardZoom - 80
 
                 if (data.type === 'evidence') {
                   const itemId = `evidence-${data.item.id}`
@@ -1603,11 +1843,38 @@ const handlePhoneClose = () => {
               }
             }}
           >
-            {/* 연결선 (실 이미지) */}
+            {/* 줌 가능한 보드 컨텐츠 */}
+            <div
+              className="relative"
+              style={{
+                width: `${BOARD_WIDTH * boardZoom}px`,
+                height: `${BOARD_HEIGHT * boardZoom}px`,
+              }}
+            >
+              <div
+                data-board-bg
+                className="relative"
+                style={{
+                  width: `${BOARD_WIDTH}px`,
+                  height: `${BOARD_HEIGHT}px`,
+                  transform: `scale(${boardZoom})`,
+                  transformOrigin: '0 0',
+                  backgroundImage: 'url(/board/board.jpg)',
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                }}
+              >
+            {/* 연결선 (실 이미지) - 필터에 맞는 카드끼리만 표시 */}
             {connections.map((conn, idx) => {
               const fromItem = boardItems.find(i => i.id === conn.from)
               const toItem = boardItems.find(i => i.id === conn.to)
               if (!fromItem || !toItem) return null
+
+              // 필터 적용: 양쪽 카드가 모두 보이는 경우에만 연결선 표시
+              const isFromVisible = fromItem.type === 'victim' || boardFilter === 'all' || fromItem.type === boardFilter
+              const isToVisible = toItem.type === 'victim' || boardFilter === 'all' || toItem.type === boardFilter
+              if (!isFromVisible || !isToVisible) return null
+
               const isSelected = selectedConnection === idx
 
               // 두 점 사이 계산
@@ -1621,9 +1888,13 @@ const handlePhoneClose = () => {
               // 처짐 효과 (거리에 비례)
               const sag = Math.min(distance * 0.08, 25)
 
+              // 노란선(의심)은 빨간선의 절반 크기
+              const lineHeight = conn.type === 'yellow' ? 20 : 40
+
               return (
                 <div
                   key={idx}
+                  data-connection
                   className={cn(
                     "absolute cursor-pointer",
                     isSelected && "z-10"
@@ -1632,29 +1903,39 @@ const handlePhoneClose = () => {
                     left: midX,
                     top: midY,
                     width: distance,
-                    height: 40,
+                    height: lineHeight,
                     transform: `translate(-50%, -50%) rotate(${angle}deg)`,
                     transformOrigin: 'center center',
                   }}
                   onClick={() => handleConnectionClick(conn, idx)}
                 >
-                  {/* 실 이미지 */}
+                  {/* 실 이미지 - 빨간색(red)은 thread.png, 노란색(yellow)은 thread2.png */}
                   <div
                     className="w-full h-full relative"
                     style={{
-                      backgroundImage: 'url(/board/thread.png)',
+                      backgroundImage: conn.type === 'yellow' ? 'url(/board/thread2.png)' : 'url(/board/thread.png)',
                       backgroundSize: 'auto 100%',
                       backgroundRepeat: 'repeat-x',
                       backgroundPosition: 'center',
                       filter: isSelected ? 'brightness(1.5) drop-shadow(0 0 4px white)' : 'drop-shadow(1px 2px 2px rgba(0,0,0,0.3))',
-                      // 처짐 효과를 위한 곡선
-                      borderRadius: `0 0 ${sag}px ${sag}px`,
-                      transform: `scaleY(${1 + sag/50})`,
+                      // 처짐 효과를 위한 곡선 (노란선은 처짐 최소화)
+                      borderRadius: conn.type === 'yellow' ? `0 0 ${sag/4}px ${sag/4}px` : `0 0 ${sag}px ${sag}px`,
+                      transform: conn.type === 'yellow' ? 'none' : `scaleY(${1 + sag/50})`,
                     }}
                   />
-                  {/* 선택 시 하이라이트 */}
+                  {/* 선택 시 X 버튼 표시 (연결선 바로 위) */}
                   {isSelected && (
-                    <div className="absolute inset-0 bg-white/30 rounded animate-pulse" />
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        handleDeleteConnection()
+                      }}
+                      className="absolute left-1/2 -translate-x-1/2 -top-8 w-7 h-7 bg-red-600 text-white rounded-full shadow-lg hover:bg-red-700 flex items-center justify-center text-sm font-bold border-2 border-white transition-transform hover:scale-110 z-20"
+                      style={{ transform: `translateX(-50%) rotate(${-angle}deg)` }}
+                    >
+                      ✕
+                    </button>
                   )}
                 </div>
               )
@@ -1670,7 +1951,14 @@ const handlePhoneClose = () => {
                 </div>
               </div>
             ) : (
-              boardItems.map(item => {
+              boardItems
+                .filter(item => {
+                  // 필터 적용 (InvestigationBoard와 동일)
+                  if (item.type === 'victim') return true // 피해자는 항상 표시
+                  if (boardFilter === 'all') return true
+                  return item.type === boardFilter
+                })
+                .map(item => {
                 const isFirstSelected = connectStart?.id === item.id
                 const isCardSelected = selectedBoardItem === item.id
                 const hash = Math.abs(item.id.charCodeAt(0) * 31) % 10
@@ -1689,6 +1977,7 @@ const handlePhoneClose = () => {
                 return (
                   <div
                     key={item.id}
+                    data-board-card
                     onMouseDown={(e) => handleItemMouseDown(e, item)}
                     onClick={() => {
                       // 연결 모드면 연결 로직, 아니면 카드 선택
@@ -1735,28 +2024,48 @@ const handlePhoneClose = () => {
                         </div>
                         {item.type === 'victim' && (
                           <div className="text-xs space-y-1 text-gray-300">
-                            <p>나이: {item.data?.age}세</p>
-                            <p>역할: {item.data?.role}</p>
-                            <p>발견장소: {item.data?.discoveryLocation}</p>
-                            <p>사인: {item.data?.causeOfDeath}</p>
+                            <p>👤 나이: {item.data?.age}세</p>
+                            <p>💼 역할: {item.data?.role}</p>
+                            <p>📍 발견장소: {item.data?.discoveryLocation}</p>
+                            <p>⚰️ 사인: {item.data?.causeOfDeath}</p>
                           </div>
                         )}
                         {item.type === 'suspect' && (
                           <div className="text-xs space-y-1 text-gray-300">
-                            <p>역할: {item.data?.role}</p>
-                            {item.data?.isCulprit && <p className="text-red-400 font-bold">⚠️ 용의선상</p>}
+                            <p>👤 나이: {item.data?.age}세</p>
+                            <p>⚧ 성별: {item.data?.gender}</p>
+                            <p>💼 직업: {item.data?.occupation || item.data?.role}</p>
+                            {item.data?.oneLiner && (
+                              <div className="mt-2 p-2 bg-amber-500/20 rounded border border-amber-500/30">
+                                <p className="text-amber-300 italic">💬 "{item.data?.oneLiner}"</p>
+                              </div>
+                            )}
                           </div>
                         )}
                         {item.type === 'evidence' && (
-                          <div className="text-xs text-gray-300">
-                            <p className="mb-1">발견장소: {item.data?.location}</p>
-                            <p className="whitespace-pre-line">{item.data?.description}</p>
+                          <div className="text-xs space-y-1 text-gray-300">
+                            <p>🏢 발견 층: {item.data?.floor || 1}층</p>
+                            {item.data?.description && (
+                              <p className="mt-1">📝 {item.data?.description}</p>
+                            )}
+                            {item.data?.assistantComment && (
+                              <div className="mt-2 p-2 bg-red-500/20 rounded border border-red-500/30">
+                                <p className="text-red-300 italic">🔍 "{item.data?.assistantComment}"</p>
+                              </div>
+                            )}
                           </div>
                         )}
                         {item.type === 'location' && (
-                          <div className="text-xs text-gray-300">
-                            <p>층: {item.data?.floor}층</p>
-                            <p>장소명: {item.data?.name}</p>
+                          <div className="text-xs space-y-1 text-gray-300">
+                            <p>🏢 층: {item.data?.floor}층</p>
+                            {item.data?.description && (
+                              <p className="mt-1">📍 {item.data?.description}</p>
+                            )}
+                            {item.data?.assistantComment && (
+                              <div className="mt-2 p-2 bg-green-500/20 rounded border border-green-500/30">
+                                <p className="text-green-300 italic">🔍 "{item.data?.assistantComment}"</p>
+                              </div>
+                            )}
                           </div>
                         )}
                       </div>
@@ -1822,7 +2131,7 @@ const handlePhoneClose = () => {
                         </div>
                       </div>
 
-                      {/* 정보 영역 */}
+                      {/* 정보 영역 (InvestigationBoard와 동일) */}
                       <div className="p-2 pt-2 pb-3 text-center">
                         {/* 이름 */}
                         <p className="text-sm font-bold text-gray-900 truncate">
@@ -1830,26 +2139,33 @@ const handlePhoneClose = () => {
                         </p>
 
                         {/* 역할/타입 */}
-                        {item.type === 'victim' && (
-                          <p className="text-xs text-gray-500 mt-0.5">피해자</p>
+                        {item.type === 'victim' && item.data?.role && (
+                          <p className="text-xs text-gray-500 mt-0.5">{item.data.role}</p>
                         )}
                         {item.type === 'suspect' && item.data?.role && (
                           <p className="text-xs text-gray-500 mt-0.5">{item.data.role}</p>
                         )}
-                        {item.type === 'location' && (
-                          <p className="text-xs text-gray-500 mt-0.5">사건 장소</p>
-                        )}
 
-                        {/* 설명 (메모, 증거) */}
+                        {/* 설명 (메모, 장소, 증거) */}
                         {item.type === 'memo' && item.data?.text && (
                           <p className="text-[11px] text-gray-600 mt-1 line-clamp-2 leading-tight px-1">
                             {item.data.text}
+                          </p>
+                        )}
+                        {item.type === 'location' && item.data?.description && (
+                          <p className="text-[11px] text-gray-600 mt-1 line-clamp-2 leading-tight px-1">
+                            {item.data.description}
                           </p>
                         )}
                         {item.type === 'evidence' && item.data?.description && (
                           <p className="text-[11px] text-gray-600 mt-1 line-clamp-2 leading-tight px-1">
                             {item.data.description}
                           </p>
+                        )}
+
+                        {/* 장소: 층 정보 (InvestigationBoard와 동일) */}
+                        {item.type === 'location' && item.data?.floor && (
+                          <p className="text-[10px] text-green-600 font-semibold mt-1">{item.data.floor}층</p>
                         )}
                       </div>
                     </div>
@@ -1865,6 +2181,20 @@ const handlePhoneClose = () => {
                 )
               })
             )}
+              </div>
+            </div>
+          </div>
+
+          {/* 범례 (InvestigationBoard와 동일) */}
+          <div className="p-4 flex gap-6 justify-center items-center text-sm border-t border-border">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-1 bg-red-600 rounded" />
+              <span className="text-muted-foreground">확정</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-1 rounded" style={{ backgroundImage: 'repeating-linear-gradient(90deg, #f59e0b 0, #f59e0b 4px, transparent 4px, transparent 8px)' }} />
+              <span className="text-muted-foreground">의심</span>
+            </div>
           </div>
         </div>
       )}
@@ -1879,7 +2209,7 @@ const handlePhoneClose = () => {
           {selectedContact ? (
             <>
               <div className="bg-gray-800 p-3 flex items-center gap-3">
-                <button onClick={() => setSelectedContact(null)} className="p-1 hover:bg-gray-700 rounded">
+                <button onClick={() => { setSelectedContact(null); setSelectedClue(null) }} className="p-1 hover:bg-gray-700 rounded">
                   <ArrowLeft className="w-5 h-5" />
                 </button>
                 <div className="w-10 h-10 rounded-full bg-muted overflow-hidden flex items-center justify-center">
@@ -1909,11 +2239,17 @@ const handlePhoneClose = () => {
                   </div>
                 </div>
 
-                {/* 이미 대화한 용의자면 응답도 표시 (증거별 질문) - 현재 대기 중이 아닐 때만 */}
+                {/* 이미 대화한 용의자면 응답도 표시 (증거별 질문 + 단서 태그) - 현재 대기 중이 아닐 때만 */}
                 {!selectedContact.isHelper && chattedSuspects.includes(selectedContact.id) && !waitingForChatConfirm && (
                   <>
                     <div className="flex justify-end">
                       <div className="max-w-[80%] rounded-2xl px-3 py-2 text-sm bg-primary/20 rounded-br-sm">
+                        {/* 단서 태그 표시 */}
+                        {suspectChats[selectedContact.id]?.clueName && (
+                          <span className="inline-block px-1.5 py-0.5 bg-blue-500/30 text-blue-300 text-xs rounded mr-1 mb-1">
+                            @{suspectChats[selectedContact.id].clueName}
+                          </span>
+                        )}
                         <p>{suspectChats[selectedContact.id]?.question}</p>
                       </div>
                     </div>
@@ -1930,6 +2266,12 @@ const handlePhoneClose = () => {
                   <>
                     <div className="flex justify-end">
                       <div className="max-w-[80%] rounded-2xl px-3 py-2 text-sm bg-primary/20 rounded-br-sm">
+                        {/* 단서 태그 표시 */}
+                        {suspectChats[selectedContact.id]?.clueName && (
+                          <span className="inline-block px-1.5 py-0.5 bg-blue-500/30 text-blue-300 text-xs rounded mr-1 mb-1">
+                            @{suspectChats[selectedContact.id].clueName}
+                          </span>
+                        )}
                         <p>{suspectChats[selectedContact.id]?.question}</p>
                       </div>
                     </div>
@@ -1956,34 +2298,85 @@ const handlePhoneClose = () => {
                 )}
               </div>
 
+              {/* 선택된 단서 표시 */}
+              {selectedClue && (
+                <div className="bg-gray-800 px-3 py-2 border-t border-gray-700 flex items-center gap-2">
+                  <span className="text-xs text-gray-400">첨부 단서:</span>
+                  <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full border border-blue-500/30">
+                    <Search className="w-3 h-3" />
+                    @{selectedClue.name}
+                    <button
+                      onClick={() => setSelectedClue(null)}
+                      className="ml-1 hover:text-blue-200 transition-colors"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </span>
+                </div>
+              )}
+
               <div className="bg-gray-800 p-2">
-                {/* 튜토리얼 안내: 실제 플레이에서는 자유 대화 가능 */}
+                {/* 튜토리얼 안내 */}
                 {!selectedContact.isHelper && (
                   <div className="mb-2 px-3 py-2 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                     <p className="text-[11px] text-blue-400 text-center">
                       🎮 <strong>튜토리얼</strong>에서는 미리 정해진 대화가 진행됩니다.<br/>
-                      <span className="text-blue-300">실제 게임에서는 AI와 자유롭게 대화할 수 있어요!</span>
+                      <span className="text-blue-300">+ 버튼으로 단서를 태그해서 심문해보세요!</span>
                     </p>
                   </div>
                 )}
                 <div className="flex gap-2">
+                  {/* 단서 태그 버튼 - 실제 작동 */}
+                  <div className="relative">
+                    {/* highlightClueBtn 단계에서 + 버튼 강조 안내 */}
+                    {storyStep === 'highlightClueBtn' && (
+                      <div className="absolute -top-12 left-1/2 -translate-x-1/2 whitespace-nowrap animate-bounce z-20">
+                        <div className="bg-red-500 text-white text-[10px] px-2 py-1 rounded-full font-bold shadow-lg">
+                          👇 이 버튼!
+                        </div>
+                      </div>
+                    )}
+                    <button
+                      onClick={() => setClueModalOpen(true)}
+                      disabled={selectedContact.isHelper || discoveredEvidence.length === 0}
+                      className={cn(
+                        "w-10 h-10 rounded-full flex items-center justify-center transition-colors",
+                        // highlightClueBtn 단계에서 빨간색 강조
+                        storyStep === 'highlightClueBtn'
+                          ? "bg-red-500/20 text-red-400 border-2 border-red-500 ring-4 ring-red-500/50"
+                          : selectedClue
+                            ? "bg-blue-500/20 text-blue-400 border border-blue-500/30"
+                            : discoveredEvidence.length === 0
+                              ? "bg-gray-700 text-gray-500 cursor-not-allowed"
+                              : "bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-gray-200"
+                      )}
+                      style={storyStep === 'highlightClueBtn' ? { animation: 'pulse 1s ease-in-out infinite' } : {}}
+                      title="단서 첨부"
+                    >
+                      <Plus className={cn("w-5 h-5", storyStep === 'highlightClueBtn' && "text-red-400")} />
+                    </button>
+                  </div>
                   <input
                     type="text"
                     value={message}
                     onChange={(e) => setMessage(e.target.value)}
                     onKeyDown={(e) => {
-                      // 메시지 입력 중 WASD 등 키 입력이 게임으로 전달되지 않도록 차단
-                      e.preventDefault()
+                      // Enter 키로 메시지 전송
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        handleSendMessage()
+                        return
+                      }
+                      // WASD 등 게임 조작키가 게임으로 전달되지 않도록 차단
+                      // 단, 일반 텍스트 입력은 허용
                       e.stopPropagation()
-                      e.stopImmediatePropagation()
-                      if (e.key === 'Enter') handleSendMessage()
                     }}
                     onFocus={(e) => {
                       // 포커스 시 게임 컨테이너 블러 처리
                       const gameContainer = document.querySelector('[tabindex="0"]')
                       if (gameContainer) gameContainer.blur()
                     }}
-                    placeholder={selectedContact.isHelper ? "힌트 요청..." : "질문하기..."}
+                    placeholder={selectedClue ? `@${selectedClue.name} 관련 질문...` : (selectedContact.isHelper ? "힌트 요청..." : "질문하기...")}
                     className="flex-1 bg-gray-700 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                     disabled={selectedContact.isHelper}
                   />
@@ -1999,6 +2392,85 @@ const handlePhoneClose = () => {
                   </button>
                 </div>
               </div>
+
+              {/* 단서 선택 모달 */}
+              {clueModalOpen && (
+                <div className="absolute inset-0 bg-black/80 z-10 flex flex-col rounded-3xl overflow-hidden">
+                  <div className="bg-gray-800 p-3 flex items-center justify-between border-b border-gray-700">
+                    <h3 className="font-bold text-sm">단서 선택</h3>
+                    <button
+                      onClick={() => setClueModalOpen(false)}
+                      className="p-1 hover:bg-gray-700 rounded-lg transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-y-auto bg-gray-950 p-2">
+                    {discoveredEvidence.length === 0 ? (
+                      <div className="text-center text-gray-500 py-8">
+                        <Search className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">발견한 단서가 없습니다</p>
+                        <p className="text-xs mt-1">현장을 조사하여 단서를 찾아보세요</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        {discoveredEvidence.map((clue) => (
+                          <button
+                            key={clue.id}
+                            onClick={() => {
+                              setSelectedClue(clue)
+                              setClueModalOpen(false)
+                              // waitClueSelect 단계에서 단서 선택하면 clueTagIntro2 대화 표시
+                              if (storyStep === 'waitClueSelect') {
+                                setTimeout(() => {
+                                  setStoryStep('clueTagIntro2')
+                                  setShowDialog(true)
+                                  setIsDialogActive(true)
+                                }, 300)
+                              }
+                            }}
+                            className={cn(
+                              "w-full p-2 rounded-lg text-left transition-colors flex items-center gap-3",
+                              selectedClue?.id === clue.id
+                                ? "bg-blue-500/20 border border-blue-500/30"
+                                : storyStep === 'waitClueSelect'
+                                  ? "bg-red-500/10 border-2 border-red-500 ring-2 ring-red-500/50"
+                                  : "bg-gray-800 hover:bg-gray-700"
+                            )}
+                            style={storyStep === 'waitClueSelect' ? { animation: 'pulse 1.5s ease-in-out infinite' } : {}}
+                          >
+                            {/* 단서 아이콘 */}
+                            <div className="w-12 h-12 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0 flex items-center justify-center">
+                              <Search className="w-5 h-5 text-gray-500" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-sm truncate">{clue.name}</p>
+                              {clue.location && (
+                                <p className="text-xs text-gray-400 truncate">{clue.location}</p>
+                              )}
+                            </div>
+                            {selectedClue?.id === clue.id && (
+                              <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
+                                <span className="text-white text-xs">✓</span>
+                              </div>
+                            )}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  {selectedClue && (
+                    <div className="bg-gray-800 p-3 border-t border-gray-700">
+                      <button
+                        onClick={() => setClueModalOpen(false)}
+                        className="w-full py-2 bg-blue-500 text-white rounded-lg font-bold text-sm hover:bg-blue-600 transition-colors"
+                      >
+                        @{selectedClue.name} 첨부하기
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <>
@@ -2020,7 +2492,10 @@ const handlePhoneClose = () => {
                   return (
                     <button
                       key={contact.id}
-                      onClick={() => setSelectedContact(contact)}
+                      onClick={() => {
+                        setSelectedContact(contact)
+                        setSelectedClue(null) // 연락처 변경 시 단서 초기화
+                      }}
                       className={cn(
                         "w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors border-b border-gray-800 relative",
                         !contact.isHelper && chattedSuspects.includes(contact.id) && "bg-green-500/5",
@@ -2106,6 +2581,7 @@ const handlePhoneClose = () => {
         </div>
       )}
 
+
       {/* ===== 메모 추가 모달 ===== */}
       {memoModalOpen && !isDialogActive && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
@@ -2128,172 +2604,214 @@ const handlePhoneClose = () => {
         </div>
       )}
 
-      {/* ===== 최종 제출 모달 (GameRoom 스타일) ===== */}
+      {/* ===== 최종 제출 모달 (SubmitAnswerModal 스타일) ===== */}
       {submitFormOpen && !isDialogActive && (
-        <div className="fixed inset-0 z-[80] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/80" />
-          <div className="relative z-10 w-full max-w-5xl bg-card border border-border rounded-xl overflow-hidden max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4">
+          <div className="bg-card border border-border rounded-xl w-full max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             <div className="p-4 border-b border-border">
-              <h3 className="text-xl font-bold gold-glow flex items-center gap-2">
-                <Target className="w-6 h-6" />최종 정답 제출
-              </h3>
+              <h2 className="text-xl font-bold gold-glow">최종 정답 제출</h2>
               <p className="text-sm text-muted-foreground mt-1">
-                확정(빨간선)으로 연결된 카드들이 정답으로 제출됩니다.
+                확정(빨간선)으로 연결된 카드들만 정답으로 제출됩니다. 제출 단계에서는 노란선/메모 추가가 없습니다.
               </p>
             </div>
-            <div className="flex-1 p-4 overflow-auto space-y-4">
-              {/* 추리보드 미리보기 (실제 보드 그대로 표시) */}
-              <div className="bg-muted/20 border border-border rounded-xl p-3">
-                <p className="text-sm font-bold mb-2 text-primary">📌 제출될 추리보드</p>
-                <div
-                  className="relative h-[350px] overflow-auto rounded-lg"
-                  style={{
-                    backgroundImage: 'url(/board/board.jpg)',
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                  }}
-                >
-                  {/* 모든 연결선 표시 (실 이미지 사용) */}
-                  {connections.map((conn, idx) => {
-                    const fromItem = boardItems.find(i => i.id === conn.from)
-                    const toItem = boardItems.find(i => i.id === conn.to)
-                    if (!fromItem || !toItem) return null
 
-                    const fromX = fromItem.x + 88, fromY = fromItem.y + 100
-                    const toX = toItem.x + 88, toY = toItem.y + 100
-                    const dx = toX - fromX, dy = toY - fromY
-                    const distance = Math.sqrt(dx * dx + dy * dy)
-                    const angle = Math.atan2(dy, dx) * 180 / Math.PI
-                    const midX = (fromX + toX) / 2, midY = (fromY + toY) / 2
-                    const sag = Math.min(distance * 0.08, 25)
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="grid gap-4 lg:grid-cols-2 lg:items-start">
+                {/* 왼쪽: 추리보드 미리보기 */}
+                <div className="bg-muted/20 border border-border rounded-xl p-3">
+                  <p className="text-sm font-bold mb-2 text-primary">📌 제출 보드</p>
+                  <div
+                    className="relative h-[400px] overflow-hidden rounded-lg"
+                    style={{
+                      backgroundImage: 'url(/board/board.jpg)',
+                      backgroundSize: 'cover',
+                      backgroundPosition: 'center',
+                    }}
+                  >
+                    {/* 축소된 보드 영역 */}
+                    <div
+                      className="absolute inset-0 origin-top-left"
+                      style={{ transform: 'scale(0.35)', width: '286%', height: '286%' }}
+                    >
+                    {/* 빨간선(확정)만 표시 */}
+                    {connections.filter(c => c.type === 'red').map((conn, idx) => {
+                      const fromItem = boardItems.find(i => i.id === conn.from)
+                      const toItem = boardItems.find(i => i.id === conn.to)
+                      if (!fromItem || !toItem) return null
 
-                    return (
-                      <div
-                        key={idx}
-                        className="absolute pointer-events-none"
-                        style={{
-                          left: midX,
-                          top: midY,
-                          width: distance,
-                          height: 40,
-                          transform: `translate(-50%, -50%) rotate(${angle}deg)`,
-                          transformOrigin: 'center center',
-                          zIndex: 1,
-                        }}
-                      >
+                      const fromX = fromItem.x + 88, fromY = fromItem.y + 100
+                      const toX = toItem.x + 88, toY = toItem.y + 100
+                      const dx = toX - fromX, dy = toY - fromY
+                      const distance = Math.sqrt(dx * dx + dy * dy)
+                      const angle = Math.atan2(dy, dx) * 180 / Math.PI
+                      const midX = (fromX + toX) / 2, midY = (fromY + toY) / 2
+                      const sag = Math.min(distance * 0.08, 25)
+
+                      return (
                         <div
-                          className="w-full h-full"
+                          key={idx}
+                          className="absolute pointer-events-none"
                           style={{
-                            backgroundImage: 'url(/board/thread.png)',
-                            backgroundSize: 'auto 100%',
-                            backgroundRepeat: 'repeat-x',
-                            backgroundPosition: 'center',
-                            filter: conn.type === 'red' ? 'hue-rotate(-30deg) saturate(2) brightness(1.2)' : 'sepia(1) saturate(3) hue-rotate(10deg)',
-                            borderRadius: `0 0 ${sag}px ${sag}px`,
-                            transform: `scaleY(${1 + sag/50})`,
+                            left: midX,
+                            top: midY,
+                            width: distance,
+                            height: 40,
+                            transform: `translate(-50%, -50%) rotate(${angle}deg)`,
+                            transformOrigin: 'center center',
+                            zIndex: 1,
                           }}
-                        />
-                      </div>
+                        >
+                          <div
+                            className="w-full h-full"
+                            style={{
+                              backgroundImage: 'url(/board/thread.png)',
+                              backgroundSize: 'auto 100%',
+                              backgroundRepeat: 'repeat-x',
+                              backgroundPosition: 'center',
+                              filter: 'drop-shadow(1px 2px 2px rgba(0,0,0,0.3))',
+                              borderRadius: `0 0 ${sag}px ${sag}px`,
+                              transform: `scaleY(${1 + sag/50})`,
+                            }}
+                          />
+                        </div>
+                      )
+                    })}
+                    {/* 빨간선으로 연결된 카드들만 표시 (메모 제외) */}
+                    {(() => {
+                      const redConnections = connections.filter(c => c.type === 'red')
+                      const connectedIds = new Set(redConnections.flatMap(c => [c.from, c.to]))
+                      return boardItems
+                        .filter(item => connectedIds.has(item.id) && item.type !== 'memo')
+                        .map(item => {
+                          const typeConfig = {
+                            victim: { label: '피해자', color: 'bg-red-500' },
+                            suspect: { label: '용의자', color: 'bg-amber-500' },
+                            evidence: { label: '증거', color: 'bg-blue-500' },
+                            location: { label: '장소', color: 'bg-green-500' },
+                          }
+                          const config = typeConfig[item.type] || { label: '기타', color: 'bg-gray-500' }
+                          const hash = Math.abs((item.id || '').charCodeAt(0) * 31) % 10
+                          const rotation = (hash % 2 === 0 ? 1 : -1) * 2
+
+                          return (
+                            <div
+                              key={item.id}
+                              className="absolute"
+                              style={{ left: item.x, top: item.y, zIndex: 2 }}
+                            >
+                              <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10">
+                                <Pin className="w-4 h-4 text-red-600 fill-red-600" />
+                              </div>
+                              <div
+                                className="w-32 bg-white shadow-lg"
+                                style={{ transform: `rotate(${rotation}deg)` }}
+                              >
+                                <div className="p-1.5 pb-0">
+                                  <div className="w-full h-20 flex items-center justify-center relative bg-gradient-to-br from-gray-200 to-gray-300">
+                                    <span className="text-3xl">
+                                      {item.type === 'evidence' ? '🔍' : item.type === 'location' ? '📍' : '👤'}
+                                    </span>
+                                    <span className={cn("absolute top-1 right-1 px-1.5 py-0.5 text-[9px] font-bold text-white rounded", config.color)}>
+                                      {config.label}
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="p-1.5 pt-1 pb-2 text-center">
+                                  <p className="text-xs font-bold text-gray-900 truncate">
+                                    {item.data?.name || '이름 없음'}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        })
+                    })()}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 오른쪽: 검증 및 입력 폼 */}
+                <div className="space-y-4">
+                  {/* 검증 상태 표시 */}
+                  {(() => {
+                    const redCount = connections.filter(c => c.type === 'red').length
+                    const connectedIds = new Set(connections.filter(c => c.type === 'red').flatMap(c => [c.from, c.to]))
+                    const connectedTypes = new Set(
+                      boardItems.filter(item => connectedIds.has(item.id)).map(item => item.type)
                     )
-                  })}
-                  {/* 카드들 (실제 위치 그대로) */}
-                  {boardItems.map(item => {
-                    const typeConfig = {
-                      victim: { label: '피해자', color: 'bg-red-500' },
-                      suspect: { label: '용의자', color: 'bg-amber-500' },
-                      evidence: { label: '증거', color: 'bg-blue-500' },
-                      location: { label: '장소', color: 'bg-green-500' },
-                      memo: { label: '메모', color: 'bg-gray-500' },
+                    const requiredTypes = ['victim', 'suspect', 'location', 'evidence']
+                    const missingTypes = requiredTypes.filter(t => !connectedTypes.has(t))
+                    const typeNames = { victim: '피해자', suspect: '용의자', location: '장소', evidence: '증거' }
+
+                    const hasError = redCount !== 3 || missingTypes.length > 0
+
+                    if (hasError) {
+                      let errorMsg = ''
+                      if (redCount !== 3) {
+                        errorMsg = `빨간선 연결이 정확히 3개여야 합니다. (현재: ${redCount}개)`
+                      } else if (missingTypes.length > 0) {
+                        errorMsg = `모든 타입이 연결되어야 합니다. (미연결: ${missingTypes.map(t => typeNames[t]).join(', ')})`
+                      }
+                      return (
+                        <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-4">
+                          ⚠️ {errorMsg}
+                        </div>
+                      )
                     }
-                    const config = typeConfig[item.type] || typeConfig.memo
-                    const hash = Math.abs((item.id || '').charCodeAt(0) * 31) % 10
-                    const rotation = (hash % 2 === 0 ? 1 : -1) * 2
 
                     return (
-                      <div
-                        key={item.id}
-                        className="absolute"
-                        style={{ left: item.x, top: item.y, zIndex: 2 }}
-                      >
-                        {/* 핀 */}
-                        <div className="absolute -top-2 left-1/2 -translate-x-1/2 z-10">
-                          <Pin className="w-4 h-4 text-red-600 fill-red-600" />
-                        </div>
-                        {/* 폴라로이드 카드 */}
-                        <div
-                          className="w-32 bg-white shadow-lg"
-                          style={{ transform: `rotate(${rotation}deg)` }}
-                        >
-                          <div className="p-1.5 pb-0">
-                            <div className={cn(
-                              "w-full h-20 flex items-center justify-center relative",
-                              "bg-gradient-to-br from-gray-200 to-gray-300"
-                            )}>
-                              <span className="text-3xl">
-                                {item.type === 'memo' ? '📝' : item.type === 'evidence' ? '🔍' : item.type === 'location' ? '📍' : '👤'}
-                              </span>
-                              <span className={cn("absolute top-1 right-1 px-1.5 py-0.5 text-[9px] font-bold text-white rounded", config.color)}>
-                                {config.label}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="p-1.5 pt-1 pb-2 text-center">
-                            <p className="text-xs font-bold text-gray-900 truncate">
-                              {item.type === 'memo' ? '메모' : item.data?.name}
-                            </p>
-                          </div>
-                        </div>
+                      <div className="text-sm text-green-300 bg-green-500/10 border border-green-500/30 rounded-lg p-4">
+                        ✅ 제출 조건을 모두 충족했습니다!
                       </div>
                     )
-                  })}
+                  })()}
+
+                  {/* 제출 조건 안내 */}
+                  <div className="text-sm text-muted-foreground bg-muted/20 border border-border rounded-lg p-4">
+                    <p className="font-semibold mb-2">제출 조건:</p>
+                    <ul className="list-disc list-inside space-y-1">
+                      <li>빨간선(확정) 연결이 정확히 <span className="text-red-300 font-bold">3개</span>여야 합니다</li>
+                      <li>피해자, 용의자, 장소, 증거 <span className="text-red-300 font-bold">4가지 타입</span>이 모두 연결되어야 합니다</li>
+                    </ul>
+                  </div>
+
+                  {/* 범행 동기 입력 폼 */}
+                  <div className="bg-muted/20 border border-border rounded-xl p-4">
+                    <label className="block text-sm font-semibold mb-2">
+                      범행 동기 <span className="text-red-400">*</span>
+                    </label>
+                    <textarea
+                      value={submitForm.motive}
+                      onChange={(e) => setSubmitForm(prev => ({ ...prev, motive: e.target.value }))}
+                      placeholder="범인의 범행 동기를 추론하여 입력해주세요..."
+                      className="w-full min-h-[120px] p-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
+                      maxLength={500}
+                    />
+                    <div className="flex justify-between mt-2 text-xs text-muted-foreground">
+                      <span>최종 정답 제출 전에 범행 동기를 입력해주세요</span>
+                      <span>{submitForm.motive.length}/500</span>
+                    </div>
+                  </div>
+
+                  {/* 튜토리얼 힌트 */}
+                  <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <p className="text-sm text-amber-300">
+                      💡 <strong>튜토리얼 힌트:</strong> 이영희가 범인입니다. 동기는 "유산 독차지" 또는 "상속을 위해" 등으로 입력해보세요.
+                    </p>
+                  </div>
                 </div>
-              </div>
-
-              {/* 제출 조건 안내 */}
-              <div className="text-sm bg-muted/20 border border-border rounded-lg p-4">
-                <p className="font-semibold mb-2">📋 제출 조건:</p>
-                <ul className="list-disc list-inside space-y-1 text-muted-foreground">
-                  <li>빨간선(확정) 연결이 정확히 <span className="text-red-400 font-bold">3개</span>여야 합니다</li>
-                  <li>피해자, 용의자, 장소, 증거 <span className="text-red-400 font-bold">4가지 타입</span>이 모두 연결되어야 합니다</li>
-                </ul>
-                <p className="text-xs text-primary mt-2">
-                  현재 빨간선: {connections.filter(c => c.type === 'red').length}개
-                </p>
-              </div>
-
-              {/* 범행 동기 입력 (GameRoom 스타일) */}
-              <div className="bg-muted/20 border border-border rounded-xl p-4">
-                <label className="block text-sm font-semibold mb-2">
-                  범행 동기 <span className="text-red-400">*</span>
-                </label>
-                <textarea
-                  value={submitForm.motive}
-                  onChange={(e) => setSubmitForm(prev => ({ ...prev, motive: e.target.value }))}
-                  placeholder="범인의 범행 동기를 추론하여 입력해주세요..."
-                  className="w-full min-h-[80px] p-3 bg-background border border-border rounded-lg text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                  maxLength={500}
-                />
-                <div className="flex justify-between mt-2 text-xs text-muted-foreground">
-                  <span>최종 정답 제출 전에 범행 동기를 입력해주세요</span>
-                  <span>{submitForm.motive.length}/500</span>
-                </div>
-              </div>
-
-              <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
-                <p className="text-sm text-amber-300">
-                  💡 <strong>튜토리얼 힌트:</strong> 이영희가 범인입니다. 동기는 "유산 독차지" 또는 "상속을 위해" 등으로 입력해보세요.
-                </p>
               </div>
             </div>
+
             <div className="p-4 border-t border-border flex gap-3">
               <Button variant="outline" className="flex-1" onClick={() => setSubmitFormOpen(false)}>취소</Button>
               <Button
                 variant="neon"
                 className="flex-1"
                 onClick={handleFinalSubmit}
-                disabled={!submitForm.motive.trim() || connections.filter(c => c.type === 'red').length < 3}
+                disabled={!submitForm.motive.trim() || connections.filter(c => c.type === 'red').length !== 3}
               >
-                <Send className="w-4 h-4 mr-2" />제출하기
+                최종 제출하기
               </Button>
             </div>
           </div>
@@ -2338,29 +2856,8 @@ const handlePhoneClose = () => {
               </div>
             </div>
           )}
-
           {/* 보드 연결 힌트 - 빨간선 강조 */}
-          {storyStep === 'waitBoardConnect' && boardPanelOpen && (
-            <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[80]">
-              <div className="bg-red-600 text-white px-8 py-4 rounded-xl shadow-2xl text-center border-4 border-white">
-                <p className="text-xl font-bold mb-2">🔴 빨간선(확정)으로 연결하세요!</p>
-                <p className="text-sm opacity-90 mb-1">상단 <span className="bg-red-700 px-2 py-0.5 rounded">"확정"</span> 버튼 클릭!</p>
-                <p className="text-sm opacity-90">피해자 → 이영희 → 식칼 → 침실 순서로 클릭</p>
-                <p className="text-xs mt-2 text-yellow-200 font-bold">⚠️ 빨간선 3개가 있어야 제출 가능!</p>
-              </div>
-            </div>
-          )}
-
           {/* 보드 저장 힌트 - 저장 강조 (빨간색으로 통일) */}
-          {storyStep === 'waitBoardSave' && boardPanelOpen && (
-            <div className="fixed top-20 left-1/2 -translate-x-1/2 z-[80]">
-              <div className="bg-red-600 text-white px-8 py-4 rounded-xl shadow-2xl text-center border-4 border-white">
-                <p className="text-xl font-bold mb-2">💾 저장 버튼을 꼭 눌러주세요!</p>
-                <p className="text-sm opacity-90">저장하지 않으면 추리보드가 사라져요!</p>
-                <p className="text-xs mt-2 text-yellow-200 font-bold">⚠️ 저장 후 닫기 버튼 클릭!</p>
-              </div>
-            </div>
-          )}
         </>
       )}
     </div>

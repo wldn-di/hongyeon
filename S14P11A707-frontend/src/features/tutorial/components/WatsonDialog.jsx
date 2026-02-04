@@ -20,8 +20,8 @@ export default function WatsonDialog({ dialog, onComplete }) {
   const isLastMessage = messageIndex === dialog.messages.length - 1
 
   const handleNext = () => {
+    // 타이핑 중이면 스킵 불가 - 타이핑이 끝날 때까지 대기
     if (isTyping) {
-      setIsTyping(false)
       return
     }
 
@@ -33,8 +33,17 @@ export default function WatsonDialog({ dialog, onComplete }) {
     }
   }
 
+  // 스페이스바/클릭 스킵 비활성화 - 타이핑이 끝나야만 진행 가능
   useEffect(() => {
     const handleKeyDown = (e) => {
+      // 타이핑 중에는 스페이스바 무시
+      if (isTyping) {
+        if (e.code === 'Space') {
+          e.preventDefault()
+        }
+        return
+      }
+
       if (e.code === 'Space') {
         e.preventDefault()
         handleNext()
@@ -63,7 +72,7 @@ export default function WatsonDialog({ dialog, onComplete }) {
 
             <div className="min-h-[80px] text-lg leading-relaxed mb-4 pl-2 border-l-2 border-primary/30">
               {isTyping ? (
-                <TypingText text={currentMessage} speed={25} onComplete={() => setIsTyping(false)} />
+                <TypingText text={currentMessage} speed={18} onComplete={() => setIsTyping(false)} />
               ) : (
                 currentMessage
               )}
@@ -71,10 +80,20 @@ export default function WatsonDialog({ dialog, onComplete }) {
 
             <div className="flex items-center justify-between pt-2 border-t border-border/50">
               <p className="text-xs text-muted-foreground">
-                <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Space</kbd> 또는 클릭으로 진행
+                {isTyping ? (
+                  <span className="text-amber-400">⏳ 대화를 읽어주세요...</span>
+                ) : (
+                  <><kbd className="px-1.5 py-0.5 bg-muted rounded text-xs">Space</kbd> 또는 클릭으로 진행</>
+                )}
               </p>
-              <Button variant="neon" size="sm" onClick={handleNext} className="min-w-[120px]">
-                {isTyping ? '스킵' : isLastMessage ? '알겠어요!' : '다음'}
+              <Button
+                variant="neon"
+                size="sm"
+                onClick={handleNext}
+                className="min-w-[120px]"
+                disabled={isTyping}
+              >
+                {isTyping ? '읽는 중...' : isLastMessage ? '알겠어요!' : '다음'}
                 {!isTyping && !isLastMessage && <ArrowRight className="w-4 h-4 ml-1" />}
               </Button>
             </div>

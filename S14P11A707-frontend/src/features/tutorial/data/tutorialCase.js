@@ -55,9 +55,39 @@ export const tutorialVictim = {
 }
 
 export const tutorialSuspects = [
-  { id: 'suspect-1', name: '김철수', role: '집사', image: null, isCulprit: false },
-  { id: 'suspect-2', name: '이영희', role: '피해자의 딸', image: null, isCulprit: true },
-  { id: 'suspect-3', name: '박민수', role: '경호원', image: null, isCulprit: false },
+  {
+    id: 'suspect-1',
+    name: '김철수',
+    role: '집사',
+    age: 58,
+    gender: '남성',
+    occupation: '저택 집사',
+    oneLiner: '30년간 박 회장님을 모셔온 충직한 집사입니다.',
+    image: null,
+    isCulprit: false
+  },
+  {
+    id: 'suspect-2',
+    name: '이영희',
+    role: '피해자의 딸',
+    age: 32,
+    gender: '여성',
+    occupation: '무직 (상속인)',
+    oneLiner: '아버지와 유산 문제로 갈등을 겪고 있었습니다.',
+    image: null,
+    isCulprit: true
+  },
+  {
+    id: 'suspect-3',
+    name: '박민수',
+    role: '경호원',
+    age: 45,
+    gender: '남성',
+    occupation: '개인 경호원',
+    oneLiner: '10년차 경호원으로, 저택의 보안을 담당합니다.',
+    image: null,
+    isCulprit: false
+  },
 ]
 
 export const tutorialEvidence = [
@@ -65,32 +95,59 @@ export const tutorialEvidence = [
     id: 1,
     name: '혈흔이 묻은 식칼',
     location: '지하실 (Room 1)',
+    floor: 1,
     description: '누군가의 혈흔이 묻어있는 식칼이다.\n\n🔍 분석 결과:\n• 손잡이에 마른 진흙과 미세한 섬유가 엉겨 있음\n• 최근에 급하게 씻어낸 흔적 발견\n• 섬유는 이영희의 옷 재질과 일치\n\n💡 핵심: 급하게 세척했지만 혈흔이 남아있다.',
     storyHint: '이영희의 옷 섬유가 묻어있다...',
+    assistantComment: '저기 칼날 끝에 누군가의 지문이 묻어있는 것 같아요! 급하게 닦았지만 미세한 혈흔이 남아있네요.',
     suggestSuspect: 'suspect-2',
   },
   {
     id: 2,
     name: '구겨진 편지',
     location: '지하실 (Room 2)',
+    floor: 2,
     description: '급히 찢었다가 다시 주워 담은 듯한 편지 조각이다.\n\n🔍 분석 결과:\n• "…오늘 밤… 엘리베이터…" 라는 단어가 희미하게 읽힘\n• 잉크가 번져 있어 원문 복원 필요\n• 필적이 이영희의 것과 92% 일치\n\n💡 핵심: 이영희가 쓴 편지를 왜 찢으려 했을까?',
     storyHint: '이영희의 필적... 왜 찢으려 했을까?',
+    assistantComment: '이 편지, 누군가 급하게 찢으려다가 포기한 것 같아요. 필적 분석을 해볼까요?',
     suggestSuspect: 'suspect-1',
   },
   {
     id: 3,
     name: '낡은 열쇠',
     location: '지하실 (Room 3)',
+    floor: 3,
     description: '묵직한 금속 열쇠다.\n\n🔍 분석 결과:\n• 표면에 긁힌 자국이 많음\n• 숫자 "3"이 새겨져 있음\n• 피해자의 서재 금고 번호가 "3"번\n\n💡 핵심: 금고에는 유언장이 보관되어 있었다.',
     storyHint: '3번 금고... 유언장이 들어있었다.',
+    assistantComment: '열쇠에 숫자 3이 새겨져 있어요! 저택 어딘가에 3번 금고가 있을 것 같은데요.',
     suggestSuspect: 'suspect-3',
   },
 ]
 
 export const tutorialRooms = [
-  { id: 1, floor: 1, name: '1층 - 침실', unlocked: true },
-  { id: 2, floor: 2, name: '2층 - 서재', unlocked: true },
-  { id: 3, floor: 3, name: '3층 - 거실', unlocked: false },
+  {
+    id: 1,
+    floor: 1,
+    name: '1층 - 침실',
+    description: '피해자가 마지막으로 잠들었던 침실입니다. 침대 시트에 핏자국이 남아있습니다.',
+    assistantComment: '방 안이 어수선해요... 누군가 급하게 물건을 뒤진 흔적이 보여요.',
+    unlocked: true
+  },
+  {
+    id: 2,
+    floor: 2,
+    name: '2층 - 서재',
+    description: '피해자의 개인 서재입니다. 중요한 문서들이 보관되어 있었습니다.',
+    assistantComment: '서류들이 바닥에 흩어져 있어요. 누가 뭔가를 찾고 있었던 것 같아요.',
+    unlocked: true
+  },
+  {
+    id: 3,
+    floor: 3,
+    name: '3층 - 거실',
+    description: '저택의 메인 거실입니다. 가족 모임이 열리던 장소입니다.',
+    assistantComment: '고급스러운 가구들 사이에 이상한 긴장감이 감돌아요...',
+    unlocked: false
+  },
 ]
 
 // AgitRoom clue placement (local room coordinates)
@@ -151,14 +208,14 @@ export const watsonDialogs = {
     messages: [
       '혈흔이 묻은 식칼을 찾았어요!',
       '급하게 씻은 흔적이 있고, 이영희 씨 옷의 섬유가 묻어있대요.',
-      '왼쪽 증거 목록에 추가됐어요. 클릭해서 자세히 확인해보세요!',
+      '왼쪽 증거 목록에 추가됐어요. 마우스를 올려서 자세히 확인해보세요!',
     ],
   },
   evidenceListIntro: {
     speaker: '왓슨',
     avatar: '🧑‍💼',
     messages: [
-      '증거를 클릭하면 이렇게 상세 정보를 볼 수 있어요.',
+      '이렇게 수사 팔레트 목록에서 마우스를 올리면 상세 정보를 볼 수 있어요!',
       '이제 오른쪽을 보세요. 수사 로그가 업데이트됐을 거에요.',
     ],
   },
@@ -177,7 +234,21 @@ export const watsonDialogs = {
     messages: [
       '이 증거... 이영희 씨한테 물어보면 어떨까요?',
       '휴대폰으로 용의자에게 직접 질문할 수 있어요.',
-      '📱 버튼을 눌러서 이영희 씨와 대화해보세요!',
+    ],
+  },
+  clueTagIntro1: {
+    speaker: '왓슨',
+    avatar: '🧑‍💼',
+    messages: [
+      '📱 이제 이영희 씨와 대화해볼게요!',
+    ],
+  },
+  clueTagIntro2: {
+    speaker: '왓슨',
+    avatar: '🧑‍💼',
+    messages: [
+      '💡 이렇게 왼쪽의 + 버튼을 눌러 단서를 선택하고, 태그해서 심문할 수 있어요!',
+      '🏷️ 확실한 단서를 태그해 용의자가 발뺌하지 못하도록 막아주세요!',
     ],
   },
   secondClue: {
@@ -224,7 +295,7 @@ export const watsonDialogs = {
     avatar: '🧑‍💼',
     messages: [
       '📌 추리보드 사용법을 알려드릴게요!',
-      '1️⃣ 왼쪽 패널에서 항목을 드래그해서 추리보드에 올릴 수 있어요.',
+      '1️⃣ 수사 팔레트널에서 항목을 드래그해서 추리보드에 올릴 수 있어요.',
       '2️⃣ 카드 위에 마우스를 올리면 상세정보를 볼 수 있어요.',
       '3️⃣ "확정"(빨간선) 또는 "의심"(노란선) 버튼 클릭 후 카드 2개를 클릭하면 연결돼요!',
       '4️⃣ 연결선을 클릭하면 삭제할 수 있어요.',
@@ -235,9 +306,6 @@ export const watsonDialogs = {
     avatar: '🧑‍💼',
     messages: [
       '🎯 이제 직접 해볼게요!',
-      '✨ 왼쪽 패널에서 깜빡이는 항목들을 보드에 드래그하세요!',
-      '📍 이영희 씨, 혈흔이 묻은 식칼, 1층 - 침실이에요!',
-      '다 추가하면 다음 단계로 넘어갈게요!',
     ],
   },
   boardConnect: {
@@ -248,6 +316,7 @@ export const watsonDialogs = {
       '1️⃣ 상단 "확정" 버튼(빨간선)을 클릭하세요.',
       '2️⃣ 피해자와 이영희, 혈흔이 묻은 식칼, 그리고 침실을 빨간 실로 연결하세요!',
       '💡 힌트: 4개 항목이 모두 연결되어야 제출할 수 있어요.',
+      '참! 연결하는 순서는 상관없으니, 4개 항목을 모두 연결만 해주세요!',
     ],
   },
   boardSave: {
@@ -300,4 +369,3 @@ export const watsonDialogs = {
     ],
   },
 }
-
