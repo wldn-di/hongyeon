@@ -162,8 +162,9 @@ public class ImagePromptNode implements ScenarioV2Node {
                 APPEARANCE:
                 %s
                 STYLE:
-                - cinematic noir lighting, realistic textures, 8k quality
-                - dramatic shadows, professional photography
+                - black-and-white monochrome instant-film (Polaroid) photo aesthetic
+                - film grain/noise, dust/scratches, slight vignette, soft focus
+                - cinematic noir lighting, dramatic shadows
                 - Atmosphere: mysterious, crime scene victim, tragic mood
                 """.formatted(
                 visualBiblePrefix,
@@ -211,8 +212,9 @@ public class ImagePromptNode implements ScenarioV2Node {
                     APPEARANCE:
                     %s
                     STYLE:
-                    - cinematic noir lighting, realistic textures, 8k quality
-                    - dramatic shadows, professional photography
+                    - black-and-white monochrome instant-film (Polaroid) photo aesthetic
+                    - film grain/noise, dust/scratches, slight vignette, soft focus
+                    - cinematic noir lighting, dramatic shadows
                     - Atmosphere: suspicious, hiding something, interrogation room mood
                     """.formatted(
                     visualBiblePrefix,
@@ -249,7 +251,9 @@ public class ImagePromptNode implements ScenarioV2Node {
                     Description: %s
                     Importance: %s
                     %s
-                    Tone: realistic, cinematic, detailed
+                    STYLE:
+                    - black-and-white monochrome evidence photo, instant-film (Polaroid) aesthetic
+                    - film grain/noise, dust/scratches, slight vignette, soft focus
                     """.formatted(
                             visualBiblePrefix,
                             clue.getName(),
@@ -274,7 +278,9 @@ public class ImagePromptNode implements ScenarioV2Node {
                     Room Type: %s
                     Room Name: %s
                     Description: %s
-                    Style: first-person view, atmospheric, noir, cinematic, realistic
+                    STYLE:
+                    - first-person view, atmospheric, noir, cinematic, realistic
+                    - black-and-white monochrome instant-film (Polaroid) photograph, film grain/noise, dust/scratches
                     """.formatted(
                             visualBiblePrefix,
                             room.getFloorNumber(),
@@ -338,6 +344,9 @@ public class ImagePromptNode implements ScenarioV2Node {
     private String buildVisualBiblePrefix(Scenario scenario, ScenarioV2State state) {
         StringBuilder sb = new StringBuilder();
         sb.append("VISUAL CONSISTENCY (apply to all images):\n");
+        sb.append("- Output medium: black-and-white monochrome photo ONLY (no color).\n");
+        sb.append("- Aesthetic: noisy analog instant-film (Polaroid) photo; film grain, dust/scratches, slight vignette, soft focus.\n");
+        sb.append("- Continuity: props/clothing/architecture must match Era/Locale/Season/Time of day.\n");
 
         JsonNode storyConfig = scenario.getStoryConfigJson();
         JsonNode visualBible = storyConfig == null ? null : storyConfig.path("visual_bible_json");

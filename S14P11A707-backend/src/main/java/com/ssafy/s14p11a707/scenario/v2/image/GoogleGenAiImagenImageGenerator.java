@@ -7,7 +7,14 @@ import com.google.genai.types.SafetyFilterLevel;
 import com.google.genai.types.GenerateImagesConfig;
 import com.google.genai.types.GenerateImagesResponse;
 import com.google.genai.types.Image;
+import java.awt.Color;
+import java.awt.Graphics2D;
+import java.awt.RenderingHints;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import jakarta.annotation.PostConstruct;
+import javax.imageio.ImageIO;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -33,6 +40,12 @@ import org.springframework.util.StringUtils;
 @Slf4j
 @RequiredArgsConstructor
 public class GoogleGenAiImagenImageGenerator {
+
+    private static final int MAX_BYTES = 300 * 1024;
+    private static final int OUTER_SIZE = 512;
+    private static final int BORDER_LEFT_RIGHT = 36;
+    private static final int BORDER_TOP = 24;
+    private static final int BORDER_BOTTOM = 48;
 
     private final Client googleGenAiClient;
 
@@ -109,14 +122,24 @@ public class GoogleGenAiImagenImageGenerator {
                 Math.round(waitedSeconds * 1000.0)
         );
 
+        if (StringUtils.hasText(outputMimeType) && !"image/png".equalsIgnoreCase(outputMimeType.trim())) {
+            log.warn(
+                    "[v2] google imagen outputMimeType is not png, but this generator always returns PNG. configured={}",
+                    outputMimeType
+            );
+        }
         var configBuilder = GenerateImagesConfig.builder()
                 .numberOfImages(1)
                 .aspectRatio(StringUtils.hasText(aspectRatio) ? aspectRatio : "1:1")
-                .outputMimeType(StringUtils.hasText(outputMimeType) ? outputMimeType : "image/png");
+                .outputMimeType("image/png")
+                .addWatermark(false)
+                .imageSize("%dx%d".formatted(OUTER_SIZE, OUTER_SIZE));
 
-        if (StringUtils.hasText(negativePrompt)) {
-            configBuilder.negativePrompt(negativePrompt);
-        }
+        String negative = StringUtils.hasText(negativePrompt)
+                ? negativePrompt
+                : "color, vibrant, saturated, neon, cartoon, illustration, CGI, 3D render, text, caption, subtitle, watermark, logo, UI, poster";
+        configBuilder.negativePrompt(negative);
+
         if (guidanceScale > 0) {
             configBuilder.guidanceScale(guidanceScale);
         }
@@ -157,11 +180,105 @@ public class GoogleGenAiImagenImageGenerator {
             }
 
             log.info("[v2] google imagen generate finished. model={}, bytes={}", model, bytes.length);
-            return bytes;
+
+            byte[] polaroid = normalizePolaroidPng(bytes);
+            if (polaroid.length > MAX_BYTES) {
+                log.warn(
+                        "[v2] google imagen size limit exceeded even after normalization. model={}, bytes={}",
+                        model,
+                        polaroid.length
+                );
+            }
+
+            return polaroid;
         } catch (Exception e) {
             log.error("[v2] google imagen generate failed. model={}, error={}", model, e.getMessage(), e);
             throw new IllegalStateException("failed to generate image via google imagen", e);
         }
+    }
+
+    private byte[] normalizePolaroidPng(byte[] bytes) {
+        if (bytes == null) {
+            return new byte[0];
+        }
+
+        BufferedImage source;
+        try {
+            source = ImageIO.read(new ByteArrayInputStream(bytes));
+        } catch (Exception e) {
+            log.warn("[v2] failed to decode image bytes for normalization. bytes={}", bytes.length, e);
+            return bytes;
+        }
+        if (source == null) {
+            log.warn("[v2] ImageIO returned null while decoding image bytes. bytes={}", bytes.length);
+            return bytes;
+        }
+
+        int[] sizes = {OUTER_SIZE, 448, 384, 320, 256, 224, 192, 160};
+        byte[] best = bytes;
+        for (int outer : sizes) {
+            try {
+                byte[] normalized = renderPolaroid(source, outer);
+                best = normalized;
+                if (normalized.length <= MAX_BYTES) {
+                    return normalized;
+                }
+            } catch (Exception e) {
+                log.warn("[v2] failed to normalize image. outerSize={}", outer, e);
+            }
+        }
+        return best;
+    }
+
+    private byte[] renderPolaroid(BufferedImage source, int outerSize) {
+        int borderLr = Math.max(8, (int) Math.round(outerSize * (BORDER_LEFT_RIGHT / (double) OUTER_SIZE)));
+        int borderTop = Math.max(6, (int) Math.round(outerSize * (BORDER_TOP / (double) OUTER_SIZE)));
+        int borderBottom = Math.max(12, (int) Math.round(outerSize * (BORDER_BOTTOM / (double) OUTER_SIZE)));
+        int innerWidth = outerSize - (borderLr * 2);
+        int innerHeight = outerSize - borderTop - borderBottom;
+        int innerSize = Math.max(1, Math.min(innerWidth, innerHeight));
+        int innerX = borderLr + Math.max(0, (innerWidth - innerSize) / 2);
+        int innerY = borderTop + Math.max(0, (innerHeight - innerSize) / 2);
+
+        int crop = Math.min(source.getWidth(), source.getHeight());
+        int cropX = (source.getWidth() - crop) / 2;
+        int cropY = (source.getHeight() - crop) / 2;
+
+        BufferedImage out = new BufferedImage(outerSize, outerSize, BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D g = out.createGraphics();
+        try {
+            g.setColor(Color.WHITE);
+            g.fillRect(0, 0, outerSize, outerSize);
+            g.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BILINEAR);
+            g.setRenderingHint(RenderingHints.KEY_RENDERING, RenderingHints.VALUE_RENDER_QUALITY);
+            g.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON);
+
+            g.drawImage(
+                    source,
+                    innerX,
+                    innerY,
+                    innerX + innerSize,
+                    innerY + innerSize,
+                    cropX,
+                    cropY,
+                    cropX + crop,
+                    cropY + crop,
+                    null
+            );
+        } finally {
+            g.dispose();
+        }
+
+        ByteArrayOutputStream outBytes = new ByteArrayOutputStream();
+        try {
+            boolean ok = ImageIO.write(out, "png", outBytes);
+            if (!ok) {
+                throw new IllegalStateException("no png writer available");
+            }
+        } catch (Exception e) {
+            throw new IllegalStateException("failed to encode normalized png", e);
+        }
+        return outBytes.toByteArray();
     }
 
     private PersonGeneration parsePersonGeneration(String value) {
