@@ -15,6 +15,7 @@ export default function LeftEvidencePanel({
   onAddToBoard,
 }) {
   const [activeTab, setActiveTab] = useState("evidence") // 'evidence' | 'suspect' | 'location'
+  const [hoveredItem, setHoveredItem] = useState(null) // 호버된 아이템 정보 { item, type, rect }
 
   const getCardImageUrl = (item, type) => {
     if (!item) return null
@@ -137,6 +138,11 @@ export default function LeftEvidencePanel({
                 draggable
                 onDragStart={(e) => onDragStart?.(e, item, activeTab)}
                 className="relative select-none"
+                onMouseEnter={(e) => {
+                  const rect = e.currentTarget.getBoundingClientRect()
+                  setHoveredItem({ item, type: activeTab, rect })
+                }}
+                onMouseLeave={() => setHoveredItem(null)}
               >
                 <div
                   onClick={() => handleItemClick(item)}
@@ -207,6 +213,7 @@ export default function LeftEvidencePanel({
                     <Plus className="w-3 h-3" /> 보드에 추가
                   </button>
                 </div>
+
               </div>
             ))
           )}
@@ -221,6 +228,53 @@ export default function LeftEvidencePanel({
         >
           <Search className="w-5 h-5" />
         </button>
+      )}
+
+      {/* 호버 상세정보 - fixed 위치로 패널 바깥에 렌더링 */}
+      {hoveredItem && isOpen && (
+        <div
+          className="fixed w-64 bg-gray-900 border border-gray-700 rounded-lg shadow-xl p-3 pointer-events-none animate-in fade-in duration-150"
+          style={{
+            left: hoveredItem.rect.right + 12,
+            top: hoveredItem.rect.top,
+            zIndex: 200,
+          }}
+        >
+          <div className="flex items-center gap-2 mb-2">
+            <span className={cn(
+              'px-2 py-0.5 text-xs font-bold text-white rounded',
+              hoveredItem.type === 'evidence' ? 'bg-blue-500' :
+              hoveredItem.type === 'suspect' ? 'bg-amber-500' :
+              hoveredItem.type === 'location' ? 'bg-green-500' : 'bg-gray-500'
+            )}>
+              {hoveredItem.type === 'evidence' ? '증거' :
+               hoveredItem.type === 'suspect' ? '용의자' :
+               hoveredItem.type === 'location' ? '장소' : ''}
+            </span>
+            <span className="font-bold text-sm text-white">{hoveredItem.item.name}</span>
+          </div>
+
+          {hoveredItem.type === 'suspect' && (
+            <div className="text-xs space-y-1 text-gray-300">
+              {hoveredItem.item.role && <p>정보: {hoveredItem.item.role}</p>}
+              {hoveredItem.item.note && <p className="italic">"{hoveredItem.item.note}"</p>}
+            </div>
+          )}
+
+          {hoveredItem.type === 'evidence' && (
+            <div className="text-xs text-gray-300">
+              {hoveredItem.item.note && <p className="whitespace-pre-line">{hoveredItem.item.note}</p>}
+            </div>
+          )}
+
+          {hoveredItem.type === 'location' && (
+            <div className="text-xs text-gray-300">
+              {hoveredItem.item.floorNumber && <p>층: {hoveredItem.item.floorNumber}층</p>}
+              <p>장소명: {hoveredItem.item.name}</p>
+              {hoveredItem.item.note && <p className="mt-1">{hoveredItem.item.note}</p>}
+            </div>
+          )}
+        </div>
       )}
     </>
   )
