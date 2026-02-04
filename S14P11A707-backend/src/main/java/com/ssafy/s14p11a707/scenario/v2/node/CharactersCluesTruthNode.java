@@ -89,6 +89,13 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 - suspects에서 is_culprit=true 인 용의자는 정확히 1명
                 - clues는 반드시 배열이며 길이는 8~12
 
+                외모 정보(appearance 필드):
+                - hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
+                - 모든 값은 구체적이고 생생하게 작성 (빈 문자열 금지)
+
+                피해자 추가 정보:
+                - personality(성격), last_known_action(마지막 행동), physical_condition(신체 상태)
+
                 중요: DB ID를 절대 추측하지 마라.
                 - truth_config_json.culprit_id / weapon_clue_id, ai_config_json.secret.weakness_clue.id 는 0으로 둔다(서버가 DB 저장 후 실제 ID로 치환).
                 - 대신 weapon_clue_name / weakness_clue.name 으로 단서를 지정한다.
@@ -114,7 +121,21 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                   "discovery_location": string,
                   "estimated_death_time": string,
                   "cause_of_death": string,
-                  "victim_detail_json": object
+                  "victim_detail_json": {
+                    "personality": string,
+                    "last_known_action": string,
+                    "physical_condition": string,
+                    "appearance": {
+                      "hair_style": string,
+                      "hair_color": string,
+                      "eye_color": string,
+                      "facial_features": string,
+                      "body_type": string,
+                      "clothing_style": string,
+                      "expression": string,
+                      "distinctive_trait": string
+                    }
+                  }
                 }
 
                 suspects[] item: {
@@ -136,7 +157,17 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                       "alibi_progression": { "level1_lie": string, "level2_weak": string }
                     },
                     "deflection_strategy": { "target_name": string, "suspicion_point": string, "dialogue_hint": string },
-                    "timeline_alibi": [ { "time": "HH:MM", "location": string, "activity": string, "is_verified": false } ]
+                    "timeline_alibi": [ { "time": "HH:MM", "location": string, "activity": string, "is_verified": false } ],
+                    "appearance": {
+                      "hair_style": string,
+                      "hair_color": string,
+                      "eye_color": string,
+                      "facial_features": string,
+                      "body_type": string,
+                      "clothing_style": string,
+                      "expression": string,
+                      "distinctive_trait": string
+                    }
                   }
                 }
 
