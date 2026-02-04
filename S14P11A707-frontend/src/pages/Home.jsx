@@ -58,7 +58,6 @@ export default function Home() {
             >
               HONG-YEON
             </h1>
-            <p className="text-xl md:text-2xl text-muted-foreground font-mono">[SYSTEM_DETECTED]</p>
             <p className="text-lg text-foreground/80 max-w-2xl mx-auto">
               영화 속 수사반장의 화이트보드를 디지털로 구현한 추리 게임<br />
               증거를 수집하고, 용의자를 심문하며, 진실을 밝혀내라!
@@ -126,8 +125,8 @@ export default function Home() {
               <div className="container">
                 <SectionHeader title="인기 TOP 10" to="/scenarios" />
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {popularTop10.filter(isVisibleInAll).slice(0, 3).map((scenario) => (
-                    <ScenarioCard key={scenario.id} scenario={scenario} />
+                  {popularTop10.filter(isVisibleInAll).slice(0, 3).map((scenario, index) => (
+                    <ScenarioCard key={scenario.id} scenario={scenario} index={index} />
                   ))}
                 </div>
               </div>
@@ -140,8 +139,8 @@ export default function Home() {
               <div className="container">
                 <SectionHeader title="평점 TOP 10" to="/scenarios" />
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {ratingTop10.filter(isVisibleInAll).slice(0, 3).map((scenario) => (
-                    <ScenarioCard key={scenario.id} scenario={scenario} />
+                  {ratingTop10.filter(isVisibleInAll).slice(0, 3).map((scenario, index) => (
+                    <ScenarioCard key={scenario.id} scenario={scenario} index={index} />
                   ))}
                 </div>
               </div>

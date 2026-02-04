@@ -54,6 +54,9 @@ public class Room {
     @Lob
     private String assistantComment;
 
+    @Column(length = 500)
+    private String backgroundImageUrl;
+
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(nullable = false, columnDefinition = "jsonb")
     private JsonNode objectJson;
@@ -75,5 +78,9 @@ public class Room {
         this.description = description;
         this.assistantComment = assistantComment;
         this.objectJson = objectJson;
+    }
+
+    public void setBackgroundImageUrl(String backgroundImageUrl) {
+        this.backgroundImageUrl = backgroundImageUrl;
     }
 }

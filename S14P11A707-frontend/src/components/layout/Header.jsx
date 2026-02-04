@@ -21,7 +21,6 @@ export function Header() {
                 HONG-YEON
               </div>
               <div className="error-code opacity-70 group-hover:opacity-100 transition-opacity">
-                [SYS_v2.0]
               </div>
             </div>
           </Link>

@@ -18,6 +18,7 @@ public record RoomListResponse(
             String roomName,
             String description,
             String assistantComment,
+            String backgroundImageUrl,
             @ArraySchema(schema = @Schema(implementation = Object.class))
             JsonNode objects
     ) {

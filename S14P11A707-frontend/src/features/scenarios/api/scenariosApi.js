@@ -267,6 +267,8 @@ export const createScenario = async (data) => {
  */
 export const createScenarioV2 = async (data) => {
   try {
+    console.log("[createScenarioV2] url =", ENDPOINTS.scenariosV2.create);
+    console.log("[createScenarioV2] data =", data);
     const response = await apiClient.post(ENDPOINTS.scenariosV2.create, data);
     return response.data;
   } catch (error) {

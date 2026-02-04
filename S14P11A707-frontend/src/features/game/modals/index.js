@@ -5,3 +5,5 @@ export { default as SubmitAnswerModal } from "./SubmitAnswerModal";
 export { default as ReviewModal } from "./ReviewModal";
 export { default as ReportModal } from "./ReportModal";
 export { default as GameEndModal } from "./GameEndModal";
+export { default as SuspectDetailModal } from "./SuspectDetailModal";
+export { default as LocationDetailModal } from "./LocationDetailModal";

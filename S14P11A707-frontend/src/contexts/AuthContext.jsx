@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer } from "react"
-import { alertError, alertWarning } from "@/components/ui/AlertModal"
+import { alertError, alertWarning,alertInfo } from "@/components/ui/AlertModal"
+
 
 const AuthContext = createContext(null)
 
@@ -126,12 +127,12 @@ export function AuthProvider({ children }) {
       async deleteAccount() {
         if ( !base) {
           dispatch({ type: "CLEAR_USER" })
-          return
+          return true
         }
 
         alertWarning("회원탈퇴 기능은 서버 준비 중입니다.")
         console.warn("[AUTH] deleteAccount not implemented yet. Waiting backend endpoint.")
-        return
+        return false
 
         // 백엔드 준비되면 아래 주석 해제
         // const res = await fetch(`${base}/api/auth/me`, {
@@ -198,7 +199,7 @@ export function AuthProvider({ children }) {
             })
           } catch (e) {
             console.error("[AUTH] update nickname failed:", e)
-            alertError("닉네임 변경에 실패했습니다.")
+            alert("닉네임 변경에 실패했습니다.")
           }
         })()
       },

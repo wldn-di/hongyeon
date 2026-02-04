@@ -15,7 +15,7 @@ export default function EvidenceDetailModal({ evidence, onClose }) {
     : (evidence.location || '알 수 없음')
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+    <div data-board-safe-area="true" className="fixed inset-0 z-[70] flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
       <div className="relative z-10 w-full max-w-md bg-gray-900 border border-gray-700 rounded-lg shadow-xl overflow-hidden">
         {/* 헤더 */}
@@ -33,17 +33,19 @@ export default function EvidenceDetailModal({ evidence, onClose }) {
 
         <div className="p-4">
           {/* 이미지 */}
-          <div className="w-full h-36 bg-gray-800 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+         <div className="w-full aspect-[16/10] bg-gray-800 rounded-lg mb-4 overflow-hidden">
             {imageUrl ? (
               <img src={imageUrl} alt={evidence.name} className="w-full h-full object-cover" />
             ) : (
+               <div className="w-full h-full flex items-center justify-center">
               <Search className="w-12 h-12 text-gray-600" />
+              </div>
             )}
           </div>
 
           {/* 정보 */}
           <div className="text-sm space-y-2 text-gray-300">
-            <p>📍 발견장소: {locationText}</p>
+            <p>✔️ 발견장소: {locationText}</p>
             <p className="whitespace-pre-line">{evidence.description || '설명이 없습니다.'}</p>
           </div>
 

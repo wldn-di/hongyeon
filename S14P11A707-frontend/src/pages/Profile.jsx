@@ -4,11 +4,10 @@ import { Button } from '@/components/ui/Button'
 import { PageLayout } from '@/components/layout/PageLayout'
 import { useAuth } from '@/contexts/AuthContext'
 import { ProfileCard } from '@/features/auth/components/ProfileCard'
-import { DangerZone } from '@/features/auth/components/DangerZone'
 
 /**
  * Profile - 프로필 페이지 (리팩토링 버전)
- * ProfileCard와 DangerZone 컴포넌트를 조립만 함
+ * ProfileCard와 DangerZone 컴포넌트를 조립만 함(DangerZone은 회원탈퇴를 위한 페이지라 현재는 조립X)
  */
 export default function Profile() {
   const { state, actions } = useAuth()
@@ -36,8 +35,9 @@ export default function Profile() {
 
   //로그인 정보가 있으면 삭제 처리 함수 만들고, 정상 프로필 보여주기
   const handleDeleteAccount = async () => {
-    await actions.deleteAccount()
-    setLocation('/')
+    const success = await actions.deleteAccount()
+    if (success) setLocation('/')
+    return success
   }
 
   return (
@@ -48,8 +48,6 @@ export default function Profile() {
           onUpdateProfile={actions.updateProfile} //수정
           onLogout={actions.logout} //로그아웃
         />
-        
-        <DangerZone onDeleteAccount={handleDeleteAccount} />
       </div>
     </PageLayout>
   )

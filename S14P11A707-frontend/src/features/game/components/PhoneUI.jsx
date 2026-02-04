@@ -69,7 +69,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
   if (!isOpen) return null
 
   return (
-    <div className="fixed right-6 bottom-24 w-80 h-[500px] bg-gray-900 rounded-3xl border-4 border-gray-700 shadow-2xl z-50 overflow-hidden flex flex-col">
+    <div data-board-safe-area="true" className="fixed right-6 bottom-24 w-80 h-[500px] bg-gray-900 rounded-3xl border-4 border-gray-700 shadow-2xl z-[210] overflow-hidden flex flex-col">
       {/* 폰 노치 */}
       <div className="bg-black h-6 flex items-center justify-center">
         <div className="w-20 h-4 bg-gray-800 rounded-full" />

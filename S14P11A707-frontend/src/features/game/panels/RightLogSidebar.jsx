@@ -19,25 +19,29 @@ const logTypeConfig = {
 export default function RightLogSidebar({ isOpen, onToggle, logs = [] }) {
   return (
     <>
-      <div className={cn(
-        "fixed top-16 right-0 h-[calc(100%-140px)] bg-card/95 backdrop-blur border-l border-border transition-transform duration-300 z-30",
+      <div
+        data-board-safe-area="true"
+        className={cn(
+        "fixed top-16 right-0 h-[calc(100%-160px)] bg-card/95 backdrop-blur border-l border-border transition-transform duration-300 z-[100]",
         "w-72 flex flex-col",
         isOpen ? "translate-x-0" : "translate-x-full"
       )}>
-        <div className="p-4 border-b border-border bg-muted/20 flex items-center justify-between gap-3">
-          <div className="min-w-0">
+        <div className="relative p-4 border-b border-border bg-muted/20">
+        {/* X 버튼: 레이아웃 폭 안 먹게 absolute로 */}
+        <button onClick={onToggle} 
+        className="absolute right-3 top-3 p-1 hover:bg-muted rounded" 
+        aria-label="닫기">
+          <X className="w-5 h-5" />
+          </button>
+          <div className="min-w-0 pr-10">
             <h3 className="font-bold flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
               수사 로그
               <span className="text-xs text-muted-foreground">({logs.length})</span>
-            </h3>
-            <p className="text-xs text-muted-foreground mt-1">수사 진행 상황이 기록됩니다</p>
-          </div>
-          <button onClick={onToggle} className="p-1 hover:bg-muted rounded">
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">수사 진행 상황이 기록됩니다</p>
+              </div>
+              </div>
         <div className="flex-1 p-3 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'thin' }}>
           {logs.length === 0 ? (
             <p className="text-sm text-muted-foreground text-center py-8">
@@ -76,8 +80,9 @@ export default function RightLogSidebar({ isOpen, onToggle, logs = [] }) {
 
       {!isOpen && (
         <button
+          data-board-safe-area="true"
           onClick={onToggle}
-          className="fixed top-1/2 -translate-y-1/2 right-0 z-30 w-10 h-24 bg-card border border-border border-r-0 rounded-l-lg flex items-center justify-center hover:bg-muted/50 transition-colors"
+          className="fixed top-1/2 -translate-y-1/2 right-0 z-[80] w-10 h-24 bg-card border border-border border-r-0 rounded-l-lg flex items-center justify-center hover:bg-muted/50 transition-colors"
         >
           <FileText className="w-5 h-5" />
         </button>
