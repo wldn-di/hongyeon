@@ -1,5 +1,6 @@
 package com.ssafy.s14p11a707.scenario.v2.node;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.ssafy.s14p11a707.exception.BaseException;
 import com.ssafy.s14p11a707.exception.ErrorCode;
 import com.ssafy.s14p11a707.scenario.entity.Clue;
@@ -109,38 +110,96 @@ public class ImagePromptNode implements ScenarioV2Node {
                 """.formatted(scenario.getGenre(), scenario.getTitle(), scenario.getSynopsis(), safe(state.getRequest().style()))
         ));
 
+        // Victim portrait
+        JsonNode victimAppearance = victim.getVictimDetailJson() != null
+                ? victim.getVictimDetailJson().path("appearance")
+                : null;
+        String victimGender = safe(victim.getGender());
+        String victimGenderInst = victimGender.contains("남") || victimGender.toLowerCase().contains("male")
+                ? "(male: masculine face, strong jawline)"
+                : victimGender.contains("여") || victimGender.toLowerCase().contains("female")
+                    ? "(female: feminine face)"
+                    : "";
+        String victimAppearanceDetails = victimAppearance != null && !victimAppearance.isMissingNode() && !victimAppearance.isNull()
+                ? buildAppearanceText(victimAppearance)
+                : "- Hair: realistic style\n- Face: " + (victimGender.contains("남") || victimGender.toLowerCase().contains("male") ? "masculine features, strong jawline" : "feminine features") + "\n- Body: normal build\n- Clothing: appropriate attire\n- Expression: neutral\n";
+
         jobs.add(new ScenarioV2ImageJob(
                 ScenarioV2ImageJob.Target.VICTIM_PORTRAIT,
                 victim.getId(),
                 "scenarios/%d/victim/%d.png".formatted(scenario.getId(), victim.getId()),
                 """
-                Portrait of the victim for a mystery detective game.
-                Name: %s
-                Gender: %s
-                Occupation: %s
-                Background: %s
-                Tone: noir, cinematic, realistic
-                """.formatted(victim.getName(), safe(victim.getGender()), safe(victim.getOccupation()), safe(victim.getBackground()))
+                MUST CREATE a photorealistic portrait for a mystery detective game victim.
+
+                REQUIRED GENDER:
+                - GENDER: %s %s
+
+                IDENTITY:
+                - Name: %s
+                - Occupation: %s
+                - Age: %s
+                - Background: %s
+
+                APPEARANCE:
+                %s
+                STYLE:
+                - cinematic noir lighting, realistic textures, 8k quality
+                - dramatic shadows, professional photography
+                - Atmosphere: mysterious, crime scene victim, tragic mood
+                """.formatted(
+                victimGender, victimGenderInst,
+                victim.getName(),
+                safe(victim.getOccupation()),
+                victim.getAge() != null ? victim.getAge().toString() : "adult",
+                safe(victim.getBackground()),
+                victimAppearanceDetails
+        )
         ));
 
         for (Suspect suspect : suspects) {
+            JsonNode suspectAppearance = suspect.getAiConfigJson() != null
+                    ? suspect.getAiConfigJson().path("appearance")
+                    : null;
+            String suspectGender = safe(suspect.getGender());
+            String suspectGenderInst = suspectGender.contains("남") || suspectGender.toLowerCase().contains("male")
+                    ? "(male: masculine face, strong jawline)"
+                    : suspectGender.contains("여") || suspectGender.toLowerCase().contains("female")
+                        ? "(female: feminine face)"
+                        : "";
+            String suspectAppearanceDetails = suspectAppearance != null && !suspectAppearance.isMissingNode() && !suspectAppearance.isNull()
+                    ? buildAppearanceText(suspectAppearance)
+                    : "- Hair: realistic style\n- Face: " + (suspectGender.contains("남") || suspectGender.toLowerCase().contains("male") ? "masculine features, strong jawline" : "feminine features") + "\n- Body: normal build\n- Clothing: appropriate attire\n- Expression: neutral\n";
+
             jobs.add(new ScenarioV2ImageJob(
                     ScenarioV2ImageJob.Target.SUSPECT_PORTRAIT,
                     suspect.getId(),
                     "scenarios/%d/suspects/%d.png".formatted(scenario.getId(), suspect.getId()),
                     """
-                    Portrait of a suspect for a mystery detective game.
-                    Name: %s
-                    Gender: %s
-                    Occupation: %s
-                    One-liner: %s
-                    Tone: noir, cinematic, realistic
+                    MUST CREATE a photorealistic portrait for a mystery detective game suspect.
+
+                    REQUIRED GENDER:
+                    - GENDER: %s %s
+
+                    IDENTITY:
+                    - Name: %s
+                    - Occupation: %s
+                    - Age: %s
+                    - Personality hint: %s
+
+                    APPEARANCE:
+                    %s
+                    STYLE:
+                    - cinematic noir lighting, realistic textures, 8k quality
+                    - dramatic shadows, professional photography
+                    - Atmosphere: suspicious, hiding something, interrogation room mood
                     """.formatted(
-                            suspect.getName(),
-                            safe(suspect.getGender()),
-                            safe(suspect.getOccupation()),
-                            safe(suspect.getOneLiner())
-                    )
+                    suspectGender, suspectGenderInst,
+                    suspect.getName(),
+                    safe(suspect.getOccupation()),
+                    suspect.getAge() != null ? suspect.getAge().toString() : "adult",
+                    safe(suspect.getOneLiner()),
+                    suspectAppearanceDetails
+            )
             ));
         }
 
@@ -193,5 +252,34 @@ public class ImagePromptNode implements ScenarioV2Node {
 
     private String safe(String value) {
         return value == null ? "" : value;
+    }
+
+    private String buildAppearanceText(JsonNode appearance) {
+        String hairStyle = safe(appearance.path("hair_style").asText());
+        String hairColor = safe(appearance.path("hair_color").asText());
+        String eyeColor = safe(appearance.path("eye_color").asText());
+        String facialFeatures = safe(appearance.path("facial_features").asText());
+        String bodyType = safe(appearance.path("body_type").asText());
+        String clothingStyle = safe(appearance.path("clothing_style").asText());
+        String expression = safe(appearance.path("expression").asText());
+        String distinctiveTrait = safe(appearance.path("distinctive_trait").asText());
+
+        StringBuilder sb = new StringBuilder();
+
+        String hair = hairStyle.isEmpty() ? "realistic style" : hairStyle;
+        if (!hairColor.isEmpty()) hair += ", " + hairColor;
+        sb.append("- Hair: ").append(hair).append("\n");
+
+        sb.append("- Eyes: ").append(eyeColor.isEmpty() ? "natural color" : eyeColor).append("\n");
+        sb.append("- Face: ").append(facialFeatures.isEmpty() ? "realistic features" : facialFeatures).append("\n");
+        sb.append("- Body: ").append(bodyType.isEmpty() ? "normal build" : bodyType).append("\n");
+        sb.append("- Clothing: ").append(clothingStyle.isEmpty() ? "appropriate attire" : clothingStyle).append("\n");
+        sb.append("- Expression: ").append(expression.isEmpty() ? "natural" : expression).append("\n");
+
+        if (!distinctiveTrait.isEmpty() && !distinctiveTrait.equals("없음")) {
+            sb.append("- Distinctive: ").append(distinctiveTrait).append("\n");
+        }
+
+        return sb.toString();
     }
 }
