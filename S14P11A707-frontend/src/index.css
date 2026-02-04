@@ -55,6 +55,20 @@ body {
   position: relative;
   overflow-x: hidden;
   min-height: 100vh;
+  cursor: url("/images/cursor1_32.png") 2 0, default;
+}
+
+/* 텍스트 입력 등 기본 커서도 전부 cursor1로 통일 */
+input,
+textarea,
+[contenteditable="true"],
+[contenteditable=""] {
+  cursor: url("/images/cursor1_32.png") 2 0, text;
+}
+
+/* Phaser가 canvas에 cursor 스타일을 직접 주는 경우 대비(기본은 항상 cursor1) */
+canvas {
+  cursor: url("/images/cursor1_32.png") 2 0, default !important;
 }
 
 /* Film grain effect */
@@ -95,10 +109,24 @@ code, pre, .mono {
 }
 
 button:not(:disabled),
+input[type="button"]:not(:disabled),
+input[type="submit"]:not(:disabled),
+input[type="reset"]:not(:disabled),
 [role="button"]:not([aria-disabled="true"]),
 a[href],
 select:not(:disabled) {
-  cursor: pointer;
+  cursor: url("/images/cursor2_32.png") 20 1, pointer;
+}
+
+/* JS/라이브러리(Phaser 등)에서 inline style로 cursor:pointer를 주는 케이스도 커스텀 커서로 덮어쓰기 */
+[style*="cursor:pointer"],
+[style*="cursor: pointer"] {
+  cursor: url("/images/cursor2_32.png") 20 1, pointer !important;
+}
+
+/* Tailwind cursor-pointer 대응 */
+.cursor-pointer {
+  cursor: url("/images/cursor2_32.png") 20 1, pointer !important;
 }
 
 /* Container */
@@ -236,11 +264,20 @@ select:not(:disabled) {
 
 /* Dragging Cursor */
 .cursor-move {
-  cursor: move;
+  cursor: url("/images/cursor1_32.png") 2 0, move !important;
 }
 
 .cursor-grabbing {
-  cursor: grabbing !important;
+  cursor: url("/images/cursor1_32.png") 2 0, grabbing !important;
+}
+
+/* Tailwind cursor-grab / cursor-not-allowed 등도 lamp로 통일 */
+.cursor-grab {
+  cursor: url("/images/cursor1_32.png") 2 0, grab !important;
+}
+
+.cursor-not-allowed {
+  cursor: url("/images/cursor1_32.png") 2 0, not-allowed !important;
 }
 
 /* ===== Modern Tabs (ScenarioHeader) ===== */
@@ -258,7 +295,7 @@ select:not(:disabled) {
   font-size: 14px;
   letter-spacing: 0.02em;
   transition: all 200ms ease;
-  cursor: pointer;
+  cursor: url("/images/cursor2_32.png") 20 1, pointer;
 }
 
 .tab-chevron:hover {
