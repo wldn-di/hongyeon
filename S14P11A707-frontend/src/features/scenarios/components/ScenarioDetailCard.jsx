@@ -1,9 +1,13 @@
-import React from 'react'
+import React, { useMemo, useState } from 'react'
 // import { Link } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { Star, Clock, Users, Play, Trophy, ChevronLeft, ChevronRight, User, AlertTriangle, RotateCcw, CheckCircle, XCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useReviews } from '../hooks/useReviews'
+import { deleteReview, updateReview } from '../api/reviewsApi'
+import { toast } from 'sonner'
+import { showConfirm } from '@/components/ui/ConfirmModal'
+import { useAuth } from '@/contexts/AuthContext'
 
 // 난이도 배지
 function DifficultyBadge({ difficulty }) {
@@ -91,7 +95,11 @@ function RankingItem({ ranking, index }) {
 }
 
 // 리뷰 아이템
-function ReviewItem({ review }) {
+function ReviewItem({ review, isMine = false, onRefresh }) {
+  const [isEditing, setIsEditing] = useState(false)
+  const [draftContent, setDraftContent] = useState(review?.content || '')
+  const [isSubmitting, setIsSubmitting] = useState(false)
+
   const formatDate = (dateStr) => {
     if (!dateStr) return ''
     try {
@@ -105,6 +113,72 @@ function ReviewItem({ review }) {
     if (diff <= 2) return '쉬움'
     if (diff <= 4) return '보통'
     return '어려움'
+  }
+
+  const reviewId = review?.reviewId ?? review?.id ?? null
+
+  const beginEdit = () => {
+    setDraftContent(review?.content || '')
+    setIsEditing(true)
+  }
+
+  const cancelEdit = () => {
+    setDraftContent(review?.content || '')
+    setIsEditing(false)
+  }
+
+  const saveEdit = async () => {
+    if (!reviewId) {
+      toast.error('리뷰 정보를 찾을 수 없습니다.')
+      return
+    }
+
+    const content = draftContent.trim()
+    if (!content) {
+      toast.error('리뷰 내용을 입력해주세요.')
+      return
+    }
+
+    try {
+      setIsSubmitting(true)
+      await updateReview(reviewId, { content })
+      toast.success('리뷰가 수정되었습니다.')
+      setIsEditing(false)
+      onRefresh?.()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || '리뷰 수정에 실패했습니다.')
+      console.error('updateReview error:', err)
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const removeReview = async () => {
+    if (!reviewId) {
+      toast.error('리뷰 정보를 찾을 수 없습니다.')
+      return
+    }
+
+    const ok = await showConfirm({
+      title: '리뷰 삭제',
+      message: '리뷰를 삭제하시겠습니까?',
+      confirmText: '삭제',
+      cancelText: '취소',
+      tone: 'destructive',
+    })
+    if (!ok) return
+
+    try {
+      setIsSubmitting(true)
+      await deleteReview(reviewId)
+      toast.success('리뷰가 삭제되었습니다.')
+      onRefresh?.()
+    } catch (err) {
+      toast.error(err?.response?.data?.message || err?.message || '리뷰 삭제에 실패했습니다.')
+      console.error('deleteReview error:', err)
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   return (
@@ -123,30 +197,88 @@ function ReviewItem({ review }) {
               />
             ))}
           </div>
+          {isMine && (
+            <span className="ml-1 px-1.5 py-0.5 rounded bg-primary/15 text-primary text-[11px] font-bold">
+              내 리뷰
+            </span>
+          )}
         </div>
-        <span className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</span>
+        <div className="flex flex-col items-end gap-2">
+          <span className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</span>
+          {isMine ? (
+            isEditing ? (
+              <div className="flex items-center gap-2">
+                <Button variant="neon" size="sm" onClick={saveEdit} disabled={isSubmitting}>
+                  저장
+                </Button>
+                <Button variant="outline" size="sm" onClick={cancelEdit} disabled={isSubmitting}>
+                  취소
+                </Button>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={beginEdit} disabled={isSubmitting}>
+                  수정
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-red-500/40 text-red-400 hover:bg-red-500/10"
+                  onClick={removeReview}
+                  disabled={isSubmitting}
+                >
+                  삭제
+                </Button>
+              </div>
+            )
+          ) : null}
+        </div>
       </div>
 
       <div className="flex items-center gap-2 mb-2 text-xs text-muted-foreground">
         <span>체감 난이도: {getDifficultyLabel(review.difficulty)}</span>
       </div>
 
-      {review.isSpoiler ? (
+      {isEditing ? (
+        <div className="space-y-2">
+          {review.isSpoiler ? (
+            <div className="flex items-center gap-2 text-yellow-500 text-sm">
+              <AlertTriangle className="w-4 h-4" />
+              <span>스포일러가 포함된 리뷰입니다</span>
+            </div>
+          ) : null}
+          <textarea
+            value={draftContent}
+            onChange={(e) => setDraftContent(e.target.value)}
+            rows={4}
+            className={cn(
+              'w-full rounded-md border border-border bg-background/40 px-3 py-2 text-sm text-foreground',
+              'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+            )}
+            placeholder="리뷰 내용을 입력하세요"
+            disabled={isSubmitting}
+          />
+        </div>
+      ) : review.isSpoiler ? (
         <div className="flex items-center gap-2 text-yellow-500 text-sm">
           <AlertTriangle className="w-4 h-4" />
           <span>스포일러가 포함된 리뷰입니다</span>
         </div>
       ) : (
-        <p className="text-sm text-muted-foreground line-clamp-3">
-          {review.content}
-        </p>
+        <p className="text-sm text-muted-foreground line-clamp-3">{review.content}</p>
       )}
     </div>
   )
 }
 
 export default function ScenarioDetailCard({ scenario, onPlay, playStatus, isPlaying }) {
-  const { reviews, loading: reviewsLoading, page, totalPages, hasNext, hasPrev, nextPage, prevPage } = useReviews(scenario?.id, 2)
+  const { state: auth } = useAuth()
+  const currentUserId = useMemo(
+    () => auth.user?.userId ?? auth.user?.user_id ?? auth.user?.id ?? null,
+    [auth.user]
+  )
+
+  const { reviews, loading: reviewsLoading, page, totalPages, hasNext, hasPrev, nextPage, prevPage, refetch } = useReviews(scenario?.id, 2)
 
   if (!scenario) return null
 
@@ -265,7 +397,16 @@ export default function ScenarioDetailCard({ scenario, onPlay, playStatus, isPla
             ) : reviews.length > 0 ? (
               <div className="space-y-3">
                 {reviews.map(review => (
-                  <ReviewItem key={review.reviewId} review={review} />
+                  <ReviewItem
+                    key={review.reviewId ?? review.id}
+                    review={review}
+                    isMine={
+                      currentUserId != null &&
+                      (review.userId ?? review.user_id) != null &&
+                      String(currentUserId) === String(review.userId ?? review.user_id)
+                    }
+                    onRefresh={refetch}
+                  />
                 ))}
 
                 {/* 페이지네이션 */}
