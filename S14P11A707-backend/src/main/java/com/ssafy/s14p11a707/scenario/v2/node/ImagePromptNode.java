@@ -24,24 +24,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * 이미지 생성 프롬프트/작업 목록 구성 노드
- * <p>
- * 영속화된 도메인 엔티티({@link Scenario}, {@link Victim}, {@link Suspect}, {@link Clue})를 조회하여,
- * 생성해야 할 이미지 목록({@link ScenarioV2ImageJob})을 구성한다.
- * </p>
- * <p><b>이미지 정책</b></p>
- * <ul>
- *   <li>고정 장수(예: 30장) 방식이 아닌, 실제 URL 필드가 존재하는 엔티티만 대상으로 생성한다.</li>
- *   <li>대상 필드: {@link Scenario#setThumbnailUrl(String)}, {@link Victim#setPortraitUrl(String)},
- *       {@link Suspect#setPortraitUrl(String)}, {@link Clue#setDetailImageUrl(String)}</li>
- * </ul>
- * <p><b>트랜잭션</b></p>
- * <p>
- * 조회 전용 노드로 {@link Transactional#readOnly()} 트랜잭션에서 실행된다.
- * </p>
- *
- * @see ImageBatchNode
- * @see ScenarioV2ImageJob.Target
+ * 이미지 생성 프롬프트 구성을 담당하는 노드입니다.
+ * 텍스트 렌더링 노이즈를 방지하기 위해 'Key: Value' 형태의 레이블을 배제하고 묘사 위주로 구성합니다.
  */
 @Component
 @Slf4j
@@ -55,16 +39,10 @@ public class ImagePromptNode implements ScenarioV2Node {
     private final ScenarioV2EventPublisher eventPublisher;
 
     /**
-     * 이미지 작업 목록을 생성하여 상태에 저장
-     * <p>
-     * 시나리오/인물/단서 정보를 바탕으로 objectKey와 프롬프트를 구성한 뒤,
-     * {@link ScenarioV2State#setImageJobs(List)}에 저장한다.
-     * </p>
-     *
-     * @param state 현재 상태
-     * @return 이미지 작업 목록이 반영된 상태
-     * @throws BaseException 시나리오 또는 피해자 조회에 실패했을 때
+     * 텍스트 생성을 강력하게 억제하는 접두사
      */
+    private static final String NO_TEXT_PREFIX = "((STRICTLY NO TEXT, NO LETTERS, NO WORDS, NO SYMBOLS)). ";
+
     @Override
     @Transactional(readOnly = true)
     public ScenarioV2State execute(ScenarioV2State state) {
@@ -92,76 +70,56 @@ public class ImagePromptNode implements ScenarioV2Node {
 
         List<ScenarioV2ImageJob> jobs = new ArrayList<>();
 
+        // 1. Scenario Thumbnail: 'Synopsis:' 레이블을 제거하고 'depicting'으로 연결
         jobs.add(new ScenarioV2ImageJob(
                 ScenarioV2ImageJob.Target.SCENARIO_THUMBNAIL,
                 scenario.getId(),
                 "scenarios/%d/thumbnail.png".formatted(scenario.getId()),
-                """
-                Create a cinematic thumbnail image for a mystery detective game.
-                Genre: %s
-                Title: %s
-                Synopsis: %s
-                Style: %s
-                """.formatted(scenario.getGenre(), scenario.getTitle(), scenario.getSynopsis(), safe(state.getRequest().style()))
+                NO_TEXT_PREFIX + 
+                "A cinematic %s atmosphere for a mystery game depicting [%s]. Artistic style: %s."
+                .formatted(scenario.getGenre(), scenario.getSynopsis(), safe(state.getRequest().style()))
         ));
 
+        // 2. Victim Portrait: 'Name:', 'Occupation:' 레이블 제거
         jobs.add(new ScenarioV2ImageJob(
                 ScenarioV2ImageJob.Target.VICTIM_PORTRAIT,
                 victim.getId(),
                 "scenarios/%d/victim/%d.png".formatted(scenario.getId(), victim.getId()),
-                """
-                Portrait of the victim for a mystery detective game.
-                Name: %s
-                Gender: %s
-                Occupation: %s
-                Background: %s
-                Tone: noir, cinematic, realistic
-                """.formatted(victim.getName(), safe(victim.getGender()), safe(victim.getOccupation()), safe(victim.getBackground()))
+                NO_TEXT_PREFIX +
+                "A photorealistic character portrait of a %s in a %s role. Background: %s. Noir cinematic lighting."
+                .formatted(safe(victim.getGender()), safe(victim.getOccupation()), safe(victim.getBackground()))
         ));
 
+        // 3. Suspect Portraits: 'One-liner:' 레이블 제거
         for (Suspect suspect : suspects) {
             jobs.add(new ScenarioV2ImageJob(
                     ScenarioV2ImageJob.Target.SUSPECT_PORTRAIT,
                     suspect.getId(),
                     "scenarios/%d/suspects/%d.png".formatted(scenario.getId(), suspect.getId()),
-                    """
-                    Portrait of a suspect for a mystery detective game.
-                    Name: %s
-                    Gender: %s
-                    Occupation: %s
-                    One-liner: %s
-                    Tone: noir, cinematic, realistic
-                    """.formatted(
-                            suspect.getName(),
-                            safe(suspect.getGender()),
-                            safe(suspect.getOccupation()),
+                    NO_TEXT_PREFIX +
+                    "A detailed character portrait of a %s %s. The character vibe is [%s]. Realistic studio lighting."
+                    .formatted(
+                            safe(suspect.getGender()), 
+                            safe(suspect.getOccupation()), 
                             safe(suspect.getOneLiner())
                     )
             ));
         }
 
+        // 4. Clue Images: 'Clue name:' 레이블 제거
         for (Clue clue : clues) {
             jobs.add(new ScenarioV2ImageJob(
                     ScenarioV2ImageJob.Target.CLUE_IMAGE,
                     clue.getId(),
                     "scenarios/%d/clues/%d.png".formatted(scenario.getId(), clue.getId()),
-                    """
-                    Close-up evidence photo for a mystery detective game.
-                    Clue name: %s
-                    Description: %s
-                    Tone: realistic, cinematic, detailed
-                    """.formatted(clue.getName(), safe(clue.getDescription()))
+                    NO_TEXT_PREFIX +
+                    "A macro close-up evidence photo of [%s]. Physical description: [%s]. Sharp focus, realistic textures."
+                    .formatted(clue.getName(), safe(clue.getDescription()))
             ));
         }
 
         state.setImageJobs(jobs);
-        log.info(
-                "[v2] ImagePromptNode completed. scenarioId={}, jobs={}, suspects={}, clues={}",
-                state.getScenarioId(),
-                jobs.size(),
-                suspects.size(),
-                clues.size()
-        );
+        log.info("[v2] ImagePromptNode completed. scenarioId={}, jobs={}", state.getScenarioId(), jobs.size());
         return state;
     }
 
