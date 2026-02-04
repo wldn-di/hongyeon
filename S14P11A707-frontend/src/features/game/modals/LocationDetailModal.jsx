@@ -28,11 +28,13 @@ export default function LocationDetailModal({ location, onClose }) {
 
         <div className="p-4">
           {/* 이미지 */}
-          <div className="w-full h-36 bg-gray-800 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+          <div className="w-full aspect-[16/10] bg-gray-800 rounded-lg mb-4 overflow-hidden">
             {imageUrl ? (
               <img src={imageUrl} alt={location.name} className="w-full h-full object-cover" />
             ) : (
+               <div className="w-full h-full flex items-center justify-center">
               <MapPin className="w-12 h-12 text-gray-600" />
+              </div>
             )}
           </div>
 

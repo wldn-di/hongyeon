@@ -5,7 +5,7 @@ import { Star, Clock, Users } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { normalizeStatus } from '@/features/scenarios/api/scenarioMappers'
 
-export function ScenarioCard({ scenario, className }) {
+export function ScenarioCard({ scenario, className, index = 999 }) {
   const status = normalizeStatus(scenario?.status)
   if (status === 'FAILED') return null
 
@@ -20,16 +20,18 @@ export function ScenarioCard({ scenario, className }) {
       )}
     >
       {/* 왼쪽: 썸네일 이미지 (세로 포스터) */}
-      <div className="relative w-44 flex-shrink-0 overflow-hidden">
-        <img 
-          src={scenario.thumbnail} 
-          alt={scenario.title}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
-          onError={(e) => {
-            e.target.style.display = 'none'
-            e.target.nextSibling.style.display = 'flex'
-          }}
-        />
+      <div className="relative w-44 aspect-[2/3] flex-shrink-0 overflow-hidden bg-black/20">
+          <img
+            src={scenario.thumbnail}
+            alt={scenario.title}
+            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
+            loading={index < 6 ? "eager" : "lazy"}
+            decoding="async"
+            onError={(e) => {
+              e.currentTarget.style.display = "none"
+              e.currentTarget.nextSibling.style.display = "flex"
+            }}
+          />
         {/* 이미지 없을 때 플레이스홀더 */}
         <div 
           className="absolute inset-0 bg-gradient-to-br from-primary/20 to-secondary/20 items-center justify-center hidden"

@@ -28,13 +28,18 @@ export default function SuspectDetailModal({ suspect, onClose }) {
 
         <div className="p-4">
           {/* 이미지 */}
-          <div className="w-full h-36 bg-gray-800 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
-            {imageUrl ? (
-              <img src={imageUrl} alt={suspect.name} className="w-full h-full object-cover" />
-            ) : (
-              <Users className="w-12 h-12 text-gray-600" />
-            )}
+        <div className="w-full aspect-[4/3] bg-gray-800 rounded-lg mb-4 overflow-hidden">
+        {imageUrl ? (
+          <img
+            src={imageUrl} alt={suspect.name} className="w-full h-full object-cover object-top"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center">
+            <Users className="w-12 h-12 text-gray-600" />
           </div>
+        )}
+      </div>
+
 
           {/* 정보 (보드 hover 툴팁과 동일 필드) */}
           <div className="text-sm space-y-2 text-gray-300">
