@@ -52,10 +52,10 @@ export function InvestigationBoard({
   const [connections, setConnections] = useState([])
   const [saveStatus, setSaveStatus] = useState(null)
   const [memoModalOpen, setMemoModalOpen] = useState(false)
+  const [editingNote, setEditingNote] = useState(null) // { id, text }
   const [lineMode, setLineMode] = useState(null)
   const [pendingConnectFrom, setPendingConnectFrom] = useState(null)
   const [selectedConnectionKey, setSelectedConnectionKey] = useState(null)
-  const [selectedConnectionPos, setSelectedConnectionPos] = useState(null)
   const [modalOffset, setModalOffset] = useState({ x: 0, y: 0 })
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -77,6 +77,7 @@ export function InvestigationBoard({
     startScrollTop: 0,
     didMove: false,
   })
+  const suppressNextConnectionDeleteClickRef = useRef(false)
   const didAutoCenterVictimRef = useRef(false)
   const didAutoFitSubmitRef = useRef(false)
 
@@ -815,6 +816,28 @@ export function InvestigationBoard({
     setSelectedItem(nextItemId)
   }, [readOnly, isSubmitMode, allowMemo, getViewportCenterWorld])
 
+  const updateNoteItem = useCallback((noteId, nextText) => {
+    if (readOnly || isSubmitMode || !allowMemo) return
+    const normalized = String(nextText ?? '').trim()
+    if (!normalized) return
+
+    setBoardItems(prev => prev.map(item => (
+      item.id === noteId
+        ? { ...item, note: normalized }
+        : item
+    )))
+    setSelectedItem(noteId)
+  }, [readOnly, isSubmitMode, allowMemo])
+
+  const startEditNote = useCallback((noteId) => {
+    if (readOnly || isSubmitMode || !allowMemo) return
+    const target = boardItems.find((item) => item.id === noteId && item.type === 'note')
+    if (!target) return
+
+    setEditingNote({ id: noteId, text: target.note ?? '' })
+    setMemoModalOpen(false)
+  }, [readOnly, isSubmitMode, allowMemo, boardItems])
+
   // ========================================
   // 연결선 관리
   // ========================================
@@ -1001,7 +1024,6 @@ export function InvestigationBoard({
     setLineMode(prev => prev === nextMode ? null : nextMode)
     setPendingConnectFromWithRef(null)
     setSelectedConnectionKey(null)
-    setSelectedConnectionPos(null)
   }, [readOnly, effectiveAllowedLineModes, setPendingConnectFromWithRef])
 
   const handleCardClick = useCallback((itemId) => {
@@ -1009,7 +1031,6 @@ export function InvestigationBoard({
 
     setSelectedItem(itemId)
     setSelectedConnectionKey(null)
-    setSelectedConnectionPos(null)
 
     if (!lineMode || !effectiveAllowedLineModes.includes(lineMode)) return
 
@@ -1146,7 +1167,14 @@ export function InvestigationBoard({
     el.scrollTop = panRef.current.startScrollTop - dy
   }, [])
 
-  const handleBoardPointerUp = useCallback(() => {
+  const handleBoardPointerUp = useCallback((e) => {
+    const el = boardRef.current
+    try {
+      if (el && e?.pointerId != null) el.releasePointerCapture?.(e.pointerId)
+    } catch {
+      // ignore
+    }
+
     if (!panRef.current.isPanning) return
     panRef.current.isPanning = false
     document.body.style.cursor = ''
@@ -1173,6 +1201,32 @@ export function InvestigationBoard({
     })
     return set
   }, [filteredItems])
+
+  // 선택된 연결선의 현재 중간 좌표(카드 이동 시에도 따라가도록 매 렌더에서 계산)
+  const selectedConnectionPos = useMemo(() => {
+    if (!selectedConnectionKey) return null
+
+    const selectedConn = connections.find((conn) => (
+      conn?.from &&
+      conn?.to &&
+      getConnectionKey(conn.from, conn.to) === selectedConnectionKey
+    ))
+    if (!selectedConn) return null
+
+    // 필터로 연결선이 숨겨진 상태면 삭제 버튼도 숨김
+    if (!visibleItemIdSet.has(selectedConn.from) || !visibleItemIdSet.has(selectedConn.to)) return null
+
+    const fromItem = boardItems.find((item) => item.id === selectedConn.from)
+    const toItem = boardItems.find((item) => item.id === selectedConn.to)
+    if (!fromItem || !toItem) return null
+
+    const fromX = fromItem.x + CARD_HALF_WIDTH
+    const fromY = fromItem.y + CARD_HALF_HEIGHT
+    const toX = toItem.x + CARD_HALF_WIDTH
+    const toY = toItem.y + CARD_HALF_HEIGHT
+
+    return { x: (fromX + toX) / 2, y: (fromY + toY) / 2 }
+  }, [selectedConnectionKey, connections, boardItems, visibleItemIdSet])
 
   const filterOptions = [
     { value: 'all', label: '전체 보기' },
@@ -1337,7 +1391,10 @@ export function InvestigationBoard({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => setMemoModalOpen(true)}
+          onClick={() => {
+            setEditingNote(null)
+            setMemoModalOpen(true)
+          }}
           className="shrink-0"
         >
           <Plus className="w-4 h-4 mr-2" />
@@ -1375,7 +1432,6 @@ export function InvestigationBoard({
           setSelectedItem(null)
           setPendingConnectFromWithRef(null)
           setSelectedConnectionKey(null)
-          setSelectedConnectionPos(null)
         }}
       >
         {isLoading && (
@@ -1470,7 +1526,6 @@ export function InvestigationBoard({
                         e.stopPropagation()
                         setPendingConnectFromWithRef(null)
                         setSelectedItem(null)
-                        setSelectedConnectionPos({ x: midX, y: midY })
                         setSelectedConnectionKey(prev => prev === key ? null : key)
                       }}
                     />
@@ -1530,7 +1585,6 @@ export function InvestigationBoard({
                       e.stopPropagation()
                       setPendingConnectFromWithRef(null)
                       setSelectedItem(null)
-                      setSelectedConnectionPos({ x: midX, y: midY })
                       setSelectedConnectionKey(prev => prev === key ? null : key)
                     }}
                   />
@@ -1542,23 +1596,36 @@ export function InvestigationBoard({
            {!readOnly && selectedConnectionKey && selectedConnectionPos && (
             <button
               type="button"
+              data-no-board-pan="true"
               onPointerDown={(e) => {
-                // 클릭 시작 단계에서 보드의 선택 해제 트리거를 차단
-                e.preventDefault()
+                if (e.button !== 0) return
                 e.stopPropagation()
+                try {
+                  e.currentTarget.setPointerCapture?.(e.pointerId)
+                } catch {
+                  // ignore
+                }
               }}
-              onMouseDown={(e) => {
-                // 일부 브라우저/환경에서 pointerdown 대신 mousedown만 타는 케이스도 방어
-                e.preventDefault()
-                e.stopPropagation()
-              }}
-              onClick={(e) => {
+              onPointerUp={(e) => {
+                if (e.button !== 0) return
                 e.preventDefault()
                 e.stopPropagation()
 
                 removeConnectionByKey(selectedConnectionKey)
                 setSelectedConnectionKey(null)
-                setSelectedConnectionPos(null)
+
+                suppressNextConnectionDeleteClickRef.current = true
+                window.setTimeout(() => {
+                  suppressNextConnectionDeleteClickRef.current = false
+                }, 0)
+              }}
+              onClick={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
+
+                if (suppressNextConnectionDeleteClickRef.current) return
+                removeConnectionByKey(selectedConnectionKey)
+                setSelectedConnectionKey(null)
               }}
               className="absolute w-9 h-9 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 flex items-center justify-center text-base font-bold border-2 border-white/50 transition-transform hover:scale-110"
               style={{
@@ -1581,9 +1648,16 @@ export function InvestigationBoard({
                 suspect: { label: '용의자', color: 'bg-amber-500', borderColor: 'border-amber-400' },
                 evidence: { label: '증거', color: 'bg-blue-500', borderColor: 'border-blue-400' },
                 location: { label: '장소', color: 'bg-green-500', borderColor: 'border-green-400' },
-                note: { label: '메모', color: 'bg-gray-500', borderColor: 'border-gray-400' },
+                note: { label: '메모', color: 'bg-amber-600', borderColor: 'border-amber-500' },
               }
               const config = typeConfig[item.type] || typeConfig.note
+              const noteLines = item.type === 'note' ? String(item.note ?? '').split('\n') : []
+              const noteTitleIndex = noteLines.findIndex(line => String(line ?? '').trim().length > 0)
+              const noteTitle = noteTitleIndex === -1 ? '' : String(noteLines[noteTitleIndex] ?? '').trim()
+              const noteBody =
+                noteTitleIndex === -1
+                  ? ''
+                  : noteLines.slice(noteTitleIndex + 1).join('\n').trimEnd()
 
               return (
                 <div
@@ -1621,94 +1695,132 @@ export function InvestigationBoard({
                 <Pin className="w-6 h-6 text-red-600 fill-red-600" style={{ filter: 'drop-shadow(0 3px 4px rgba(0,0,0,0.5))' }} />
               </div>
 
-              {/* 폴라로이드 카드 */}
-              <div
-                className={cn(
-                  "w-44 bg-white transition-all duration-300",
-                  selectedItem === item.id && "ring-2 ring-primary"
-                )}
-                style={{
-                  transform: selectedItem === item.id ? 'scale(1.05) rotate(0deg)' : `rotate(${(hashString(item.id) % 2 === 0 ? 1 : -1) * 2}deg)`,
-                  boxShadow: '4px 4px 12px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.05)'
-                }}
-              >
-                {/* 이미지 영역 */}
-                <div className="p-2 pb-0">
-                  {item.image ? (
-                    <div className="relative">
-                      <img
-                        src={item.image}
-                        alt={item.name}
-                        className="w-full h-28 object-cover bg-gray-200 pointer-events-none select-none"
-                        draggable={false}
-                        onDragStart={(e) => e.preventDefault()}
-                        onError={(e) => {
-                          e.target.onerror = null
-                          e.target.src = ''
-                          e.target.className = 'w-full h-28 bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center'
-                        }}
-                      />
-                      {/* 타입 뱃지 */}
-                      <span className={cn(
-                        "absolute top-1 right-1 px-2 py-0.5 text-[10px] font-bold text-white rounded",
-                        config.color
-                      )}>
-                        {config.label}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className={cn(
-                      "w-full h-28 flex items-center justify-center relative",
-                      item.type === 'note'
-                        ? "bg-gradient-to-br from-amber-100 to-amber-200"
-                        : "bg-gradient-to-br from-gray-200 to-gray-300"
-                    )}>
-                      {item.type === 'note' ? (
-                        <span className="text-4xl">📝</span>
-                      ) : item.type === 'location' ? (
-                        <span className="text-4xl">📍</span>
-                      ) : item.type === 'evidence' ? (
-                        <span className="text-4xl">🔍</span>
-                      ) : (
-                        <span className="text-4xl">👤</span>
-                      )}
-                      {/* 타입 뱃지 */}
-                      <span className={cn(
-                        "absolute top-1 right-1 px-2 py-0.5 text-[10px] font-bold text-white rounded",
-                        config.color
-                      )}>
-                        {config.label}
-                      </span>
-                    </div>
+              {/* 카드 */}
+              {item.type === 'note' ? (
+                <div
+                  className={cn(
+                    "w-44 h-44 relative rounded-sm border border-yellow-300/60 bg-[#F7E67D] transition-all duration-300",
+                    selectedItem === item.id && "ring-2 ring-primary"
                   )}
-                </div>
-
-                {/* 정보 영역 */}
-                <div className="p-2 pt-2 pb-3 text-center">
-                  {/* 이름 */}
-                  <p className="text-sm font-bold text-gray-900 truncate">{item.name || '이름 없음'}</p>
-
-                  {/* 역할/타입 */}
-                  {item.type === 'victim' && item.occupation && (
-                    <p className="text-xs text-gray-500 mt-0.5">{item.occupation}</p>
-                  )}
-                  {item.type === 'suspect' && item.role && (
-                    <p className="text-xs text-gray-500 mt-0.5">{item.role}</p>
-                  )}
-
-                  {/* 설명 (메모, 장소, 증거) */}
-                  {(item.type === 'note' || item.type === 'location' || item.type === 'evidence') && item.note && (
-                    <p className="text-[11px] text-gray-600 mt-1 line-clamp-2 leading-tight px-1">
-                      {item.note}
+                  style={{
+                    transform: selectedItem === item.id ? 'scale(1.05) rotate(0deg)' : `rotate(${(hashString(item.id) % 2 === 0 ? 1 : -1) * 2}deg)`,
+                    boxShadow: '6px 10px 18px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  <div className="h-full p-4 pt-5 text-left overflow-hidden">
+                    <p className="text-xl font-extrabold text-gray-900 leading-tight break-words line-clamp-2">
+                      {noteTitle}
                     </p>
-                  )}
-
-                  {/* 장소: 층 정보 */}
-                  {item.type === 'location' && item.floorNumber && (
-                    <p className="text-[10px] text-green-600 font-semibold mt-1">{item.floorNumber}층</p>
-                  )}
+                    {noteBody && (
+                      <p className="mt-2 text-base text-gray-700 leading-snug whitespace-pre-wrap break-words line-clamp-4">
+                        {noteBody}
+                      </p>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div
+                  className={cn(
+                    "w-44 bg-white transition-all duration-300",
+                    selectedItem === item.id && "ring-2 ring-primary"
+                  )}
+                  style={{
+                    transform: selectedItem === item.id ? 'scale(1.05) rotate(0deg)' : `rotate(${(hashString(item.id) % 2 === 0 ? 1 : -1) * 2}deg)`,
+                    boxShadow: '4px 4px 12px rgba(0,0,0,0.3), 0 0 0 1px rgba(0,0,0,0.05)'
+                  }}
+                >
+                  {/* 이미지 영역 */}
+                  <div className="p-2 pb-0">
+                    {item.image ? (
+                      <div className="relative">
+                        <img
+                          src={item.image}
+                          alt={item.name}
+                          className="w-full h-28 object-cover bg-gray-200 pointer-events-none select-none"
+                          draggable={false}
+                          onDragStart={(e) => e.preventDefault()}
+                          onError={(e) => {
+                            e.target.onerror = null
+                            e.target.src = ''
+                            e.target.className = 'w-full h-28 bg-gradient-to-br from-gray-300 to-gray-400 flex items-center justify-center'
+                          }}
+                        />
+                        {/* 타입 뱃지 */}
+                        <span className={cn(
+                          "absolute top-1 right-1 px-2 py-0.5 text-[10px] font-bold text-white rounded",
+                          config.color
+                        )}>
+                          {config.label}
+                        </span>
+                      </div>
+                    ) : (
+                      <div className={cn(
+                        "w-full h-28 flex items-center justify-center relative",
+                        "bg-gradient-to-br from-gray-200 to-gray-300"
+                      )}>
+                        {item.type === 'location' ? (
+                          <span className="text-4xl">📍</span>
+                        ) : item.type === 'evidence' ? (
+                          <span className="text-4xl">🔍</span>
+                        ) : (
+                          <span className="text-4xl">👤</span>
+                        )}
+                        {/* 타입 뱃지 */}
+                        <span className={cn(
+                          "absolute top-1 right-1 px-2 py-0.5 text-[10px] font-bold text-white rounded",
+                          config.color
+                        )}>
+                          {config.label}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 정보 영역 */}
+                  <div className="p-2 pt-2 pb-3 text-center">
+                    {/* 이름 */}
+                    <p className="text-sm font-bold text-gray-900 truncate">{item.name || '이름 없음'}</p>
+
+                    {/* 역할/타입 */}
+                    {item.type === 'victim' && item.occupation && (
+                      <p className="text-xs text-gray-500 mt-0.5">{item.occupation}</p>
+                    )}
+                    {item.type === 'suspect' && item.role && (
+                      <p className="text-xs text-gray-500 mt-0.5">{item.role}</p>
+                    )}
+
+                    {/* 설명 (장소, 증거) */}
+                    {(item.type === 'location' || item.type === 'evidence') && item.note && (
+                      <p className="text-[11px] text-gray-600 mt-1 line-clamp-2 leading-tight px-1">
+                        {item.note}
+                      </p>
+                    )}
+
+                    {/* 장소: 층 정보 */}
+                    {item.type === 'location' && item.floorNumber && (
+                      <p className="text-[10px] text-green-600 font-semibold mt-1">{item.floorNumber}층</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* 메모 수정 버튼 */}
+              {!readOnly && !isSubmitMode && allowMemo && selectedItem === item.id && item.type === 'note' && (
+                <button
+                  type="button"
+                  onMouseDown={(e) => { e.preventDefault(); e.stopPropagation() }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    e.stopPropagation()
+                    startEditNote(item.id)
+                  }}
+                  className="absolute -top-2 -left-2 w-7 h-7 bg-amber-600 text-white rounded-full shadow-lg hover:bg-amber-700 flex items-center justify-center text-sm font-bold border-2 border-white transition-transform hover:scale-110"
+                  style={{ zIndex: 20 }}
+                  aria-label="메모 수정"
+                >
+                  ✎
+                </button>
+              )}
 
               {/* 삭제 버튼 - victim 제외 */}
               {!readOnly && selectedItem === item.id && item.type !== 'victim' && (
@@ -1733,7 +1845,19 @@ export function InvestigationBoard({
         </div>
       </div>
 
-      <MemoInputModal isOpen={memoModalOpen} onClose={() => setMemoModalOpen(false)} onSubmit={addNoteItem} />
+      <MemoInputModal
+        isOpen={memoModalOpen || Boolean(editingNote)}
+        onClose={() => {
+          setMemoModalOpen(false)
+          setEditingNote(null)
+        }}
+        onSubmit={(text) => {
+          if (editingNote?.id) updateNoteItem(editingNote.id, text)
+          else addNoteItem(text)
+        }}
+        initialText={editingNote?.text ?? ''}
+        isEdit={Boolean(editingNote)}
+      />
     </div>
   )
 }
