@@ -80,13 +80,13 @@ spring:
         base-url: https://generativelanguage.googleapis.com
 
     openai:
-      api-key: ${GMS_KEY:}
-      base-url: ${GMS_URL:https://gms.ssafy.io/gmsapi/api.openai.com/v1}
+      api-key: ${GMS_KEY}
+      base-url: ${GMS_URL}
       chat:
         options:
-          model: ${GMS_MODEL:gpt-5-nano}
-          temperature: 0.8
+          model: ${GMS_MODEL}
           max-tokens: 2000
+        completions-path: ${GMS_PATH}
 
 gms:
   url: ${GMS_URL:https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions}
