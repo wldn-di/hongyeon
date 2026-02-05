@@ -4,15 +4,17 @@ import { Button } from '@/components/ui/Button'
 
 // 증거 상세 보기 팝업 (튜토리얼 스타일)
 export default function EvidenceDetailModal({ evidence, onClose }) {
-  if (!evidence) return null
-
   useEffect(() => {
+    if (!evidence) return
+
     const onKeyDown = (e) => {
       if (e.key === "Escape") onClose?.()
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [onClose])
+  }, [evidence, onClose])
+
+  if (!evidence) return null
 
   // 이미지 URL (detailImageUrl 또는 image 필드 사용)
   const imageUrl = evidence.detailImageUrl || evidence.imageUrl || evidence.image || null

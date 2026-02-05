@@ -77,7 +77,6 @@ export function InvestigationBoard({
     startScrollTop: 0,
     didMove: false,
   })
-  const suppressNextConnectionDeleteClickRef = useRef(false)
   const didAutoCenterVictimRef = useRef(false)
   const didAutoFitSubmitRef = useRef(false)
 
@@ -1598,33 +1597,27 @@ export function InvestigationBoard({
               type="button"
               data-no-board-pan="true"
               onPointerDown={(e) => {
-                if (e.button !== 0) return
-                e.stopPropagation()
-                try {
-                  e.currentTarget.setPointerCapture?.(e.pointerId)
-                } catch {
-                  // ignore
-                }
-              }}
-              onPointerUp={(e) => {
-                if (e.button !== 0) return
                 e.preventDefault()
                 e.stopPropagation()
 
-                removeConnectionByKey(selectedConnectionKey)
-                setSelectedConnectionKey(null)
+                const keyToRemove = selectedConnectionKey
+                if (!keyToRemove) return
 
-                suppressNextConnectionDeleteClickRef.current = true
-                window.setTimeout(() => {
-                  suppressNextConnectionDeleteClickRef.current = false
-                }, 0)
+                removeConnectionByKey(keyToRemove)
+                setSelectedConnectionKey(null)
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault()
+                e.stopPropagation()
               }}
               onClick={(e) => {
                 e.preventDefault()
                 e.stopPropagation()
 
-                if (suppressNextConnectionDeleteClickRef.current) return
-                removeConnectionByKey(selectedConnectionKey)
+                const keyToRemove = selectedConnectionKey
+                if (!keyToRemove) return
+
+                removeConnectionByKey(keyToRemove)
                 setSelectedConnectionKey(null)
               }}
               className="absolute w-9 h-9 bg-red-600 text-white rounded-full shadow-xl hover:bg-red-700 flex items-center justify-center text-base font-bold border-2 border-white/50 transition-transform hover:scale-110"
@@ -1651,13 +1644,7 @@ export function InvestigationBoard({
                 note: { label: '메모', color: 'bg-amber-600', borderColor: 'border-amber-500' },
               }
               const config = typeConfig[item.type] || typeConfig.note
-              const noteLines = item.type === 'note' ? String(item.note ?? '').split('\n') : []
-              const noteTitleIndex = noteLines.findIndex(line => String(line ?? '').trim().length > 0)
-              const noteTitle = noteTitleIndex === -1 ? '' : String(noteLines[noteTitleIndex] ?? '').trim()
-              const noteBody =
-                noteTitleIndex === -1
-                  ? ''
-                  : noteLines.slice(noteTitleIndex + 1).join('\n').trimEnd()
+              const noteText = item.type === 'note' ? String(item.note ?? '').trimEnd() : ''
 
               return (
                 <div
@@ -1696,29 +1683,38 @@ export function InvestigationBoard({
               </div>
 
               {/* 카드 */}
-              {item.type === 'note' ? (
-                <div
-                  className={cn(
-                    "w-44 h-44 relative rounded-sm border border-yellow-300/60 bg-[#F7E67D] transition-all duration-300",
-                    selectedItem === item.id && "ring-2 ring-primary"
-                  )}
-                  style={{
-                    transform: selectedItem === item.id ? 'scale(1.05) rotate(0deg)' : `rotate(${(hashString(item.id) % 2 === 0 ? 1 : -1) * 2}deg)`,
-                    boxShadow: '6px 10px 18px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)'
-                  }}
-                >
-                  <div className="h-full p-4 pt-5 text-left overflow-hidden">
-                    <p className="text-xl font-extrabold text-gray-900 leading-tight break-words line-clamp-2">
-                      {noteTitle}
-                    </p>
-                    {noteBody && (
-                      <p className="mt-2 text-base text-gray-700 leading-snug whitespace-pre-wrap break-words line-clamp-4">
-                        {noteBody}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              ) : (
+             {item.type === 'note' ? (
+  <div
+    className={cn(
+      "w-44 h-44 relative rounded-sm border border-yellow-300/60 bg-[#F7E67D] transition-all duration-300 overflow-hidden",
+      selectedItem === item.id && "ring-2 ring-primary"
+    )}
+    style={{
+      transform: selectedItem === item.id ? 'scale(1.05) rotate(0deg)' : `rotate(${(hashString(item.id) % 2 === 0 ? 1 : -1) * 2}deg)`,
+      boxShadow: '6px 10px 18px rgba(0,0,0,0.22), 0 0 0 1px rgba(0,0,0,0.05)'
+    }}
+  >
+    {/* 종이 질감 레이어 (이미지 없이도 자연스럽게) */}
+    <div
+      className="absolute inset-0 pointer-events-none opacity-35 mix-blend-multiply"
+      style={{
+        backgroundImage: `
+          radial-gradient(circle at 20% 15%, rgba(255,255,255,0.55), transparent 45%),
+          radial-gradient(circle at 80% 0%, rgba(0,0,0,0.10), transparent 55%),
+          repeating-linear-gradient(0deg, rgba(0,0,0,0.035) 0px, rgba(0,0,0,0.035) 1px, transparent 1px, transparent 4px),
+          repeating-linear-gradient(90deg, rgba(0,0,0,0.02) 0px, rgba(0,0,0,0.02) 1px, transparent 1px, transparent 6px)
+        `,
+      }}
+    />
+
+    <div className="relative h-full p-4 pt-5 text-left overflow-hidden">
+      {/* 제목/본문 구분 없음: 전부 동일 크기 + 볼드 */}
+      <p className="text-base font-bold text-gray-900 whitespace-pre-wrap break-words leading-snug line-clamp-6">
+        {noteText || '메모'}
+      </p>
+    </div>
+  </div>
+) : (
                 <div
                   className={cn(
                     "w-44 bg-white transition-all duration-300",

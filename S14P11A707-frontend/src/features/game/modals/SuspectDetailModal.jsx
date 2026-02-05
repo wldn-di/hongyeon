@@ -3,15 +3,17 @@ import { Users, X } from "lucide-react"
 import { Button } from "@/components/ui/Button"
 
 export default function SuspectDetailModal({ suspect, onClose }) {
-  if (!suspect) return null
-
   useEffect(() => {
+    if (!suspect) return
+
     const onKeyDown = (e) => {
       if (e.key === "Escape") onClose?.()
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [onClose])
+  }, [suspect, onClose])
+
+  if (!suspect) return null
 
   const imageUrl = suspect.image || suspect.portraitUrl || null
   const roleText = suspect.role || suspect.occupation || ""

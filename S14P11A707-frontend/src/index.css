@@ -360,3 +360,34 @@ select:not(:disabled) {
 [data-sonner-toast][data-type="info"] [data-icon] {
   color: #3b82f6 !important;
 }
+
+/* 커스텀 스크롤바 (전역) */
+*,
+.scrollbar-dark {
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(255, 255, 255, 0.18) rgba(0, 0, 0, 0.35); /* thumb track */
+}
+
+*::-webkit-scrollbar,
+.scrollbar-dark::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track,
+.scrollbar-dark::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.35);
+  border-radius: 9999px;
+}
+
+*::-webkit-scrollbar-thumb,
+.scrollbar-dark::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 9999px;
+  border: 2px solid rgba(0, 0, 0, 0.35); /* track과 자연스럽게 */
+}
+
+*::-webkit-scrollbar-thumb:hover,
+.scrollbar-dark::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.28);
+}

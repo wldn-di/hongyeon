@@ -1,10 +1,22 @@
+import React, { useState, useEffect, useRef } from "react"
 import { ArrowLeft, Send, Users, Plus, X, Search } from "lucide-react"
-import { React, useState, useEffect, useRef } from "react"
 import { cn } from "@/lib/utils"
 
 // 용의자 심문용 휴대폰 UI 컴포넌트
-export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistories, onSendMessage, currentChat, setCurrentChat, onContactSelect, onMarkAsRead, clues = [] }) {
-  const [message, setMessage] = useState('')
+export default function PhoneUI({
+  isOpen,
+  onClose,
+  helper,
+  suspects,
+  chatHistories,
+  onSendMessage,
+  currentChat,
+  setCurrentChat,
+  onContactSelect,
+  onMarkAsRead,
+  clues = [],
+}) {
+  const [message, setMessage] = useState("")
   const [selectedContact, setSelectedContact] = useState(null)
   const [selectedClue, setSelectedClue] = useState(null) // 선택된 단서
   const [clueModalOpen, setClueModalOpen] = useState(false) // 단서 선택 모달
@@ -15,16 +27,32 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
 
   useEffect(() => {
     if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: 'smooth' })
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" })
     }
   }, [chatHistories, selectedContact])
 
-  // 채팅방 입장 시 읽음 처리
+  // 중요 (읽음 처리 영역 1) 채팅방 입장 시 읽음 처리
   useEffect(() => {
-    if (selectedContact && onMarkAsRead) {
+    if (!isOpen) return
+    if (selectedContact?.id && onMarkAsRead) {
       onMarkAsRead(selectedContact.id)
     }
-  }, [selectedContact, onMarkAsRead])
+  }, [isOpen, selectedContact?.id, onMarkAsRead])
+
+  // 중요 (읽음 처리 영역 2) 채팅방을 보고 있는 동안 새 메시지가 오면 즉시 읽음 처리
+  useEffect(() => {
+    if (!isOpen) return
+    if (!selectedContact?.id || !onMarkAsRead) return
+
+    const history = chatHistories?.[selectedContact.id] || []
+    const hasUnread = history.some(
+      (m) => m && !m.isTyping && m.sender !== "user" && m.read !== true
+    )
+
+    if (hasUnread) {
+      onMarkAsRead(selectedContact.id)
+    }
+  }, [isOpen, selectedContact?.id, chatHistories, onMarkAsRead])
 
   // 연락처 변경 시 선택된 단서 초기화
   useEffect(() => {
@@ -34,13 +62,13 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
   const handleSend = () => {
     if (message.trim() && selectedContact) {
       onSendMessage(selectedContact.id, message, selectedClue?.id || null)
-      setMessage('')
+      setMessage("")
       setSelectedClue(null) // 전송 후 단서 선택 초기화
     }
   }
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault()
       handleSend()
     }
@@ -55,21 +83,25 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
     setSelectedClue(null)
   }
 
+  // 중요 unread 계산에서 isTyping 제외 + read !== true 로 엄격 처리
   const getUnreadCount = (contactId) => {
-    const history = chatHistories[contactId] || []
-    return history.filter(m => m.sender !== 'user' && !m.read).length
+    const history = chatHistories?.[contactId] || []
+    return history.filter((m) => m && !m.isTyping && m.sender !== "user" && m.read !== true).length
   }
 
   // 미리보기용 텍스트 자르기 (10글자 이상이면 ...)
   const truncatePreview = (text) => {
-    if (!text) return ''
-    return text.length > 10 ? text.substring(0, 10) + '...' : text
+    if (!text) return ""
+    return text.length > 10 ? text.substring(0, 10) + "..." : text
   }
 
   if (!isOpen) return null
 
   return (
-    <div data-board-safe-area="true" className="fixed right-6 bottom-24 w-80 h-[500px] bg-gray-900 rounded-3xl border-4 border-gray-700 shadow-2xl z-[210] overflow-hidden flex flex-col">
+    <div
+      data-board-safe-area="true"
+      className="fixed right-6 bottom-24 w-80 h-[500px] bg-gray-900 rounded-3xl border-4 border-gray-700 shadow-2xl z-[210] overflow-hidden flex flex-col"
+    >
       {/* 폰 노치 */}
       <div className="bg-black h-6 flex items-center justify-center">
         <div className="w-20 h-4 bg-gray-800 rounded-full" />
@@ -79,12 +111,22 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
         // 채팅 화면
         <>
           <div className="bg-gray-800 p-3 flex items-center gap-3 border-b border-gray-700">
-            <button onClick={() => setSelectedContact(null)} className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors">
+            <button
+              onClick={() => {
+                setSelectedContact(null)
+                setCurrentChat?.(null)
+              }}
+              className="p-1.5 hover:bg-gray-700 rounded-lg transition-colors"
+            >
               <ArrowLeft className="w-5 h-5" />
             </button>
             <div className="w-10 h-10 rounded-full bg-muted overflow-hidden border-2 border-gray-600">
               {selectedContact.image ? (
-                <img src={selectedContact.image} alt={selectedContact.name} className="w-full h-full object-cover" />
+                <img
+                  src={selectedContact.image}
+                  alt={selectedContact.name}
+                  className="w-full h-full object-cover"
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-muted-foreground bg-gray-700">
                   <Users className="w-5 h-5" />
@@ -95,34 +137,54 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
               <div className="flex items-center gap-2">
                 <p className="font-bold text-sm truncate">{selectedContact.name}</p>
                 {selectedContact.isHelper ? (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded">조력자</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded">
+                    조력자
+                  </span>
                 ) : (
-                  <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded">용의자</span>
+                  <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded">
+                    용의자
+                  </span>
                 )}
               </div>
               <p className="text-xs text-gray-400 truncate">
                 {selectedContact.isHelper
-                  ? '수사를 도와드립니다'
-                  : (selectedContact.role || selectedContact.occupation || '관련자')
-                }
+                  ? "수사를 도와드립니다"
+                  : selectedContact.role || selectedContact.occupation || "관련자"}
               </p>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-950 scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            {(chatHistories[selectedContact.id] || []).map((msg, idx) => (
-              <div key={idx} className={cn("flex", msg.sender === 'user' ? "justify-end" : "justify-start")}>
-                <div className={cn(
-                  "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
-                  msg.sender === 'user'
-                    ? "bg-primary text-primary-foreground rounded-br-sm"
-                    : "bg-gray-800 rounded-bl-sm"
-                )}>
+          <div
+            className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-950 scrollbar-hide"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {(chatHistories?.[selectedContact.id] || []).map((msg, idx) => (
+              <div
+                key={idx}
+                className={cn("flex", msg.sender === "user" ? "justify-end" : "justify-start")}
+              >
+                <div
+                  className={cn(
+                    "max-w-[80%] rounded-2xl px-3 py-2 text-sm",
+                    msg.sender === "user"
+                      ? "bg-primary text-primary-foreground rounded-br-sm"
+                      : "bg-gray-800 rounded-bl-sm"
+                  )}
+                >
                   {msg.isTyping ? (
                     <div className="flex items-center gap-1 h-4">
-                      <span className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                      <span className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce" style={{ animationDelay: '120ms' }} />
-                      <span className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce" style={{ animationDelay: '240ms' }} />
+                      <span
+                        className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce"
+                        style={{ animationDelay: "0ms" }}
+                      />
+                      <span
+                        className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce"
+                        style={{ animationDelay: "120ms" }}
+                      />
+                      <span
+                        className="inline-block w-1.5 h-1.5 bg-gray-200/90 rounded-full animate-bounce"
+                        style={{ animationDelay: "240ms" }}
+                      />
                     </div>
                   ) : (
                     <>
@@ -149,10 +211,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
               <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full border border-blue-500/30">
                 <Search className="w-3 h-3" />
                 @{selectedClue.name}
-                <button
-                  onClick={handleRemoveClue}
-                  className="ml-1 hover:text-blue-200 transition-colors"
-                >
+                <button onClick={handleRemoveClue} className="ml-1 hover:text-blue-200 transition-colors">
                   <X className="w-3 h-3" />
                 </button>
               </span>
@@ -174,6 +233,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
               >
                 <Plus className="w-5 h-5" />
               </button>
+
               <input
                 type="text"
                 value={message}
@@ -184,6 +244,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                 placeholder={selectedClue ? `@${selectedClue.name} 관련 질문...` : "메시지 입력..."}
                 className="flex-1 bg-gray-700 rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
               />
+
               <button
                 onClick={handleSend}
                 className="w-10 h-10 bg-primary rounded-full flex items-center justify-center hover:bg-primary/80"
@@ -205,6 +266,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                   <X className="w-5 h-5" />
                 </button>
               </div>
+
               <div className="flex-1 overflow-y-auto bg-gray-950 p-2">
                 {clues.length === 0 ? (
                   <div className="text-center text-gray-500 py-8">
@@ -225,7 +287,6 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                             : "bg-gray-800 hover:bg-gray-700"
                         )}
                       >
-                        {/* 단서 이미지 */}
                         <div className="w-12 h-12 rounded-lg bg-gray-700 overflow-hidden flex-shrink-0">
                           {clue.image || clue.imageUrl || clue.detailImageUrl ? (
                             <img
@@ -239,15 +300,17 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                             </div>
                           )}
                         </div>
+
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-sm truncate">{clue.name}</p>
-                          {clue.location && (
-                            <p className="text-xs text-gray-400 truncate">{clue.location}</p>
-                          )}
+                          {clue.location && <p className="text-xs text-gray-400 truncate">{clue.location}</p>}
                           {clue.description && (
-                            <p className="text-xs text-gray-500 truncate mt-0.5">{truncatePreview(clue.description)}</p>
+                            <p className="text-xs text-gray-500 truncate mt-0.5">
+                              {truncatePreview(clue.description)}
+                            </p>
                           )}
                         </div>
+
                         {selectedClue?.id === clue.id && (
                           <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
                             <span className="text-white text-xs">✓</span>
@@ -258,6 +321,7 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                   </div>
                 )}
               </div>
+
               {selectedClue && (
                 <div className="bg-gray-800 p-3 border-t border-gray-700">
                   <button
@@ -279,17 +343,22 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
             <p className="text-xs text-gray-400 mt-1">용의자와 대화하여 정보를 수집하세요</p>
           </div>
 
-          <div className="flex-1 bg-gray-950 overflow-y-auto scrollbar-hide" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-            {allContacts.map(contact => {
+          <div
+            className="flex-1 bg-gray-950 overflow-y-auto scrollbar-hide"
+            style={{ scrollbarWidth: "none", msOverflowStyle: "none" }}
+          >
+            {allContacts.map((contact) => {
               const unread = getUnreadCount(contact.id)
-              const lastMessage = (chatHistories[contact.id] || []).slice(-1)[0]
+              const lastMessage = (chatHistories?.[contact.id] || []).slice(-1)[0]
 
               return (
                 <button
                   key={contact.id}
                   onClick={() => {
                     setSelectedContact(contact)
+                    setCurrentChat?.(contact) // 현재 채팅 동기화(옵션)
                     onContactSelect?.(contact)
+                    onMarkAsRead?.(contact.id) // 클릭 즉시도 한번 처리
                   }}
                   className="w-full p-3 flex items-center gap-3 hover:bg-gray-800 transition-colors border-b border-gray-800 group"
                 >
@@ -309,24 +378,31 @@ export default function PhoneUI({ isOpen, onClose, helper, suspects, chatHistori
                       </div>
                     )}
                   </div>
+
                   <div className="flex-1 text-left min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="font-bold text-sm truncate">{contact.name}</p>
                       {contact.isHelper ? (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded flex-shrink-0">조력자</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-primary/20 text-primary rounded flex-shrink-0">
+                          조력자
+                        </span>
                       ) : (
-                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded flex-shrink-0">용의자</span>
+                        <span className="text-[10px] px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded flex-shrink-0">
+                          용의자
+                        </span>
                       )}
                     </div>
-                    {/* 역할 표시 */}
+
                     {(contact.role || contact.occupation) && !contact.isHelper && (
                       <p className="text-xs text-gray-500 truncate">{contact.role || contact.occupation}</p>
                     )}
-                    {/* 마지막 메시지 또는 한줄 소개 */}
+
                     {lastMessage ? (
                       <p className="text-xs text-gray-400 truncate mt-0.5">{truncatePreview(lastMessage.text)}</p>
                     ) : contact.oneLiner && !contact.isHelper ? (
-                      <p className="text-xs text-gray-500 italic truncate mt-0.5">"{truncatePreview(contact.oneLiner)}"</p>
+                      <p className="text-xs text-gray-500 italic truncate mt-0.5">
+                        "{truncatePreview(contact.oneLiner)}"
+                      </p>
                     ) : null}
                   </div>
                 </button>
