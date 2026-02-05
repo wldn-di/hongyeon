@@ -1499,8 +1499,34 @@ export default function GameRoom() {
        {currentRoom?.name || "발견 장소"}
       </span>
     </div>
-  {/* RIGHT (비워둠) */}
-  <div />
+  {/* RIGHT - 도움말 아이콘 */}
+  <div className="justify-self-end relative group">
+    <div className="w-6 h-6 rounded-full bg-white/10 border border-white/20 flex items-center justify-center cursor-help hover:bg-white/20 transition-colors">
+      <span className="text-xs text-white/70 font-bold">?</span>
+    </div>
+    {/* 호버 시 안내 툴팁 */}
+    <div className="absolute top-full right-0 mt-2 w-56 p-3 bg-card/95 backdrop-blur border border-border rounded-lg shadow-xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-50">
+      <p className="text-xs font-bold text-primary mb-2">조작 안내</p>
+      <div className="space-y-1.5 text-[11px] text-muted-foreground">
+        <div className="flex items-center gap-2">
+          <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">WASD</kbd>
+          <span>이동</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <kbd className="px-1.5 py-0.5 bg-muted rounded text-[10px] font-mono">Space</kbd>
+          <span>층 이동 / 단서 수집</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <kbd className="px-1.5 py-0.5 bg-yellow-500/30 rounded text-[10px] font-mono">Shift</kbd>
+          <span>손전등 켜고 끄기</span>
+        </div>
+        <div className="flex items-start gap-2 pt-1 border-t border-border mt-1">
+          <span className="text-red-400">❤️</span>
+          <span className="text-red-400">용의자 심문 시 체력 5 소모<br/><span className="text-muted-foreground">(0이 되어도 플레이 가능, 심문만 불가)</span></span>
+        </div>
+      </div>
+    </div>
+  </div>
   </div>
   <div className="w-full h-[calc(100%-40px)] bg-black/40 relative">
 	            {sessionId ? (
