@@ -1453,43 +1453,78 @@ const handlePhoneClose = () => {
               />
             )}
 
-            {/* 이동 + 스페이스바 통합 안내 (movement 단계) */}
+            {/* 이동 + 스페이스바 + Shift + 체력 통합 안내 (movement 단계) */}
             {storyStep === 'movement' && !isDialogActive && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
                 <div className="bg-card/95 backdrop-blur px-5 py-4 rounded-xl border-2 border-primary shadow-xl">
-                  <div className="flex items-center gap-6">
-                    {/* WASD 키 안내 */}
-                    <div className="flex items-center gap-3">
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="w-8 h-8 bg-muted border-2 border-primary rounded flex items-center justify-center font-bold text-primary text-xs">W</div>
-                        <div className="flex gap-1">
-                          <div className="w-8 h-8 bg-muted border-2 border-primary rounded flex items-center justify-center font-bold text-primary text-xs">A</div>
-                          <div className="w-8 h-8 bg-muted border-2 border-primary rounded flex items-center justify-center font-bold text-primary text-xs">S</div>
-                          <div className="w-8 h-8 bg-muted border-2 border-primary rounded flex items-center justify-center font-bold text-primary text-xs">D</div>
+                  <div className="flex items-center gap-5">
+                    {/* WASD 이동 */}
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="flex flex-col items-center gap-0.5">
+                        <div className="w-6 h-6 bg-muted border border-primary rounded flex items-center justify-center font-bold text-primary text-[10px]">W</div>
+                        <div className="flex gap-0.5">
+                          <div className="w-6 h-6 bg-muted border border-primary rounded flex items-center justify-center font-bold text-primary text-[10px]">A</div>
+                          <div className="w-6 h-6 bg-muted border border-primary rounded flex items-center justify-center font-bold text-primary text-[10px]">S</div>
+                          <div className="w-6 h-6 bg-muted border border-primary rounded flex items-center justify-center font-bold text-primary text-[10px]">D</div>
                         </div>
                       </div>
-                      <span className="text-sm font-bold">이동</span>
+                      <span className="text-xs font-medium">이동</span>
                     </div>
 
                     <div className="w-px h-12 bg-border" />
 
-                    {/* Space 키 안내 */}
-                    <div className="flex items-center gap-3">
-                      <kbd className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm shadow-lg animate-pulse">Space</kbd>
-                      <span className="text-sm font-bold">반짝이는 단서 근처에서 수집!</span>
+                    {/* Space 단서 수집 */}
+                    <div className="flex flex-col items-center gap-2">
+                      <kbd className="px-3 py-2 bg-primary text-white rounded-lg font-bold text-xs animate-pulse">Space</kbd>
+                      <span className="text-xs font-medium">단서 수집</span>
+                    </div>
+
+                    <div className="w-px h-12 bg-border" />
+
+                    {/* Shift 손전등 */}
+                    <div className="flex flex-col items-center gap-2">
+                      <kbd className="px-3 py-2 bg-yellow-500/80 text-black rounded-lg font-bold text-xs">Shift</kbd>
+                      <span className="text-xs font-medium">손전등</span>
+                    </div>
+
+                    <div className="w-px h-12 bg-border" />
+
+                    {/* 체력 안내 */}
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-xl">❤️</span>
+                      <span className="text-xs font-medium text-red-400">심문 시 -5</span>
                     </div>
                   </div>
                 </div>
               </div>
             )}
 
-            {/* 엘리베이터 + 스페이스바 안내 (두 번째, 세 번째 단서 탐색 단계) */}
+            {/* 엘리베이터 + 스페이스바 + Shift + 체력 안내 (두 번째, 세 번째 단서 탐색 단계) */}
             {(storyStep === 'waitSecondClue' || storyStep === 'waitThirdClue') && !isDialogActive && (
               <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none">
-                <div className="bg-card/95 backdrop-blur px-5 py-3 rounded-xl border-2 border-primary shadow-xl">
-                  <div className="flex items-center gap-3">
-                    <kbd className="px-4 py-2 bg-primary text-white rounded-lg font-bold text-sm shadow-lg animate-pulse">Space</kbd>
-                    <span className="text-sm font-bold">엘리베이터 앞에서 층 이동 / 단서 근처에서 수집</span>
+                <div className="bg-card/95 backdrop-blur px-5 py-4 rounded-xl border-2 border-primary shadow-xl">
+                  <div className="flex items-center gap-5">
+                    {/* Space 층 이동/단서 수집 */}
+                    <div className="flex flex-col items-center gap-2">
+                      <kbd className="px-3 py-2 bg-primary text-white rounded-lg font-bold text-xs animate-pulse">Space</kbd>
+                      <span className="text-xs font-medium text-center">층 이동<br/>단서 수집</span>
+                    </div>
+
+                    <div className="w-px h-12 bg-border" />
+
+                    {/* Shift 손전등 */}
+                    <div className="flex flex-col items-center gap-2">
+                      <kbd className="px-3 py-2 bg-yellow-500/80 text-black rounded-lg font-bold text-xs">Shift</kbd>
+                      <span className="text-xs font-medium">손전등</span>
+                    </div>
+
+                    <div className="w-px h-12 bg-border" />
+
+                    {/* 체력 안내 */}
+                    <div className="flex flex-col items-center gap-2">
+                      <span className="text-xl">❤️</span>
+                      <span className="text-xs font-medium text-red-400">심문 시 -5</span>
+                    </div>
                   </div>
                 </div>
               </div>
