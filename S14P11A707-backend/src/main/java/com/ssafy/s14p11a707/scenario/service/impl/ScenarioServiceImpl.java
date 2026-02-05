@@ -654,7 +654,6 @@ public class ScenarioServiceImpl implements ScenarioService {
             );
 
         } catch (Exception e) {
-            log.error("Scenario generation failed", e);
             Scenario scenario = Scenario.builder()
                     .creator(creator)
                     .title(request.title())

@@ -26,6 +26,7 @@ export default function CreateScenario() {
   const authLoading = state.loading;
   const { generation } = useScenarioGeneration();
   const { createScenario, isGenerating } = useCreateScenario();
+  const [submitLock, setSubmitLock] = useState(false);
 
   const [formData, setFormData] = useState({
     title: "",
@@ -35,7 +36,7 @@ export default function CreateScenario() {
   });
 
   // 전역 생성 상태가 true이면 새 생성 UX 차단
-  const locked = generation.isScenarioGenerating || isGenerating;
+  const locked = generation.isScenarioGenerating || isGenerating || submitLock;
 
   const handleChange = (field, value) => {
     if (locked) return;
@@ -46,9 +47,11 @@ export default function CreateScenario() {
     e.preventDefault();
 
     if (locked) {
-      toast.error("현재 다른 시나리오를 생성 중입니다. 취소 후 다시 시도해주세요.");
+      toast.error("현재 다른 시나리오를 생성 중입니다. 완료 후 다시 시도해주세요.");
       return;
     }
+
+    setSubmitLock(true);
 
     if (!formData.title.trim()) {
       toast.error("제목을 입력해주세요.");
@@ -202,7 +205,7 @@ export default function CreateScenario() {
                   취소
                 </Button>
               </Link>
-              <Button type="submit" variant="neon" className="flex-[2] py-6" disabled={locked}>
+              <Button variant="neon" className="flex-[2] py-6" disabled={locked}>
                 {locked ? (
                   <>
                     <Loader2 className="w-5 h-5 mr-2 animate-spin" />
