@@ -205,7 +205,7 @@ function ReviewItem({ review, isMine = false, onRefresh }) {
         </div>
         <div className="flex flex-col items-end gap-2">
           <span className="text-xs text-muted-foreground">{formatDate(review.createdAt)}</span>
-          {isMine ? (
+          {isMine && !review.isDeleted ? (
             isEditing ? (
               <div className="flex items-center gap-2">
                 <Button variant="neon" size="sm" onClick={saveEdit} disabled={isSubmitting}>
