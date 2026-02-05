@@ -46,6 +46,7 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -82,7 +83,7 @@ public class GameSessionServiceImpl implements GameSessionService {
     @PersistenceContext
     private EntityManager entityManager;
 
-    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
+    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, @Qualifier("genAiFlashChatClient") ChatClient chatClient, ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
         this.gameSessionRepository = gameSessionRepository;
         this.sessionSuspectStateRepository = sessionSuspectStateRepository;
         this.scenarioRepository = scenarioRepository;
@@ -345,6 +346,12 @@ public class GameSessionServiceImpl implements GameSessionService {
     @Override
     @Transactional
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
+        long startedAt = System.nanoTime();
+        Long usedClueId = request == null ? null : request.usedClueId();
+        int userMessageLen = request != null && request.message() != null ? request.message().trim().length() : 0;
+        long contextMs = 0L;
+        long aiMs = 0L;
+
         GameSession session = getSession(sessionId);
         validatePlaying(session);
 
@@ -359,7 +366,9 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
 
         // 시나리오 정보를 문자열로 빌드 (현재 심문 중인 용의자 전달)
+        long contextStartedAt = System.nanoTime();
         String scenarioContext = buildScenarioContext(session.getScenario(), suspect);
+        contextMs = (System.nanoTime() - contextStartedAt) / 1_000_000L;
 
         // aiConfigJson에서 성격/말투 추출
         JsonNode aiConfig = suspect.getAiConfigJson();
@@ -405,7 +414,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                         .build()));
 
         // 현재 레벨 확인 (Level 2 이상이면 약점이 이미 드러난 상태)
-        Long usedClueId = request.usedClueId();
         boolean isWeaknessClueUsed = state.getCurrentInterrogationLevel() >= 2;
 
         // 아직 Level 2가 아니고, 약점 단서를 제시한 경우
@@ -574,6 +582,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .build();
 
         // AI 응답 생성
+        long aiStartedAt = System.nanoTime();
         StringBuilder sb = new StringBuilder();
         chatClient.prompt()
                 .system(systemMessage)
@@ -583,6 +592,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .content()
                 .doOnNext(sb::append)
                 .blockLast();
+        aiMs = (System.nanoTime() - aiStartedAt) / 1_000_000L;
 
         String fullResponse = sb.toString();
 
@@ -638,6 +648,22 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         saveEventLog(session, CHAT_STARTED, suspect.getName());
 
+        long totalMs = (System.nanoTime() - startedAt) / 1_000_000L;
+        if (totalMs >= 2000) {
+            log.info(
+                    "[chat] slow. sessionId={}, suspectId={}, usedClueId={}, userMessageLen={}, totalMs={}, contextMs={}, aiMs={}, responseLevel={}, keyTalk={}, health={}",
+                    sessionId,
+                    suspectId,
+                    usedClueId,
+                    userMessageLen,
+                    totalMs,
+                    contextMs,
+                    aiMs,
+                    responseLevel,
+                    keyTalk,
+                    health
+            );
+        }
 
         return new SuspectChatResponse(
                 sessionId,

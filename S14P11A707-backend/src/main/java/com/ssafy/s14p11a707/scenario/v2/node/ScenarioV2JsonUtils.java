@@ -149,6 +149,10 @@ public final class ScenarioV2JsonUtils {
      * 문자열 종료 시 스택에 남아있는 열림 토큰을 역순으로 닫아 JSON 파싱 성공 가능성을 높인다.
      * </p>
      * <p>
+     * LLM 응답이 문자열 값 중간에서 끊겨 따옴표가 닫히지 않는 경우가 있어,
+     * 문자열 컨텍스트({@code inString})가 열린 상태로 종료되면 닫는 따옴표를 추가한다.
+     * </p>
+     * <p>
      * 본 메서드는 LLM 응답이 마지막 닫힘 괄호를 누락하는 흔한 케이스를 완화하기 위한 용도이며,
      * 근본적으로 잘못된 JSON을 완전히 복구한다는 보장은 없다.
      * </p>
@@ -207,11 +211,17 @@ public final class ScenarioV2JsonUtils {
             }
         }
 
-        if (stack.isEmpty()) {
-            return json;
+        StringBuilder sb = new StringBuilder(json);
+        if (inString) {
+            if (escape) {
+                sb.append('\\');
+            }
+            sb.append('"');
         }
 
-        StringBuilder sb = new StringBuilder(json);
+        if (stack.isEmpty()) {
+            return sb.toString();
+        }
         while (!stack.isEmpty()) {
             char open = stack.pop();
             sb.append(open == '{' ? '}' : ']');

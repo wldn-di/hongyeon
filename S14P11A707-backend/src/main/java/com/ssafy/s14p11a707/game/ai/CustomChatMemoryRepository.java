@@ -6,10 +6,12 @@ import com.ssafy.s14p11a707.game.repository.ChatMessageRepository;
 import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
 import com.ssafy.s14p11a707.scenario.entity.Suspect;
 import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
+import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -23,12 +25,15 @@ import org.springframework.transaction.annotation.Transactional;
  * Spring AI의 ChatMemoryRepository를 구현하여 기존 chat_messages 테이블을 사용하도록 커스터마이징
  * conversationId 형식: "session-{sessionId}-suspect-{suspectId}"
  */
+@Slf4j
 @Component
 @Primary
 public class CustomChatMemoryRepository implements ChatMemoryRepository {
 
     private static final Pattern CONVERSATION_ID_PATTERN =
             Pattern.compile("session-(\\d+)-suspect-(\\d+)");
+
+    private static final int CHAT_MEMORY_MAX_MESSAGES = 20;
 
     private final ChatMessageRepository chatMessageRepository;
     private final GameSessionRepository gameSessionRepository;
@@ -56,8 +61,18 @@ public class CustomChatMemoryRepository implements ChatMemoryRepository {
     public List<Message> findByConversationId(@NonNull String conversationId) {
         ConversationKey key = parseConversationId(conversationId);
 
+        long startedAt = System.nanoTime();
         List<ChatMessage> chatMessages = chatMessageRepository
-                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(key.sessionId, key.suspectId);
+                .findTop20BySessionIdAndSuspectIdOrderByCreatedAtDesc(key.sessionId, key.suspectId);
+        Collections.reverse(chatMessages);
+        long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
+        if (elapsedMs >= 100) {
+            log.info("[chat-memory] findByConversationId slow. conversationId={}, size={}, elapsedMs={}",
+                    conversationId,
+                    chatMessages.size(),
+                    elapsedMs
+            );
+        }
 
         List<Message> messages = new ArrayList<>();
         for (ChatMessage chatMessage : chatMessages) {

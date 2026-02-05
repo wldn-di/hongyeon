@@ -85,11 +85,17 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 - 응답은 반드시 단 하나의 JSON 오브젝트만 출력한다(사담/설명/마크다운/코드펜스 금지).
                 - 첫 글자는 '{', 마지막 글자는 '}' 여야 한다.
                 - 최상위 키는 정확히 다음 4개만 허용: truth_config_json, victim, suspects, clues
+                - JSON 키/문자열은 큰따옴표(")만 사용한다.
+                - 문자열 값에 큰따옴표(")를 직접 넣지 말라. 필요하면 ‘ ’ 또는 ()를 사용한다.
+                - 문자열 값에 줄바꿈/탭 같은 제어문자를 넣지 말라. 필요하면 \\n, \\t로 이스케이프한다.
+                - "..." / "(중략)" 같은 생략 표기는 절대 사용하지 말라. 완전한 JSON을 끝까지 출력한다.
 
                 핵심 제약(HARD):
                 - suspects는 반드시 배열이며 길이는 정확히 %d
                 - suspects에서 is_culprit=true 인 용의자는 정확히 1명
                 - clues는 반드시 배열이며 길이는 8~12
+                - 모든 문자열 필드는 기본 240자 이내로 작성한다(특히 background/motive/method/secret.content).
+                - one_liner는 60자 이내, clues[].description은 140자 이내로 작성한다.
 
                 단서 텍스트 규칙(HARD):
                 - clues[].assistant_comment, clues[].clue_detail_json.revealed_truth, clues[].clue_detail_json.discovery_script 는 "플레이어 UI에 노출"될 수 있다.

@@ -71,8 +71,15 @@ public class RefineNode implements ScenarioV2Node {
                 Role: You are a detective-writer revising a JSON draft.
                 Task: Fix issues with minimal changes, keeping all constraints.
 
+                Output format (STRICT):
+                - Output a single JSON object only. No prose. No markdown. No code fences.
+                - The first character must be '{' and the last character must be '}'.
+                - Use double quotes(") for all JSON keys and string values.
+                - Do not put raw double quotes inside string values. If needed, use ‘ ’ or () instead.
+                - Do not include raw newlines/tabs/control characters in string values. Use \\n / \\t escapes if absolutely necessary.
+                - Never use "..." or any omission markers. Output must be complete, valid JSON.
+
                 Hard constraints:
-                - Output JSON only, no prose, no markdown.
                 - Top-level keys must be exactly: scenario, victim, suspects, clues, rooms
                 - suspects length must be exactly %d
                 - clues length must be between 8 and 12
@@ -80,6 +87,18 @@ public class RefineNode implements ScenarioV2Node {
                 - Do NOT change the structure of rooms (keep rooms array exactly as provided)
                 - Do NOT change clue names or suspect weakness_clue names (keep them to match existing clues)
                 - Keep the story coherent with the timeline and truth_config_json
+
+                Length limits (HARD):
+                - scenario.synopsis: <= 60 chars
+                - scenario.synopsisDetail: <= 240 chars
+                - scenario.story_config_json.twist: <= 180 chars
+                - rooms[].description: <= 220 chars
+                - rooms[].assistant_comment: <= 60 chars
+                - narration fields (if present): <= 240 chars each
+
+                Editing policy (HARD):
+                - Only change fields necessary to fix the validation issues and critique feedback.
+                - Keep existing long narrative text unchanged unless it is required to fix a listed issue.
                 """.formatted(state.getRequest().suspectCount());
 
         String user = """
@@ -200,7 +219,14 @@ public class RefineNode implements ScenarioV2Node {
                     retryPreview,
                     retryFail
             );
-            throw new IllegalStateException("failed to parse refined json", original);
+            if (baseDraft != null) {
+                state.setDraftJson(baseDraft);
+            }
+            log.warn(
+                    "[v2] RefineNode fallback to previous draft. scenarioId={}, retry={}",
+                    state.getScenarioId(),
+                    nextRetry
+            );
         }
     }
 

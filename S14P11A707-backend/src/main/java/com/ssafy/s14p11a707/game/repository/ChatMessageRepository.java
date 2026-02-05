@@ -16,6 +16,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
 
     List<ChatMessage> findBySessionIdAndSuspectIdOrderByCreatedAtAsc(long sessionId, long suspectId);
 
+    List<ChatMessage> findTop20BySessionIdAndSuspectIdOrderByCreatedAtDesc(long sessionId, long suspectId);
+
     // conversationId 형식: "session-{sessionId}-suspect-{suspectId}"
     @Query("""
         SELECT cm FROM ChatMessage cm

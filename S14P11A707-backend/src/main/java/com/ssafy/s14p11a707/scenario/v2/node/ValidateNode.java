@@ -130,6 +130,72 @@ public class ValidateNode implements ScenarioV2Node {
             root.set("clues", trimmed);
             log.info("[v2] ValidateNode normalized clues. scenarioId={}, from={}, to=12", state.getScenarioId(), clues.size());
         }
+
+        JsonNode rooms = root.get("rooms");
+        if (rooms != null && rooms.isArray()) {
+            ArrayNode roomsArray = (ArrayNode) rooms;
+
+            if (roomsArray.size() > 6) {
+                ArrayNode trimmed = objectMapper.createArrayNode();
+                for (int i = 0; i < 6; i++) {
+                    trimmed.add(roomsArray.get(i));
+                }
+                root.set("rooms", trimmed);
+                roomsArray = trimmed;
+                log.info("[v2] ValidateNode normalized rooms. scenarioId={}, from={}, to=6", state.getScenarioId(), rooms.size());
+            }
+
+            if (roomsArray.size() == 6) {
+                Set<Integer> existingFloors = new HashSet<>();
+                List<Integer> fixIndices = new ArrayList<>();
+
+                for (int i = 0; i < roomsArray.size(); i++) {
+                    JsonNode room = roomsArray.get(i);
+                    if (room instanceof ObjectNode roomObject) {
+                        int floorNumber = roomObject.path("floor_number").asInt(-1);
+                        boolean validFloor = floorNumber >= 1 && floorNumber <= 6;
+                        if (validFloor && existingFloors.add(floorNumber)) {
+                            continue;
+                        }
+                    }
+                    fixIndices.add(i);
+                }
+
+                if (!fixIndices.isEmpty()) {
+                    List<Integer> missingFloors = new ArrayList<>();
+                    for (int floor = 1; floor <= 6; floor++) {
+                        if (!existingFloors.contains(floor)) {
+                            missingFloors.add(floor);
+                        }
+                    }
+
+                    int assignIndex = 0;
+                    for (int idx : fixIndices) {
+                        int floorNumber = assignIndex < missingFloors.size()
+                                ? missingFloors.get(assignIndex)
+                                : idx + 1;
+                        assignIndex++;
+
+                        JsonNode roomNode = roomsArray.get(idx);
+                        ObjectNode roomObject;
+                        if (roomNode instanceof ObjectNode obj) {
+                            roomObject = obj;
+                        } else {
+                            roomObject = objectMapper.createObjectNode();
+                            roomsArray.set(idx, roomObject);
+                        }
+                        roomObject.put("floor_number", floorNumber);
+                    }
+
+                    log.info(
+                            "[v2] ValidateNode normalized rooms floor_number. scenarioId={}, fixedIndices={}, missingFloors={}",
+                            state.getScenarioId(),
+                            fixIndices.size(),
+                            missingFloors
+                    );
+                }
+            }
+        }
     }
 
     private JsonNode assembleDraft(ScenarioV2State state) {

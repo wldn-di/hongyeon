@@ -53,39 +53,46 @@ public class ScenarioBaseNode implements ScenarioV2Node {
         ));
 
         String scenarioSystemMessage = String.format("""
-                                    Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
-                                    당신은 [1단계 데이터]를 바탕으로 하여 시나리오의 전체 설정을 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+                [출력 형식 - 절대 준수]
+                - 반드시 JSON 오브젝트 1개만 출력한다. (설명/사담/마크다운/코드펜스 금지)
+                - 첫 글자는 '{', 마지막 글자는 '}' 여야 한다.
+                - JSON 키/문자열은 큰따옴표(")만 사용한다.
+                - 문자열 값에 큰따옴표(")를 직접 넣지 말라. 필요하면 ‘ ’ 또는 ()를 사용한다.
+                - 문자열 값에 줄바꿈/탭 같은 제어문자를 넣지 말라. 필요하면 \\n, \\t로 이스케이프한다.
+                - "..." / "(중략)" 같은 생략 표기는 절대 사용하지 말라. 완전한 JSON을 끝까지 출력한다.
 
-                                    [작성 규칙]
-                                    1. 유저가 입력한 제목과 시놉시스를 확장하여 200자 내외의 synopsisDetail을 작성하십시오.
-                                    2. story_config_json 내의 timeline에는 1단계의 내용을 사용하여 필드를 추가하십시오.
-                                    3. 인명 준수: 반드시 1단계에서 생성된 이름(cast 데이터)만 사용하십시오.
+                Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
+                당신은 [1단계 데이터]를 바탕으로 시나리오의 전체 설정을 JSON 형식으로 작성하십시오.
 
-                                    [1단계 데이터]:
-                                    %s
+                [작성 규칙(HARD)]
+                1. synopsis: 60자 이내 1문장
+                2. synopsisDetail: 240자 이내 (2~4문장)
+                3. story_config_json.twist: 180자 이내 (2문장 이내) — 결론을 확정적으로 말하지 말고 ‘가능한 반전’으로 서술
+                4. story_config_json.timeline: 반드시 [1단계 데이터]의 timeline을 그대로 사용하고, time/event를 임의로 추가/삭제하지 말 것
+                5. story_config_json.timeline[].event: 80자 이내
+                6. incident_time: "YYYY-MM-DD HH:MM" 형식
+                7. thumbnailUrl: 빈 문자열("")로 둔다. (이미지는 이후 단계에서 생성)
+                8. 인명 준수: 반드시 1단계 cast 데이터의 이름만 사용한다.
 
-                                    [1단계 타임라인 데이터] 기반으로 scenario 객체(title, synopsis, synopsisDetail, story_config_json)를 생성하십시오.
+                [1단계 데이터]:
+                %s
 
-                시나리오 작성 형식:
-
+                출력 JSON 스키마:
                 {
-                   "scenario": {
-                     "title": "[시나리오 제목]",
-                     "synopsis": "[한 줄 요약]",
-                     "synopsisDetail": "[상세 줄거리]",
-                     "thumbnailUrl": "[썸네일 이미지 URL]",
-                     "story_config_json": {
-                       "incident_time": "[YYYY-MM-DD HH:MM 형식의 발생 시각]",
-                       "twist": "[반전 요소]",
-                       "timeline": [
-                         {
-                           "time": "HH:MM",
-                           "event": "내용"
-                         }
-                       ]
-                     }
-                   }
-                 }
+                  "scenario": {
+                    "title": "string",
+                    "synopsis": "string",
+                    "synopsisDetail": "string",
+                    "thumbnailUrl": "",
+                    "story_config_json": {
+                      "incident_time": "YYYY-MM-DD HH:MM",
+                      "twist": "string",
+                      "timeline": [
+                        { "time": "HH:MM", "event": "string" }
+                      ]
+                    }
+                  }
+                }
 
                 Response strictly in JSON format without any markdown code blocks or prose.
                 """, state.getTimelineJson());

@@ -69,77 +69,66 @@ public class RoomsNode implements ScenarioV2Node {
 
         String scenarioSystemMessage = String.format("""
 
+                [출력 형식 - 절대 준수]
+                - 반드시 JSON 오브젝트 1개만 출력한다. (설명/사담/마크다운/코드펜스 금지)
+                - 첫 글자는 '{', 마지막 글자는 '}' 여야 한다.
+                - JSON 키/문자열은 큰따옴표(")만 사용한다.
+                - 문자열 값에 큰따옴표(")를 직접 넣지 말라. 필요하면 ‘ ’ 또는 ()를 사용한다.
+                - 문자열 값에 줄바꿈/탭 같은 제어문자를 넣지 말라. 필요하면 \\n, \\t로 이스케이프한다.
+                - "..." / "(중략)" 같은 생략 표기는 절대 사용하지 말라. 완전한 JSON을 끝까지 출력한다.
+
+                [구조 - 절대 준수]
+                - 최상위 키는 정확히 rooms, scenario 두 개만 허용한다.
+                - rooms는 반드시 배열이며 길이는 정확히 6.
+                - rooms[].floor_number는 1..6을 각각 1번씩 포함해야 하며, rooms는 floor_number 오름차순으로 정렬한다.
+                - scenario는 narration만 포함하는 최소 구조로 출력한다:
+                  { "scenario": { "story_config_json": { "narration": { ... } } } }
+
+                [길이 제한(HARD)]
+                - rooms[].room_type: 40자 이내
+                - rooms[].room_name: 40자 이내
+                - rooms[].description: 220자 이내 (2~4문장)
+                - rooms[].assistant_comment: 60자 이내 1문장
+                - narration.opening/epilogue/culprit_monologue/unsolved_monologue: 각각 240자 이내 (3문장 이내)
+
                 Persona: 당신은 전문 추리 게임 시나리오 작가입니다. 당신은 논리적으로 사건의 트릭, 반전, 그리고 타임라인이 독자 및 게임의 사용자들이 납득할 수 있는 시나리오를 작성하는데 있어서 특화되어 있습니다.
-                이전까지의 모든 AI호출 작업의 결과물(Timeline, title, synopsis, synopsisDetail, story_config_json, victim, suspects 배열, clues 배열, truth_config_json)를 포함한 이전 시나리오 설정)을 기반으로 6개의 층별 방(rooms) 정보를 생성하여 JSON 형식으로 작성하십시오. 아래 명시된 형식과 내용을 기반으로 응답하고, 절대 사담을 섞지 마십시오. 반드시 순수한 JSON 형식으로만 출력하십시오.
+                이전까지의 모든 AI호출 작업의 결과물(Timeline, title, synopsis, synopsisDetail, story_config_json, victim, suspects 배열, clues 배열, truth_config_json)를 포함한 이전 시나리오 설정)을 기반으로 6개의 층별 방(rooms) 정보를 생성하여 JSON 형식으로 작성하십시오.
 
                 [작성 규칙]
                 1. 층수: 1층부터 6층까지 순차적으로 floor_number를 할당하고 층별 유형과 이름을 정하십시오.
                 2. 단서 배치: [필수 참고 데이터]의 clues들을 각 방의 description에 자연스럽게 녹여내십시오. (예: 주방 묘사 시 '싱크대 위의 혈흔' 언급)
-                3. 조수 코멘트: assistant_comment는 "탐정님,"으로 시작하는 공손한 구어체(~요/~니다) 1문장(60자 이내)으로, 관찰 가능한 사실만 말하고 정답/추론을 금지하십시오. (금지어: 범인, 용의자, 알리바이, 흉기, 살해, 살인, 범행, 결정적, 반박, 의미, 거짓, 거짓말, 모순)
+                3. 조수 코멘트: assistant_comment는 "탐정님,"으로 시작하는 공손한 구어체(~요/~니다) 1문장(60자 이내)으로, 관찰 가능한 사실만 말하고 정답/추론을 금지하십시오.
+                   - 금지어: 범인, 용의자, 알리바이, 흉기, 살해, 살인, 범행, 결정적, 반박, 의미, 거짓, 거짓말, 모순
                 4. 현장 묘사: "여기가 범행 장소다"라는 확정적 서술을 피하고 객관적인 상태만 묘사하십시오.
                 5. narration 섹션(오프닝, 에필로그 등)을 극적인 톤으로 작성하십시오.
 
                 [필수 참고 데이터]:
                 %s
 
-                시나리오 작성 형식:
-                      {
-                   "rooms": [
-                     {
-                       "floor_number": 1,
-                       "room_type": "[1층 유형]",
-                       "room_name": "[1층 이름]",
-                       "description": "[1층 설명]",
-                       "assistant_comment": "[조수 코멘트]"
-                     },
-                     {
-                       "floor_number": 2,
-                       "room_type": "[2층 유형]",
-                       "room_name": "[2층 이름]",
-                       "description": "[2층 설명]",
-                       "assistant_comment": "[조수 코멘트]"
-                     },
-                     {
-                       "floor_number": 3,
-                       "room_type": "[3층 유형]",
-                       "room_name": "[3층 이름]",
-                       "description": "[3층 설명]",
-                       "assistant_comment": "[조수 코멘트]"
-                     },
-                     {
-                       "floor_number": 4,
-                       "room_type": "[4층 유형]",
-                       "room_name": "[4층 이름]",
-                       "description": "[4층 설명]",
-                       "assistant_comment": "[조수 코멘트]"
-                     },
-                     {
-                       "floor_number": 5,
-                       "room_type": "[5층 유형]",
-                       "room_name": "[5층 이름]",
-                       "description": "[5층 설명]",
-                       "assistant_comment": "[조수 코멘트]"
-                     },
-                     {
-                       "floor_number": 6,
-                       "room_type": "[6층 유형]",
-                       "room_name": "[6층 이름]",
-                       "description": "[6층 설명]",
-                       "assistant_comment": "[조수 코멘트]"
-                     }
-                   ],
-                   "scenario": {
-                     "story_config_json": {
-                       "narration": {
-                         "opening": "[시작 나레이션]",
-                         "epilogue": "[엔딩 나레이션]",
-                         "culprit_monologue": "[범인 검거 시 독백]",
-                         "unsolved_monologue": "[미해결 시 독백]"
-                       }
-                     }
-                   }
-                 }
-                 Response strictly in JSON format without any markdown code blocks or prose.
+                출력 JSON 스키마:
+                {
+                  "rooms": [
+                    {
+                      "floor_number": 1,
+                      "room_type": "string",
+                      "room_name": "string",
+                      "description": "string",
+                      "assistant_comment": "string"
+                    }
+                  ],
+                  "scenario": {
+                    "story_config_json": {
+                      "narration": {
+                        "opening": "string",
+                        "epilogue": "string",
+                        "culprit_monologue": "string",
+                        "unsolved_monologue": "string"
+                      }
+                    }
+                  }
+                }
+
+                Response strictly in JSON format without any markdown code blocks or prose.
         """, combinedContext);
 
         String content = chatClient.prompt()
