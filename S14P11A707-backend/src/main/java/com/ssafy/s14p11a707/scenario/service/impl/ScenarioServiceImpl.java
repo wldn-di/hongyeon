@@ -14,10 +14,10 @@ import com.ssafy.s14p11a707.scenario.service.RoomLayoutService; // ??추�???
 import com.ssafy.s14p11a707.scenario.service.ScenarioService;
 import com.ssafy.s14p11a707.user.entity.User;
 import com.ssafy.s14p11a707.user.repository.UserRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -42,7 +42,6 @@ import java.util.stream.Collectors;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class ScenarioServiceImpl implements ScenarioService {
 
     // Keep clue placement consistent with room object layout rules
@@ -69,6 +68,29 @@ public class ScenarioServiceImpl implements ScenarioService {
 
     // ★ 랜덤 가구 배치 서비스 주입
     private final RoomLayoutService roomLayoutService;
+
+    public ScenarioServiceImpl(
+            @Qualifier("genAiChatClient") ChatClient chatClient,
+            @Qualifier("googleGenAiTextEmbedding") EmbeddingModel embeddingModel,
+            ScenarioRepository scenarioRepository,
+            VictimRepository victimRepository,
+            SuspectRepository suspectRepository,
+            ClueRepository clueRepository,
+            RoomRepository roomRepository,
+            ScenarioRankingRepository scenarioRankingRepository,
+            UserRepository userRepository,
+            RoomLayoutService roomLayoutService) {
+        this.chatClient = chatClient;
+        this.embeddingModel = embeddingModel;
+        this.scenarioRepository = scenarioRepository;
+        this.victimRepository = victimRepository;
+        this.suspectRepository = suspectRepository;
+        this.clueRepository = clueRepository;
+        this.roomRepository = roomRepository;
+        this.scenarioRankingRepository = scenarioRankingRepository;
+        this.userRepository = userRepository;
+        this.roomLayoutService = roomLayoutService;
+    }
 
     @Override
     @Transactional

@@ -92,7 +92,8 @@ public class GameSessionServiceImpl implements GameSessionService {
     public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper,
                                   @Qualifier("genAiChatClient") ChatClient chatClient,
                                   @Qualifier("gmsChatClient") ChatClient gmsChatClient,
-                                  ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
+                                  ChatMemoryRepository chatMemoryRepository,
+                                  @Qualifier("googleGenAiTextEmbedding") EmbeddingModel embeddingModel) {
         this.gameSessionRepository = gameSessionRepository;
         this.sessionSuspectStateRepository = sessionSuspectStateRepository;
         this.scenarioRepository = scenarioRepository;
