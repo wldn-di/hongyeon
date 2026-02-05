@@ -1522,7 +1522,7 @@ export default function GameRoom() {
         </div>
         <div className="flex items-start gap-2 pt-1 border-t border-border mt-1">
           <span className="text-red-400">❤️</span>
-          <span className="text-red-400">용의자 심문 시 체력 5 소모<br/><span className="text-muted-foreground">(0이 되어도 플레이 가능, 심문만 불가)</span></span>
+          <span className="text-red-400">용의자 심문 시 체력 5 소모<br/><span className="text-muted-foreground">(0이 되어도 플레이 가능, 심문 불가)</span></span>
         </div>
       </div>
     </div>
