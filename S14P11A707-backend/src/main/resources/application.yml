@@ -116,13 +116,31 @@ app:
   vertex:
     # Vertex AI 기반 GenAI 연동 사용 여부
     enabled: ${APP_VERTEX_ENABLED:false}
-    # Vertex AI 프로젝트/리전 (enabled=true일 때 필수)
+    # Vertex AI 프로젝트/리전 (enabled=true일 때 필수, 레거시 fallback용)
     project-id: ${APP_VERTEX_PROJECT_ID:}
     location: ${APP_VERTEX_LOCATION:}
     # 서비스 계정 키 JSON 경로 (예: file:/path/to/sa.json). 설정 시 access-token/ADC보다 우선.
     credentials-uri: ${APP_VERTEX_CREDENTIALS_URI:}
     # Vertex OAuth2 access token(또는 ADC)
     access-token: ${APP_VERTEX_ACCESS_TOKEN:}
+    # 계정별 동시 AI 호출 제한
+    semaphore-per-account: ${APP_VERTEX_SEMAPHORE_PER_ACCOUNT:4}
+    # Multi-account pool
+    accounts:
+      - name: vertex-a
+        project-id: ${APP_VERTEX_PROJECT_ID:}
+        location: ${APP_VERTEX_LOCATION:}
+        credentials-uri: ${APP_VERTEX_CREDENTIALS_URI:}
+        access-token: ${APP_VERTEX_ACCESS_TOKEN:}
+      - name: vertex-b
+        project-id: ${APP_VERTEX_B_PROJECT_ID:${APP_VERTEX_PROJECT_ID:}}
+        location: ${APP_VERTEX_B_LOCATION:${APP_VERTEX_LOCATION:}}
+        credentials-uri: ${APP_VERTEX_B_CREDENTIALS_URI:}
+        access-token: ${APP_VERTEX_B_ACCESS_TOKEN:}
+  concurrency:
+    max-scenario-generation: ${APP_CONCURRENCY_MAX_SCENARIO:10}
+    max-chat-concurrent: ${APP_CONCURRENCY_MAX_CHAT:50}
+    chat-timeout-seconds: ${APP_CONCURRENCY_CHAT_TIMEOUT:30}
   auth:
     # 로그인 완료 후 이동할 URL (상대경로 또는 절대 URL)
     # - 예) /swagger-ui/index.html

@@ -62,6 +62,7 @@ public record ScenarioV2StreamEvent(
     public enum EventType {
         CONNECT,
         PING,
+        WAITING,
         TIMELINE,
         CHARACTERS_CLUES_TRUTH,
         ROOMS,

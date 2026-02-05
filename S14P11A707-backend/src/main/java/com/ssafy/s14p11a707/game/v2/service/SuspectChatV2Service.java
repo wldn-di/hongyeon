@@ -17,7 +17,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class SuspectChatV2Service {
 
-    private static final String AI_FAILURE_MESSAGE = "현재 답변 생성에 실패했습니다. 잠시 후 다시 시도해주세요.";
+    private static final String AI_FAILURE_MESSAGE = "용의자가 잠시 침묵합니다... 다시 한 번 말을 걸어보세요.";
 
     private final SuspectChatV2ContextService contextService;
     private final SuspectChatV2PromptBuilder promptBuilder;
@@ -26,10 +26,36 @@ public class SuspectChatV2Service {
     private final ChatMessageRepository chatMessageRepository;
     @Qualifier("gmsChatClient")
     private final ChatClient gmsChatClient;
+    private final ChatConcurrencyGate chatGate;
 
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
-        long startNs = System.nanoTime();
+        String reqId = "CHAT-" + System.nanoTime();
+        log.info("[CHAT][{}] 요청 도착 sessionId={} suspectId={}", reqId, sessionId, suspectId);
 
+        if (!chatGate.tryAcquire()) {
+            log.warn("[CHAT][{}] Gate 타임아웃 - fallback 응답", reqId);
+            return new SuspectChatResponse(
+                    sessionId,
+                    suspectId,
+                    "용의자가 잠시 침묵합니다... 다시 한 번 말을 걸어보세요.",
+                    0,
+                    0,
+                    null
+            );
+        }
+
+        log.info("[CHAT][{}] Gate 획득 (available={}/{})", reqId, chatGate.availablePermits(), chatGate.maxPermits());
+        long startNs = System.nanoTime();
+        try {
+            return doChat(sessionId, suspectId, request, reqId, startNs);
+        } finally {
+            chatGate.release();
+            long totalMs = toMsSince(startNs);
+            log.info("[CHAT][{}] Gate 반납 (elapsed={}ms)", reqId, totalMs);
+        }
+    }
+
+    private SuspectChatResponse doChat(long sessionId, long suspectId, SuspectChatRequest request, String reqId, long startNs) {
         long t0 = System.nanoTime();
         SuspectChatV2Context context = contextService.load(sessionId, suspectId, request);
         long contextMs = toMsSince(t0);

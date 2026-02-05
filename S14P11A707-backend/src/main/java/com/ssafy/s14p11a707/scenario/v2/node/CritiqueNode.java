@@ -7,9 +7,9 @@ import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
 import java.util.List;
+import com.ssafy.s14p11a707.vertex.VertexAiAccountPool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
 /**
@@ -32,7 +32,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CritiqueNode implements ScenarioV2Node {
 
-    private final ChatClient chatClient;
+    private final VertexAiAccountPool vertexAiPool;
     private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
 
@@ -90,11 +90,7 @@ public class CritiqueNode implements ScenarioV2Node {
                 %s
                 """.formatted(state.getValidationReport(), toJson(state.getDraftJson()));
 
-        String content = chatClient.prompt()
-                .system(system)
-                .user(user)
-                .call()
-                .content();
+        String content = vertexAiPool.call(system, user);
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
         ScenarioV2CritiqueResult result = parseCritique(cleaned);

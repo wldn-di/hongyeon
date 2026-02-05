@@ -10,9 +10,9 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.ssafy.s14p11a707.vertex.VertexAiAccountPool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
 /**
@@ -36,7 +36,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class CharactersCluesTruthNode implements ScenarioV2Node {
 
-    private final ChatClient chatClient;
+    private final VertexAiAccountPool vertexAiPool;
     private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
 
@@ -229,11 +229,7 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                         """.formatted(String.join("\n", lastIssues), safe(lastCleaned));
             }
 
-            String content = chatClient.prompt()
-                    .system(attemptSystem)
-                    .user(user)
-                    .call()
-                    .content();
+            String content = vertexAiPool.call(attemptSystem, user);
 
             String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
             List<String> issues = validateCharactersJson(cleaned, suspectCount);

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concurrency Test Dashboard</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: 'Segoe UI', sans-serif; background: #1a1a2e; color: #eee; padding: 20px; }
+        h1 { text-align: center; margin-bottom: 20px; color: #e94560; }
+        .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; max-width: 1200px; margin: 0 auto; }
+        .card { background: #16213e; border-radius: 12px; padding: 20px; border: 1px solid #0f3460; }
+        .card h2 { color: #e94560; margin-bottom: 12px; font-size: 1.1em; }
+        .status-bar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; }
+        .status-item { background: #0f3460; padding: 8px 14px; border-radius: 8px; font-size: 0.85em; }
+        .status-item .label { color: #aaa; }
+        .status-item .value { color: #53d769; font-weight: bold; font-size: 1.1em; }
+        .controls { display: flex; gap: 10px; margin-bottom: 16px; align-items: center; flex-wrap: wrap; }
+        .controls label { font-size: 0.85em; color: #aaa; }
+        .controls input { width: 60px; padding: 4px 8px; border-radius: 6px; border: 1px solid #0f3460; background: #1a1a2e; color: #eee; }
+        .controls button { padding: 8px 16px; border-radius: 8px; border: none; background: #e94560; color: #fff; cursor: pointer; font-weight: bold; }
+        .controls button:hover { background: #c73452; }
+        .controls button:disabled { background: #555; cursor: not-allowed; }
+        .results { max-height: 300px; overflow-y: auto; font-family: monospace; font-size: 0.82em; }
+        .results .row { padding: 4px 8px; border-bottom: 1px solid #0f346033; display: flex; gap: 12px; }
+        .results .row.ok { color: #53d769; }
+        .results .row.wait { color: #ffd93d; }
+        .results .row.fail { color: #e94560; }
+        .results .row .idx { width: 30px; text-align: right; color: #aaa; }
+        .results .row .time { width: 80px; }
+        .results .row .msg { flex: 1; }
+        .full-width { grid-column: 1 / -1; }
+        #refreshBtn { background: #0f3460; }
+        #refreshBtn:hover { background: #1a4a8e; }
+    </style>
+</head>
+<body>
+    <h1>Concurrency Test Dashboard</h1>
+
+    <div class="dashboard">
+        <!-- Status Monitor -->
+        <div class="card full-width">
+            <h2>Status Monitor</h2>
+            <div class="controls">
+                <button id="refreshBtn" onclick="refreshStatus()">Refresh</button>
+                <label><input type="checkbox" id="autoRefresh" checked> Auto-refresh (2s)</label>
+            </div>
+            <div class="status-bar" id="statusBar">
+                <div class="status-item"><span class="label">Loading...</span></div>
+            </div>
+        </div>
+
+        <!-- Scenario Gate Test -->
+        <div class="card">
+            <h2>Scenario Generation Gate</h2>
+            <div class="controls">
+                <label>Count:</label> <input type="number" id="scenarioCount" value="11" min="1" max="50">
+                <label>Sleep(ms):</label> <input type="number" id="scenarioSleep" value="3000" min="100" max="30000">
+                <button id="scenarioBtn" onclick="runScenarioTest()">Run</button>
+            </div>
+            <div class="results" id="scenarioResults"></div>
+        </div>
+
+        <!-- Chat Gate Test -->
+        <div class="card">
+            <h2>Chat Concurrency Gate</h2>
+            <div class="controls">
+                <label>Count:</label> <input type="number" id="chatCount" value="51" min="1" max="100">
+                <label>Sleep(ms):</label> <input type="number" id="chatSleep" value="1000" min="100" max="30000">
+                <button id="chatBtn" onclick="runChatTest()">Run</button>
+            </div>
+            <div class="results" id="chatResults"></div>
+        </div>
+
+        <!-- Vertex Pool Test -->
+        <div class="card full-width">
+            <h2>Vertex AI Pool Semaphore</h2>
+            <div class="controls">
+                <label>Count:</label> <input type="number" id="vertexCount" value="9" min="1" max="30">
+                <label>Sleep(ms):</label> <input type="number" id="vertexSleep" value="2000" min="100" max="30000">
+                <button id="vertexBtn" onclick="runVertexTest()">Run</button>
+            </div>
+            <div class="results" id="vertexResults"></div>
+        </div>
+
+        <!-- Real Scenario Generation Test -->
+        <div class="card full-width">
+            <h2>Real Scenario Generation (Same-User Bypass)</h2>
+            <div class="controls">
+                <label>User ID:</label> <input type="number" id="genUserId" value="1" min="1" style="width:80px">
+                <label>Count:</label> <input type="number" id="genCount" value="3" min="1" max="10">
+                <label>Title:</label> <input type="text" id="genTitle" value="Load Test" style="width:120px">
+                <label>Genre:</label> <input type="text" id="genGenre" value="추리" style="width:80px">
+                <label>Suspects:</label> <input type="number" id="genSuspects" value="3" min="1" max="6" style="width:50px">
+                <button id="genBtn" onclick="runScenarioGenerateTest()">Generate</button>
+            </div>
+            <div class="results" id="genResults"></div>
+        </div>
+    </div>
+
+    <script>
+        let autoRefreshInterval = null;
+
+        async function refreshStatus() {
+            try {
+                const res = await fetch('/api/v1/concurrency-test/status');
+                const data = await res.json();
+                const bar = document.getElementById('statusBar');
+                bar.innerHTML = `
+                    <div class="status-item">
+                        <span class="label">Scenario Gate</span><br>
+                        <span class="value">${data.scenarioGate.available} / ${data.scenarioGate.max}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Chat Gate</span><br>
+                        <span class="value">${data.chatGate.available} / ${data.chatGate.max}</span>
+                    </div>
+                    <div class="status-item">
+                        <span class="label">Pool Status</span><br>
+                        <span class="value" style="color:${data.vertexPool.allExhausted ? '#e94560' : data.vertexPool.degraded ? '#ffd93d' : '#53d769'}">
+                            ${data.vertexPool.allExhausted ? 'ALL EXHAUSTED' : data.vertexPool.degraded ? 'DEGRADED' : 'HEALTHY'}
+                            (${data.vertexPool.activeCount}/${data.vertexPool.accountCount})
+                        </span>
+                    </div>
+                    ${data.vertexPool.accounts.map(a => `
+                        <div class="status-item" style="border-left: 3px solid ${a.active ? '#53d769' : '#e94560'}">
+                            <span class="label">${a.name} ${a.active ? '' : '(DISABLED)'}</span><br>
+                            <span class="value" style="color:${a.active ? '#53d769' : '#e94560'}">${a.availablePermits} / ${a.totalPermits}</span>
+                            ${a.disableReason ? '<br><span style="color:#e94560;font-size:0.75em">' + a.disableReason.substring(0, 50) + '</span>' : ''}
+                        </div>
+                    `).join('')}
+                `;
+            } catch (e) {
+                document.getElementById('statusBar').innerHTML =
+                    '<div class="status-item"><span class="label" style="color:#e94560">Error: ' + e.message + '</span></div>';
+            }
+        }
+
+        function startAutoRefresh() {
+            if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+            autoRefreshInterval = setInterval(refreshStatus, 2000);
+        }
+
+        document.getElementById('autoRefresh').addEventListener('change', function() {
+            if (this.checked) startAutoRefresh();
+            else if (autoRefreshInterval) { clearInterval(autoRefreshInterval); autoRefreshInterval = null; }
+        });
+
+        function addRow(containerId, idx, text, cls) {
+            const container = document.getElementById(containerId);
+            const row = document.createElement('div');
+            row.className = 'row ' + cls;
+            const elapsed = text.match(/(\d+)ms/) ? text.match(/(\d+)ms/)[0] : '';
+            row.innerHTML = `<span class="idx">#${idx}</span><span class="time">${elapsed}</span><span class="msg">${text}</span>`;
+            container.prepend(row);
+        }
+
+        async function runScenarioTest() {
+            const count = parseInt(document.getElementById('scenarioCount').value);
+            const sleepMs = parseInt(document.getElementById('scenarioSleep').value);
+            const btn = document.getElementById('scenarioBtn');
+            const container = document.getElementById('scenarioResults');
+            container.innerHTML = '';
+            btn.disabled = true;
+
+            const promises = [];
+            for (let i = 1; i <= count; i++) {
+                const idx = i;
+                promises.push(
+                    fetch(`/api/v1/concurrency-test/scenario-gate?sleepMs=${sleepMs}`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => addRow('scenarioResults', idx, `${d.status} ${d.elapsedMs}ms ${d.reqId}`, d.status === 'ok' ? 'ok' : 'wait'))
+                        .catch(e => addRow('scenarioResults', idx, `ERROR: ${e.message}`, 'fail'))
+                );
+            }
+
+            await Promise.all(promises);
+            btn.disabled = false;
+        }
+
+        async function runChatTest() {
+            const count = parseInt(document.getElementById('chatCount').value);
+            const sleepMs = parseInt(document.getElementById('chatSleep').value);
+            const btn = document.getElementById('chatBtn');
+            const container = document.getElementById('chatResults');
+            container.innerHTML = '';
+            btn.disabled = true;
+
+            const promises = [];
+            for (let i = 1; i <= count; i++) {
+                const idx = i;
+                promises.push(
+                    fetch(`/api/v1/concurrency-test/chat-gate?sleepMs=${sleepMs}`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => addRow('chatResults', idx, `${d.status} ${d.elapsedMs}ms ${d.reqId}`, d.status === 'ok' ? 'ok' : 'fail'))
+                        .catch(e => addRow('chatResults', idx, `ERROR: ${e.message}`, 'fail'))
+                );
+            }
+
+            await Promise.all(promises);
+            btn.disabled = false;
+        }
+
+        async function runVertexTest() {
+            const count = parseInt(document.getElementById('vertexCount').value);
+            const sleepMs = parseInt(document.getElementById('vertexSleep').value);
+            const btn = document.getElementById('vertexBtn');
+            const container = document.getElementById('vertexResults');
+            container.innerHTML = '';
+            btn.disabled = true;
+
+            const promises = [];
+            for (let i = 1; i <= count; i++) {
+                const idx = i;
+                promises.push(
+                    fetch(`/api/v1/concurrency-test/vertex-call?sleepMs=${sleepMs}`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => addRow('vertexResults', idx, `${d.elapsedMs}ms ${d.result}`, 'ok'))
+                        .catch(e => addRow('vertexResults', idx, `ERROR: ${e.message}`, 'fail'))
+                );
+            }
+
+            await Promise.all(promises);
+            btn.disabled = false;
+        }
+
+        async function runScenarioGenerateTest() {
+            const userId = parseInt(document.getElementById('genUserId').value);
+            const count = parseInt(document.getElementById('genCount').value);
+            const title = document.getElementById('genTitle').value;
+            const genre = document.getElementById('genGenre').value;
+            const suspects = parseInt(document.getElementById('genSuspects').value);
+            const btn = document.getElementById('genBtn');
+            const container = document.getElementById('genResults');
+            container.innerHTML = '';
+            btn.disabled = true;
+
+            const promises = [];
+            for (let i = 1; i <= count; i++) {
+                const idx = i;
+                const params = new URLSearchParams({
+                    userId, title: `${title} #${idx}`, genre, suspectCount: suspects,
+                    synopsis: `동시성 테스트 시나리오 #${idx}`
+                });
+                promises.push(
+                    fetch(`/api/v1/concurrency-test/scenario-generate?${params}`, { method: 'POST' })
+                        .then(r => r.json())
+                        .then(d => {
+                            if (d.error) {
+                                addRow('genResults', idx, `ERROR: ${d.error}`, 'fail');
+                            } else {
+                                addRow('genResults', idx, `scenarioId=${d.scenarioId} status=${d.status}`, 'ok');
+                            }
+                        })
+                        .catch(e => addRow('genResults', idx, `ERROR: ${e.message}`, 'fail'))
+                );
+            }
+
+            await Promise.all(promises);
+            btn.disabled = false;
+        }
+
+        refreshStatus();
+        startAutoRefresh();
+    </script>
+</body>
+</html>

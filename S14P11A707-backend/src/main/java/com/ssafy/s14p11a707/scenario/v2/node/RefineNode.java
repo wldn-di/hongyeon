@@ -12,9 +12,9 @@ import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import com.ssafy.s14p11a707.vertex.VertexAiAccountPool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
 /**
@@ -37,7 +37,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class RefineNode implements ScenarioV2Node {
 
-    private final ChatClient chatClient;
+    private final VertexAiAccountPool vertexAiPool;
     private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
 
@@ -93,11 +93,7 @@ public class RefineNode implements ScenarioV2Node {
                 %s
                 """.formatted(state.getValidationReport(), state.getCritiqueFeedback(), toJson(state.getDraftJson()));
 
-        String content = chatClient.prompt()
-                .system(system)
-                .user(user)
-                .call()
-                .content();
+        String content = vertexAiPool.call(system, user);
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
 
@@ -166,11 +162,7 @@ public class RefineNode implements ScenarioV2Node {
                 - Keep text fields concise to avoid truncation.
                 """;
 
-        String retryContent = chatClient.prompt()
-                .system(retrySystem)
-                .user(user)
-                .call()
-                .content();
+        String retryContent = vertexAiPool.call(retrySystem, user);
 
         String retryCleaned = ScenarioV2JsonUtils.normalizeJsonText(retryContent);
         String retryAutoClosed = ScenarioV2JsonUtils.autoCloseJson(retryCleaned);

@@ -66,7 +66,8 @@ public class SecurityConfig {
             "/actuator/info",
             "/oauth2/**",
             "/login/oauth2/**",
-            "/api/auth/login"
+            "/api/auth/login",
+            "/concurrency-test.html"
     };
 
     private static final String[] PUBLIC_GET_WHITELIST = {

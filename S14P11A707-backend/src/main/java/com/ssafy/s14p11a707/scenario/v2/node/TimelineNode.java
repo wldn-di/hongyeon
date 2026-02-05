@@ -4,9 +4,9 @@ import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
+import com.ssafy.s14p11a707.vertex.VertexAiAccountPool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Component;
 
 /**
@@ -29,7 +29,7 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class TimelineNode implements ScenarioV2Node {
 
-    private final ChatClient chatClient;
+    private final VertexAiAccountPool vertexAiPool;
     private final ScenarioV2EventPublisher eventPublisher;
 
     /**
@@ -109,11 +109,7 @@ public class TimelineNode implements ScenarioV2Node {
                                       Response strictly in JSON format.
                 """, suspectCount, suspectCount, suspectCount, suspectCount + 1, suspectCount);
 
-        String content = chatClient.prompt()
-                .system(timelineSystemMessage)
-                .user(userMessage)
-                .call()
-                .content();
+        String content = vertexAiPool.call(timelineSystemMessage, userMessage);
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
         state.setTimelineJson(cleaned);

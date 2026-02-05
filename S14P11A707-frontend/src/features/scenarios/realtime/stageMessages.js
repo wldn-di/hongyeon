@@ -18,6 +18,8 @@ export function buildStageMessage({ stageType, progress, message, meta }) {
   const total = getNum("total");
 
   switch (stageType) {
+    case "WAITING":
+      return "생성 대기 중이에요. 잠시만 기다려 주세요.";
     case "TIMELINE":
       return "탐정이 사건 개요를 받아 적는 중이에요.";
     case "CHARACTERS_CLUES_TRUTH":

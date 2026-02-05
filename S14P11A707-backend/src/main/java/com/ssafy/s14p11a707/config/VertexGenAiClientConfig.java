@@ -3,25 +3,35 @@ package com.ssafy.s14p11a707.config;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.genai.Client;
+import com.ssafy.s14p11a707.vertex.VertexAiAccount;
+import com.ssafy.s14p11a707.vertex.VertexAiAccountPool;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Date;
+import java.util.List;
+import java.util.concurrent.Semaphore;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.ai.google.genai.GoogleGenAiChatModel;
 import org.springframework.ai.google.genai.GoogleGenAiEmbeddingConnectionDetails;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Primary;
+import org.springframework.core.Ordered;
 import org.springframework.core.io.DefaultResourceLoader;
 import org.springframework.util.Assert;
 import org.springframework.util.StringUtils;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(VertexAiProperties.class)
+@EnableConfigurationProperties(VertexAiPoolProperties.class)
 @Slf4j
 public class VertexGenAiClientConfig {
 
@@ -30,11 +40,11 @@ public class VertexGenAiClientConfig {
     @Bean
     @Primary
     @ConditionalOnProperty(name = "app.vertex.enabled", havingValue = "true")
-    Client vertexGenAiClient(VertexAiProperties properties) throws IOException {
+    Client vertexGenAiClient(VertexAiPoolProperties properties) throws IOException {
         Assert.hasText(properties.projectId(), "app.vertex.project-id must be set when app.vertex.enabled=true");
         Assert.hasText(properties.location(), "app.vertex.location must be set when app.vertex.enabled=true");
 
-        GoogleCredentials credentials = resolveCredentials(properties);
+        GoogleCredentials credentials = resolveCredentials(properties.credentialsUri(), properties.accessToken());
 
         log.info(
                 "[ai] Vertex GenAI client enabled. projectId={}, location={}",
@@ -53,7 +63,7 @@ public class VertexGenAiClientConfig {
     @Bean
     @Primary
     @ConditionalOnProperty(name = "app.vertex.enabled", havingValue = "true")
-    GoogleGenAiEmbeddingConnectionDetails vertexEmbeddingConnectionDetails(VertexAiProperties properties, Client vertexGenAiClient) {
+    GoogleGenAiEmbeddingConnectionDetails vertexEmbeddingConnectionDetails(VertexAiPoolProperties properties, Client vertexGenAiClient) {
         return GoogleGenAiEmbeddingConnectionDetails.builder()
                 .projectId(properties.projectId())
                 .location(properties.location())
@@ -61,10 +71,98 @@ public class VertexGenAiClientConfig {
                 .build();
     }
 
-    private GoogleCredentials resolveCredentials(VertexAiProperties properties) throws IOException {
+    @Bean
+    @ConditionalOnProperty(name = "app.vertex.enabled", havingValue = "true")
+    VertexAiAccountPool vertexAiAccountPool(VertexAiPoolProperties properties) throws IOException {
+        int semaphorePerAccount = properties.semaphorePerAccount() > 0 ? properties.semaphorePerAccount() : 4;
+        List<VertexAiPoolProperties.AccountEntry> entries = properties.accounts();
+
+        List<VertexAiAccount> accounts = new ArrayList<>();
+
+        if (entries != null && !entries.isEmpty()) {
+            for (VertexAiPoolProperties.AccountEntry entry : entries) {
+                if (!StringUtils.hasText(entry.projectId()) || !StringUtils.hasText(entry.location())) {
+                    log.warn("[VertexPool] skipping account '{}': missing projectId or location", entry.name());
+                    continue;
+                }
+                try {
+                    GoogleCredentials creds = resolveCredentials(entry.credentialsUri(), entry.accessToken());
+                    Client client = Client.builder()
+                            .vertexAI(true)
+                            .project(entry.projectId())
+                            .location(entry.location())
+                            .credentials(creds)
+                            .build();
+
+                    GoogleGenAiChatModel chatModel = GoogleGenAiChatModel.builder()
+                            .genAiClient(client)
+                            .build();
+                    var loggerAdvisor = SimpleLoggerAdvisor.builder()
+                            .order(Ordered.LOWEST_PRECEDENCE - 1)
+                            .build();
+                    ChatClient chatClient = ChatClient.builder(chatModel)
+                            .defaultOptions(ChatOptions.builder()
+                                    .temperature(0.7)
+                                    .maxTokens(30000)
+                                    .build())
+                            .defaultAdvisors(loggerAdvisor)
+                            .build();
+
+                    accounts.add(new VertexAiAccount(
+                            entry.name(),
+                            chatClient,
+                            new Semaphore(semaphorePerAccount, true)
+                    ));
+                    log.info("[VertexPool] account '{}' registered (project={}, location={}, semaphore={})",
+                            entry.name(), entry.projectId(), entry.location(), semaphorePerAccount);
+                } catch (Exception e) {
+                    log.error("[VertexPool] failed to create account '{}': {}", entry.name(), e.getMessage(), e);
+                }
+            }
+        }
+
+        // fallback: use legacy single account if no accounts configured
+        if (accounts.isEmpty()) {
+            log.info("[VertexPool] no accounts configured, falling back to legacy single account");
+            Assert.hasText(properties.projectId(), "app.vertex.project-id must be set");
+            Assert.hasText(properties.location(), "app.vertex.location must be set");
+
+            GoogleCredentials creds = resolveCredentials(properties.credentialsUri(), properties.accessToken());
+            Client client = Client.builder()
+                    .vertexAI(true)
+                    .project(properties.projectId())
+                    .location(properties.location())
+                    .credentials(creds)
+                    .build();
+
+            GoogleGenAiChatModel chatModel = GoogleGenAiChatModel.builder()
+                    .genAiClient(client)
+                    .build();
+            var loggerAdvisor = SimpleLoggerAdvisor.builder()
+                    .order(Ordered.LOWEST_PRECEDENCE - 1)
+                    .build();
+            ChatClient chatClient = ChatClient.builder(chatModel)
+                    .defaultOptions(ChatOptions.builder()
+                            .temperature(0.7)
+                            .maxTokens(30000)
+                            .build())
+                    .defaultAdvisors(loggerAdvisor)
+                    .build();
+
+            accounts.add(new VertexAiAccount(
+                    "vertex-legacy",
+                    chatClient,
+                    new Semaphore(semaphorePerAccount, true)
+            ));
+        }
+
+        return new VertexAiAccountPool(accounts);
+    }
+
+    private GoogleCredentials resolveCredentials(String credentialsUri, String accessToken) throws IOException {
         GoogleCredentials credentials;
-        if (StringUtils.hasText(properties.credentialsUri())) {
-            String location = properties.credentialsUri();
+        if (StringUtils.hasText(credentialsUri)) {
+            String location = credentialsUri;
             if (location.startsWith("file:") || location.startsWith("classpath:")) {
                 var resource = new DefaultResourceLoader().getResource(location);
                 try (var in = resource.getInputStream()) {
@@ -77,9 +175,9 @@ public class VertexGenAiClientConfig {
                 }
             }
             log.info("[ai] Vertex credentials loaded from credentials-uri.");
-        } else if (StringUtils.hasText(properties.accessToken())) {
+        } else if (StringUtils.hasText(accessToken)) {
             Instant expiresAt = Instant.now().plus(Duration.ofMinutes(55));
-            credentials = GoogleCredentials.create(new AccessToken(properties.accessToken(), Date.from(expiresAt)));
+            credentials = GoogleCredentials.create(new AccessToken(accessToken, Date.from(expiresAt)));
             log.info("[ai] Vertex credentials loaded from access-token.");
         } else {
             credentials = GoogleCredentials.getApplicationDefault();
