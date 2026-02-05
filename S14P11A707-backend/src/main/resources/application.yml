@@ -33,6 +33,13 @@ spring:
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
 
+  cache:
+    type: redis
+    redis:
+      time-to-live: 86400000  # 24시간 (밀리초)
+      cache-null-values: false
+      use-key-prefix: true
+
   jpa:
     hibernate:
       ddl-auto: ${JPA_DDL_AUTO}
@@ -71,6 +78,11 @@ spring:
           options:
             model: gemini-embedding-001
         base-url: https://generativelanguage.googleapis.com
+
+gms:
+  url: ${GMS_URL:https://gms.ssafy.io/gmsapi/api.openai.com/v1/chat/completions}
+  key: ${GMS_KEY:}
+  model: ${GMS_MODEL:gpt-5-nano}
 
 springdoc:
   swagger-ui:

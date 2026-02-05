@@ -2,7 +2,11 @@ package com.ssafy.s14p11a707;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.cache.annotation.EnableCaching;
+import org.springframework.retry.annotation.EnableRetry;
 
+@EnableCaching
+@EnableRetry
 @SpringBootApplication
 public class S14P11A707Application {
 

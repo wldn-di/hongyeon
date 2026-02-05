@@ -34,7 +34,13 @@ import com.ssafy.s14p11a707.user.repository.UserRepository;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.TimeoutException;
 import java.util.stream.Collectors;
+
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.retry.annotation.Backoff;
+import org.springframework.retry.annotation.Retryable;
 
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.PersistenceContext;
@@ -75,14 +81,18 @@ public class GameSessionServiceImpl implements GameSessionService {
     private final ChatMessageRepository chatMessageRepository;
     private final ScenarioRankingRepository scenarioRankingRepository;
     private final ObjectMapper objectMapper;
-    private final ChatClient chatClient;
+    private final ChatClient chatClient;  // Google Gemini (기존)
+    private final ChatClient gmsChatClient;  // GMS용 (추가)
     private final ChatMemoryRepository chatMemoryRepository;
     private final ChatMemory chatMemory;
     private final EmbeddingModel embeddingModel;
     @PersistenceContext
     private EntityManager entityManager;
 
-    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
+    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper,
+                                  @Qualifier("genAiChatClient") ChatClient chatClient,
+                                  @Qualifier("gmsChatClient") ChatClient gmsChatClient,
+                                  ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
         this.gameSessionRepository = gameSessionRepository;
         this.sessionSuspectStateRepository = sessionSuspectStateRepository;
         this.scenarioRepository = scenarioRepository;
@@ -99,6 +109,7 @@ public class GameSessionServiceImpl implements GameSessionService {
         this.scenarioRankingRepository = scenarioRankingRepository;
         this.objectMapper = objectMapper;
         this.chatClient = chatClient;
+        this.gmsChatClient = gmsChatClient;
         this.chatMemoryRepository = chatMemoryRepository;
         this.chatMemory = MessageWindowChatMemory.builder()
                 .maxMessages(20)
@@ -344,6 +355,11 @@ public class GameSessionServiceImpl implements GameSessionService {
     // TODO : session.updateProgress(), saveEventLog() 필요
     @Override
     @Transactional
+    @Retryable(
+        retryFor = {TimeoutException.class},
+        maxAttempts = 2,
+        backoff = @Backoff(delay = 300)
+    )
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
         GameSession session = getSession(sessionId);
         validatePlaying(session);
@@ -567,15 +583,18 @@ public class GameSessionServiceImpl implements GameSessionService {
         // 대화 기록을 ChatMemory에 로드 (세션별 용의자별 conversationId 사용)
         String conversationId = "session-" + sessionId + "-suspect-" + suspectId;
 
+        // 질문 재작성: 맥락 의존적인 질문을 명확한 질문으로 변환
+        userMessage = rewriteQuestionWithContext(conversationId, userMessage, sessionId, suspectId);
+
         // MessageChatMemoryAdvisor 설정 (ChatMemoryRepository가 자동으로 대화 기록 관리)
         Advisor memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory)
                 .conversationId(conversationId)
                 .order(10)
                 .build();
 
-        // AI 응답 생성
+        // AI 응답 생성 (GMS용 ChatClient 사용)
         StringBuilder sb = new StringBuilder();
-        chatClient.prompt()
+        gmsChatClient.prompt()
                 .system(systemMessage)
                 .user(userMessage)
                 .advisors(memoryAdvisor)
@@ -652,13 +671,15 @@ public class GameSessionServiceImpl implements GameSessionService {
 
 
     /**
-     * 시나리오 정보를 문자열로 빌드
+     * 시나리오 정보를 문자열로 빌드 (캐싱됨)
      * chatWithSuspect 호출 시 시나리오 정보를 프롬프트에 직접 포함하기 위해 사용
      *
      * @param scenario 시나리오
      * @param currentSuspect 현재 심문 중인 용의자 (이 용의자에게만 secret과 timeline_alibi 노출)
+     * @return 시나리오 컨텍스트 문자열 (캐시 key: scenario.id + suspect.id)
      */
-    private String buildScenarioContext(Scenario scenario, Suspect currentSuspect) {
+    @Cacheable(value = "staticSystemContext", key = "#scenario.id + '-' + #currentSuspect.id")
+    public String buildScenarioContext(Scenario scenario, Suspect currentSuspect) {
         StringBuilder contextBuilder = new StringBuilder();
 
         // 1. 상세 줄거리
@@ -1413,6 +1434,91 @@ public class GameSessionServiceImpl implements GameSessionService {
         }
 
         return (float) (dotProduct / (Math.sqrt(norm1) * Math.sqrt(norm2)));
+    }
+
+    /**
+     * 맥락 의존적인 질문을 명확한 질문으로 재작성
+     * 대화 기록을 바탕으로 "그때", "그거", "얘" 등 맥락 의존적인 표현을 구체적인 정보로 변환
+     *
+     * @param conversationId 대화 ID
+     * @param userMessage 사용자의 원래 메시지
+     * @param sessionId 세션 ID
+     * @param suspectId 용의자 ID
+     * @return 재작성된 메시지
+     */
+    private String rewriteQuestionWithContext(String conversationId, String userMessage, long sessionId, long suspectId) {
+        // 단서 제시 메시지는 재작성하지 않음
+        if (userMessage.startsWith("[단서 제시:") || userMessage.startsWith("[단서 ID")) {
+            return userMessage;
+        }
+
+        // 첫 대화이거나 너무 짧은 메시지는 재작성하지 않음
+        List<ChatMessage> history = chatMessageRepository
+                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
+        if (history.isEmpty() || userMessage.length() < 5) {
+            return userMessage;
+        }
+
+        // 맥락 의존적인 표현 패턴 확인 (그때, 그거, 얘, 걔, 거기, 등)
+        boolean hasContextDependentRef = userMessage.matches(".*(그때|그거|그건|얘|걔|걔는|거기|거긴|그 사람|그분|그때문에).*");
+        if (!hasContextDependentRef) {
+            return userMessage;  // 맥락 의존적이지 않으면 원본 반환
+        }
+
+        // 이전 대화 기록을 텍스트로 변환
+        StringBuilder contextBuilder = new StringBuilder();
+        int recentCount = Math.min(5, history.size());  // 최근 5개 대화만 참조
+        int startIndex = Math.max(0, history.size() - recentCount);
+
+        for (int i = startIndex; i < history.size(); i++) {
+            ChatMessage msg = history.get(i);
+            String role = "user".equals(msg.getRole()) ? "수사관" : "용의자";
+            contextBuilder.append(String.format("%s: %s\n", role, msg.getContent()));
+        }
+
+        // 질문 재작성을 위한 시스템 프롬프트
+        String rewritePrompt = String.format("""
+                당신은 용의자 심문 게임에서 질문을 명확하게 재작성하는 역할을 합니다.
+
+                ## 이전 대화 기록
+                %s
+
+                ## 현재 질문
+                %s
+
+                ## 작업 지침
+                1. 현재 질문에 "그때", "그거", "얘", "걔", "거기" 등 맥락 의존적인 표현이 포함되어 있습니다.
+                2. 이전 대화 기록을 참조하여 이러한 표현을 **구체적인 정보로 명확하게 변환**하세요.
+                3. 질문의 의도와 어조는 그대로 유지하면서, 맥락 의존적인 부분만 명확하게 만드세요.
+                4. 단서 제시 관련 내용은 수정하지 마세요.
+                5. 재작성된 질문만 출력하고, 다른 설명은 포함하지 마세요.
+
+                ## 예시
+                이전 대화: "사건 시간에 어디 있었어요?" → "22:00에는 클럽에 있었어요"
+                현재 질문: "그때 누구와 함께 있었나요?"
+                → "22:00에 클럽에 있을 때 누구와 함께 있었나요?"
+                """,
+                contextBuilder.toString(),
+                userMessage
+        );
+
+        try {
+            // AI로 질문 재작성 (GMS용 ChatClient 사용)
+            String rewritten = gmsChatClient.prompt()
+                    .user(rewritePrompt)
+                    .call()
+                    .content();
+
+            if (rewritten != null && !rewritten.isBlank()) {
+                String trimmed = rewritten.trim();
+                log.info("[질문 재작성] 원본: {} → 재작성: {}", userMessage, trimmed);
+                return trimmed;
+            }
+        } catch (Exception e) {
+            log.warn("[질문 재작성 실패] 재작성 없이 원본 질문 사용: {}", e.getMessage());
+        }
+
+        return userMessage;  // 실패 시 원본 반환
     }
 
 }
