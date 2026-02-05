@@ -23,6 +23,16 @@ function AppShellInner() {
         location.startsWith("/tutorial");
 
     useEffect(() => {
+        if (typeof window.gtag !== "function") return;
+
+        window.gtag("event", "page_view", {
+            page_path: location,
+            page_location: window.location.href,
+            page_title: document.title,
+        });
+    }, [location]);
+
+    useEffect(() => {
         if (auth.loading || !auth.user) return;
 
         let redirectTo = null;
