@@ -34,6 +34,7 @@ export default function MemoInputModal({ isOpen, onClose, onSubmit, initialText 
           <textarea
             value={memoText}
             onChange={(e) => setMemoText(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
             placeholder="메모 내용을 입력하세요..."
             rows={4}
             className="w-full bg-muted border border-border rounded-lg px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary resize-none"
