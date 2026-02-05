@@ -81,12 +81,12 @@ export function initAgitSceneState(scene, { enablePuzzles, enableRushers, isDial
     // 5초마다 스폰 시도 + 50% 확률로만 실제 생성
     scene.RUSHER_SPAWN_MIN_MS = 5000;
     scene.RUSHER_SPAWN_MAX_MS = 5000;
-    scene.RUSHER_SPAWN_CHANCE = 0.5; // 스폰 시도 시 실제 생성 확률
+    scene.RUSHER_SPAWN_CHANCE = 0.57; // 스폰 시도 시 실제 생성 확률
     // 예고(텔레그래프) 후 생성 (회피 여지 제공)
     scene.RUSHER_TELEGRAPH_MS = 420;
     // 카메라 뷰(약 320px)를 "훅" 지나가도 확실히 보이도록 속도는 너무 빠르지 않게
-    // (기준 100 -> 70 체감으로 약 0.7배)
-    scene.RUSHER_SPEED = 224; // px/s
+    // (기존 대비 약 1.3배, 여기서 +20% 추가)
+    scene.RUSHER_SPEED = 350; // px/s
     scene.RUSHER_PUSH_SPEED = 260; // px/s 추가 밀침(짧게)
     scene.RUSHER_PUSH_MS = 220; // 밀림 지속 시간
     scene.RUSHER_STUN_MS = 2000; // 피격 시 스턴 시간

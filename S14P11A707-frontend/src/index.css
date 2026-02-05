@@ -245,6 +245,37 @@ select:not(:disabled) {
   80% { transform: translate(2px, -2px); }
 }
 
+/* Hero Logo Motion (more natural / noir-projector vibe) */
+.hero-logo-motion {
+  transform-origin: 50% 60%;
+  will-change: transform, opacity;
+  animation: heroLogoDrift 6.8s ease-in-out infinite, heroLogoFlicker 4.2s ease-in-out infinite;
+}
+
+@keyframes heroLogoDrift {
+  0%, 100% { transform: translate3d(0, 0, 0) rotate(-0.25deg) scale(1); }
+  18% { transform: translate3d(-2px, -3px, 0) rotate(0.15deg) scale(1.01); }
+  43% { transform: translate3d(2px, -1px, 0) rotate(0.32deg) scale(1.006); }
+  67% { transform: translate3d(-1px, 2px, 0) rotate(-0.08deg) scale(1.008); }
+}
+
+@keyframes heroLogoFlicker {
+  0%, 100% { opacity: 1; }
+  8% { opacity: 0.985; }
+  10% { opacity: 1; }
+  12% { opacity: 0.975; }
+  18% { opacity: 1; }
+  60% { opacity: 0.99; }
+  62% { opacity: 1; }
+  86% { opacity: 0.992; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-logo-motion {
+    animation: none;
+  }
+}
+
 /* Art Deco Border */
 .art-deco-border {
   position: relative;

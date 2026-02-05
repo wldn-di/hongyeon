@@ -56,6 +56,23 @@ export default function AgitRoom({
     }, [canUseElevator]);
 
     useEffect(() => {
+        const game = gameInstance.current;
+        if (!game) return;
+
+        const shouldPause = Boolean(isDialogActive || inputFocused);
+        try {
+            if (shouldPause) game.scene?.pause?.("AgitScene");
+            else game.scene?.resume?.("AgitScene");
+        } catch {}
+
+        // 씬이 멈춰도 DOM 입력(폰/보드) 타이핑이 막히지 않도록 preventDefault를 풀어준다.
+        try {
+            const km = game.input?.keyboard?.manager;
+            if (km) km.preventDefault = !shouldPause;
+        } catch {}
+    }, [isDialogActive, inputFocused]);
+
+    useEffect(() => {
         initialRoomIndexRef.current = initialRoomIndex;
     }, [initialRoomIndex]);
 

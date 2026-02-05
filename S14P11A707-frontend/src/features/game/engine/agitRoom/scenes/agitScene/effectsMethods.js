@@ -371,9 +371,9 @@ export const effectsMethods = {
 
         const grd = ctx.createLinearGradient(0, 0, w, 0);
         grd.addColorStop(0.0, "rgba(255,255,255,0)");
-        grd.addColorStop(0.28, "rgba(255,255,255,0.12)");
-        grd.addColorStop(0.5, "rgba(255,255,255,0.26)");
-        grd.addColorStop(0.72, "rgba(255,255,255,0.12)");
+        grd.addColorStop(0.24, "rgba(255,255,255,0.16)");
+        grd.addColorStop(0.5, "rgba(255,255,255,0.48)");
+        grd.addColorStop(0.76, "rgba(255,255,255,0.16)");
         grd.addColorStop(1.0, "rgba(255,255,255,0)");
 
         ctx.fillStyle = grd;
@@ -381,10 +381,17 @@ export const effectsMethods = {
 
         try {
             ctx.save();
-            ctx.globalAlpha = 0.6;
-            ctx.filter = "blur(6px)";
+            ctx.globalAlpha = 0.65;
+            ctx.filter = "blur(8px)";
             ctx.fillStyle = grd;
             ctx.fillRect(0, 0, w, h);
+            ctx.restore();
+
+            // 얇은 중앙 하이라이트로 시인성 강화
+            ctx.save();
+            ctx.globalAlpha = 0.45;
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            ctx.fillRect(0, h * 0.46, w, h * 0.08);
             ctx.restore();
         } catch {}
 
@@ -395,28 +402,126 @@ export const effectsMethods = {
         if (!view) return;
         this.ensureRusherTelegraphTexture();
 
-        const x = Phaser.Math.Clamp(Number(startX) || 0, view.left + 10, view.right - 10);
-        const y = Phaser.Math.Clamp(Number(startY) || 0, view.top + 10, view.bottom - 10);
-        const rot = Math.atan2(Number(dirY) || 0, Number(dirX) || 1);
+        const sx = Number(startX) || 0;
+        const sy = Number(startY) || 0;
+        const rawDx = Number(dirX) || 1;
+        const rawDy = Number(dirY) || 0;
+        const len = Math.sqrt(rawDx * rawDx + rawDy * rawDy) || 1;
+        const nx = rawDx / len;
+        const ny = rawDy / len;
 
-        const streak = this.add.image(x, y, "rusher_wind");
-        streak.setDepth(Math.floor(y));
-        streak.setBlendMode(Phaser.BlendModes.ADD);
-        streak.setTint(0xbfc6d6);
-        streak.setAlpha(0.0);
-        streak.setRotation(rot);
-        streak.setScale(2.1, 0.9);
+        const rot = Math.atan2(ny, nx);
 
+        // 카메라 뷰 안에서의 "경로"를 선명하게 보여주기 위해,
+        // 이동 라인과 뷰(Rect)의 교차점을 구해 뷰 전체를 가로지르는 텔레그래프를 만든다.
+        const ray = new Phaser.Geom.Line(sx - nx * 5000, sy - ny * 5000, sx + nx * 5000, sy + ny * 5000);
+        const rawPoints = Phaser.Geom.Intersects.GetLineToRectangle(ray, view) || [];
+        const points = [];
+        for (const p of rawPoints) {
+            const px = Number(p?.x);
+            const py = Number(p?.y);
+            if (!Number.isFinite(px) || !Number.isFinite(py)) continue;
+            if (points.some((q) => Math.abs(q.x - px) < 0.75 && Math.abs(q.y - py) < 0.75)) continue;
+            points.push({ x: px, y: py });
+        }
+
+        let entry = null;
+        let exit = null;
+        if (points.length >= 2) {
+            // 점이 2개 이상이면, 가장 먼 두 점을 채택(코너 교차/중복 방지)
+            let bestA = points[0];
+            let bestB = points[1];
+            let bestD2 = -1;
+            for (let i = 0; i < points.length; i++) {
+                for (let j = i + 1; j < points.length; j++) {
+                    const dx = points[i].x - points[j].x;
+                    const dy = points[i].y - points[j].y;
+                    const d2 = dx * dx + dy * dy;
+                    if (d2 > bestD2) {
+                        bestD2 = d2;
+                        bestA = points[i];
+                        bestB = points[j];
+                    }
+                }
+            }
+            const dA2 = (bestA.x - sx) * (bestA.x - sx) + (bestA.y - sy) * (bestA.y - sy);
+            const dB2 = (bestB.x - sx) * (bestB.x - sx) + (bestB.y - sy) * (bestB.y - sy);
+            entry = dA2 <= dB2 ? bestA : bestB;
+            exit = entry === bestA ? bestB : bestA;
+        } else {
+            // 안전 폴백(기존처럼 시작점 근처만)
+            const x = Phaser.Math.Clamp(sx, view.left + 10, view.right - 10);
+            const y = Phaser.Math.Clamp(sy, view.top + 10, view.bottom - 10);
+            entry = { x, y };
+            exit = { x: x + nx * 120, y: y + ny * 120 };
+        }
+
+        // 너무 가장자리에 딱 붙지 않게 살짝 안쪽으로
+        const inset = 14;
+        const segLen = Phaser.Math.Distance.Between(entry.x, entry.y, exit.x, exit.y);
+        if (segLen > inset * 4) {
+            entry = { x: entry.x + nx * inset, y: entry.y + ny * inset };
+            exit = { x: exit.x - nx * inset, y: exit.y - ny * inset };
+        }
+
+        const midX = (entry.x + exit.x) * 0.5;
+        const midY = (entry.y + exit.y) * 0.5;
+        const pathLen = Phaser.Math.Distance.Between(entry.x, entry.y, exit.x, exit.y);
+
+        const tex = this.textures.get("rusher_wind");
+        const src = tex?.getSourceImage?.();
+        const texW = Number(src?.width) || 128;
+        const scaleX = Phaser.Math.Clamp(pathLen / texW, 1.2, 4.4);
+
+        const baseDepth = (Number(this.darkOverlay?.depth) || 9000) + 2;
+
+        const outer = this.add.image(midX, midY, "rusher_wind");
+        outer.setDepth(baseDepth);
+        outer.setBlendMode(Phaser.BlendModes.ADD);
+        outer.setTint(0x9cc2ff);
+        outer.setAlpha(0);
+        outer.setRotation(rot);
+        outer.setScale(scaleX * 1.06, 1.35);
+
+        const inner = this.add.image(midX, midY, "rusher_wind");
+        inner.setDepth(baseDepth + 1);
+        inner.setBlendMode(Phaser.BlendModes.ADD);
+        inner.setTint(0xe9f3ff);
+        inner.setAlpha(0);
+        inner.setRotation(rot);
+        inner.setScale(scaleX, 0.72);
+
+        const arrow = this.add.triangle(entry.x, entry.y, -10, -6, -10, 6, 12, 0, 0xffffff, 1);
+        arrow.setDepth(baseDepth + 2);
+        arrow.setBlendMode(Phaser.BlendModes.ADD);
+        arrow.setAlpha(0);
+        arrow.setRotation(rot);
+        arrow.setScale(0.9);
+
+        const duration = 110;
+        const hold = 200;
+        const cleanup = () => {
+            try {
+                outer.destroy();
+            } catch {}
+            try {
+                inner.destroy();
+            } catch {}
+            try {
+                arrow.destroy();
+            } catch {}
+        };
+
+        this.tweens.add({ targets: outer, alpha: { from: 0, to: 0.26 }, duration, ease: "Sine.easeOut", yoyo: true, hold });
+        this.tweens.add({ targets: inner, alpha: { from: 0, to: 0.42 }, duration, ease: "Sine.easeOut", yoyo: true, hold });
         this.tweens.add({
-            targets: streak,
-            alpha: { from: 0.0, to: 0.38 },
-            duration: 120,
+            targets: arrow,
+            alpha: { from: 0, to: 0.5 },
+            duration,
             ease: "Sine.easeOut",
             yoyo: true,
-            hold: 120,
-            onComplete: () => {
-                streak.destroy();
-            },
+            hold,
+            onComplete: cleanup,
         });
     },
 

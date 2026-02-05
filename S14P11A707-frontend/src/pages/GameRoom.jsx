@@ -317,8 +317,8 @@ export default function GameRoom() {
   const [playTimeSeconds, setPlayTimeSeconds] = useState(0)
   const [remainingAttempts, setRemainingAttempts] = useState(3)  // ✅ 제출 횟수
   const [leftPanelOpen, setLeftPanelOpen] = useState(true)
-  const [rightLogOpen, setRightLogOpen] = useState(true)
-  const [boardPanelOpen, setBoardPanelOpen] = useState(false)
+	  const [rightLogOpen, setRightLogOpen] = useState(true)
+	  const [boardPanelOpen, setBoardPanelOpen] = useState(false)
   const [pendingAddItem, setPendingAddItem] = useState(null)
   const [selectedEvidence, setSelectedEvidence] = useState(null)
   const [selectedSuspect, setSelectedSuspect] = useState(null)
@@ -328,10 +328,11 @@ export default function GameRoom() {
   const [gameInitError, setGameInitError] = useState(null)
   const gameInitInFlightRef = useRef(false)
 
-  const { discoveredEvidence, collectEvidence, resetSession } = useGameSession()
+	  const { discoveredEvidence, collectEvidence, resetSession } = useGameSession()
 
-  const currentRoomIndexRef = useRef(currentRoomIndex)
-  currentRoomIndexRef.current = currentRoomIndex
+	  const currentRoomIndexRef = useRef(currentRoomIndex)
+	  currentRoomIndexRef.current = currentRoomIndex
+	  const currentFloorNumberRef = useRef(1)
 
   // 초기화 중복 방지용 ref
   const isInitializedRef = useRef(false)
@@ -340,7 +341,7 @@ export default function GameRoom() {
   const resumeGameRef = useRef(null)
   const initializeNewGameRef = useRef(null)
 
-  const [phoneOpen, setPhoneOpen] = useState(false)
+	  const [phoneOpen, setPhoneOpen] = useState(false)
   const [chatHistories, setChatHistories] = useState({})
   const [currentChat, setCurrentChat] = useState(null)
   const [phoneNotification, setPhoneNotification] = useState(null)
@@ -375,7 +376,10 @@ export default function GameRoom() {
   // 오프닝 나레이션 (GameStartResponse에서 받음)
   const [openingNarration, setOpeningNarration] = useState(null)
 
-  const SIDE_PANEL_WIDTH_PX = 288
+	  const SIDE_PANEL_WIDTH_PX = 288
+
+  const isUiPaused = phoneOpen || boardPanelOpen
+  const pauseLabel = phoneOpen && boardPanelOpen ? '휴대폰 · 추리보드' : phoneOpen ? '휴대폰' : '추리보드'
 
   // 보드 로컬스토리지 초기화 함수
   const clearBoardLocalStorage = useCallback((scenarioId, sessId) => {
@@ -400,10 +404,11 @@ export default function GameRoom() {
   // 현재 방
   const currentRoom = rooms?.[currentRoomIndex] || rooms?.[0] || null
 
-  const currentFloorNumber = clampFloor(
-    Number.isFinite(currentRoom?.floorNumber) ? currentRoom.floorNumber : (currentRoomIndex + 1),
-    1,
-  )
+	  const currentFloorNumber = clampFloor(
+	    Number.isFinite(currentRoom?.floorNumber) ? currentRoom.floorNumber : (currentRoomIndex + 1),
+	    1,
+	  )
+	  currentFloorNumberRef.current = currentFloorNumber
 
   const getRoomIndexFromFloor = useCallback((floorNumber) => {
     const safeFloor = clampFloor(floorNumber, 1)
@@ -832,18 +837,40 @@ export default function GameRoom() {
       }
     }, [sessionId])
 
-  const handleClueInspected = useCallback(async (clue) => {
-    if (!clue || !sessionId) return
-
-    const clueId = clue.clueId || clue.evidenceId
-    if (!clueId) return
-
-    try {
-      // 백엔드에 단서 발견 요청
-      const response = await discoverClue(sessionId, clueId)
-
-      // 응답 정규화
-      const normalized = normalizeDiscoveredClueResponse(response)
+	  const handleClueInspected = useCallback(async (clue) => {
+	    if (!clue || !sessionId) return
+	
+	    const clueIdRaw = clue.clueId ?? clue.evidenceId
+	    const clueId = Number(clueIdRaw)
+	    if (!Number.isFinite(clueId)) return
+	
+	    const syncFloorAndRetryOnce = async () => {
+	      try {
+	        await moveFloor(sessionId, currentFloorNumberRef.current)
+	      } catch (syncErr) {
+	        console.error('층 동기화 실패(단서 획득 재시도 전):', syncErr)
+	        throw syncErr
+	      }
+	      return discoverClue(sessionId, clueId)
+	    }
+	
+	    try {
+	      // 백엔드에 단서 발견 요청
+	      let response = null
+	      try {
+	        response = await discoverClue(sessionId, clueId)
+	      } catch (err) {
+	        // 서버의 현재 층과 클라이언트 층이 틀어지면(가끔 move-floor 호출 실패 등) COMMON-002로 떨어져서
+	        // 이후 단서 획득이 계속 실패하는 케이스가 있어, 층 동기화 후 1회만 재시도한다.
+	        if (err?.code === 'COMMON-002' && Number.isFinite(currentFloorNumberRef.current)) {
+	          response = await syncFloorAndRetryOnce()
+	        } else {
+	          throw err
+	        }
+	      }
+	
+	      // 응답 정규화
+	      const normalized = normalizeDiscoveredClueResponse(response)
       const clueData = normalized.clue
 
       if (!clueData) {
@@ -886,37 +913,42 @@ export default function GameRoom() {
         return next
       })
 
-      // 백엔드 로그도 새로고침
-      refetchLogs?.()
-    } catch (err) {
-      // 이미 발견된 단서면 에러 무시
-      if (err.message?.includes('이미') || err.message?.includes('already')) {
-        console.log('이미 발견된 단서입니다.')
-      } else {
-        console.error('단서 발견 실패:', err)
-        toast.error('단서 발견에 실패했습니다.')
-        // Phaser에서는 단서를 먼저 제거하므로, 실패 시 서버 기준으로 다시 동기화
-        await loadCluesForSession(sessionId)
-      }
-    }
-  }, [sessionId, collectEvidence, currentRoom, addLog, refetchLogs, loadCluesForSession])
+	      // 백엔드 로그도 새로고침
+	      refetchLogs?.()
+	    } catch (err) {
+	      // 이미 발견된 단서면 에러 무시
+	      if (err.message?.includes('이미') || err.message?.includes('already')) {
+	        console.log('이미 발견된 단서입니다.')
+	      } else {
+	        console.error('단서 발견 실패:', err)
+	        toast.error('단서 발견에 실패했습니다.')
+	        // Phaser에서는 단서를 먼저 제거하므로, 실패 시 서버 기준으로 다시 동기화
+	        await loadCluesForSession(sessionId)
+	      }
+	    }
+	  }, [sessionId, collectEvidence, currentRoom, addLog, refetchLogs, loadCluesForSession])
 
-  const handleRoomChanged = useCallback(async (roomIndex) => {
-    if (!Number.isFinite(roomIndex)) return
-    if (!rooms || rooms.length === 0) return
-
-    const validIndex = Math.max(0, Math.min(roomIndex, rooms.length - 1))
-    const prevIndex = currentRoomIndexRef.current
-    const hasChanged = validIndex !== prevIndex
-    if (hasChanged) {
-      setCurrentRoomIndex(validIndex)
-    }
-
-    const room = rooms[validIndex]
-    const targetFloor = clampFloor(
-      Number.isFinite(room?.floorNumber) ? room.floorNumber : (validIndex + 1),
-      validIndex + 1,
-    )
+	  const handleRoomChanged = useCallback(async (roomIndex) => {
+	    if (!Number.isFinite(roomIndex)) return
+	
+	    // rooms API가 아직 로드되지 않은 타이밍에도(게임 시작 직후/네트워크 지연 등) 층 동기화는 필요해서,
+	    // rooms가 비어있으면 기본 6층 기준으로 처리한다.
+	    const roomCount = Array.isArray(rooms) && rooms.length > 0 ? rooms.length : 6
+	
+	    const validIndex = Math.max(0, Math.min(roomIndex, roomCount - 1))
+	    const prevIndex = currentRoomIndexRef.current
+	    const hasChanged = validIndex !== prevIndex
+	    if (hasChanged) {
+	      setCurrentRoomIndex(validIndex)
+	      currentRoomIndexRef.current = validIndex
+	    }
+	
+	    const room = Array.isArray(rooms) ? rooms[validIndex] : null
+	    const targetFloor = clampFloor(
+	      Number.isFinite(room?.floorNumber) ? room.floorNumber : (validIndex + 1),
+	      validIndex + 1,
+	    )
+	    currentFloorNumberRef.current = targetFloor
 
     if (sessionId && hasChanged) {
       try {
@@ -926,14 +958,13 @@ export default function GameRoom() {
         console.error('층 이동 API 오류:', err)
       }
     }
-    const isFirstVisit = !visitedFloors.has(targetFloor)
-    if (isFirstVisit) {
-      setVisitedFloors(prev => new Set([...prev, targetFloor]))
-
-      const room = rooms[validIndex]
-      if (room) {
-        // 로그 추가
-        addLog('system', `${room.name}에 도착했습니다.`)
+	    const isFirstVisit = !visitedFloors.has(targetFloor)
+	    if (isFirstVisit) {
+	      setVisitedFloors(prev => new Set([...prev, targetFloor]))
+	
+	      if (room) {
+	        // 로그 추가
+	        addLog('system', `${room.name}에 도착했습니다.`)
 
         // 조수 코멘트가 있으면 Watson 다이얼로그 표시 (첫 방문 시에만)
         if (room.assistantComment) {
@@ -1511,6 +1542,7 @@ export default function GameRoom() {
 	                onRoomChanged={handleRoomChanged}
                 initialRoomIndex={currentRoomIndex}
                 enableRushers={true}
+                isDialogActive={isUiPaused}
 	              />
 	            ) : gameInitError ? (
 	              <div className="w-full h-full flex items-center justify-center">
@@ -1529,6 +1561,20 @@ export default function GameRoom() {
 	                </div>
 	              </div>
 	            )}
+
+              {sessionId && isUiPaused && (
+                <>
+                  <div className="absolute inset-0 z-10 bg-black/55 backdrop-blur-[2px] pointer-events-none" />
+                  <div className="absolute top-4 left-1/2 -translate-x-1/2 z-[90] pointer-events-none">
+                    <div className="px-4 py-2 rounded-full border border-primary/30 bg-black/60 backdrop-blur">
+                      <div className="error-code bracket-both text-primary/90 tracking-[0.22em] text-[11px] md:text-xs text-center">
+                        GAME STOP
+                      </div>
+                      <div className="mt-0.5 text-[10px] text-muted-foreground text-center">{pauseLabel} 열림 · 일시정지</div>
+                    </div>
+                  </div>
+                </>
+              )}
 	          </div>
 	        </div>
 	      </div>
