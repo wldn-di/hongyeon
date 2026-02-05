@@ -252,9 +252,11 @@ function ReviewItem({ review, isMine = false, onRefresh }) {
             onChange={(e) => setDraftContent(e.target.value)}
             rows={4}
             className={cn(
-              'w-full rounded-md border border-border bg-background/40 px-3 py-2 text-sm text-foreground',
+              'w-full rounded-md border border-border bg-background/40 px-3 py-2 text-sm',
+              '!text-gray-800 !placeholder:text-gray-500 caret-gray-800',
               'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
             )}
+
             placeholder="리뷰 내용을 입력하세요"
             disabled={isSubmitting}
           />

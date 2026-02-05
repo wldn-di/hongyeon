@@ -51,12 +51,17 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-b from-primary/10 to-transparent" />
         <div className="container relative z-10">
           <div className="max-w-4xl mx-auto text-center space-y-8">
-            <h1
-              className="text-6xl md:text-8xl font-bold gold-glow glitch"
-              data-text="HONG-YEON"
-              style={{ color: 'var(--primary)' }}
-            >
-              HONG-YEON
+            <h1 className="flex justify-center hero-logo-motion" aria-label="HONG-YEON">
+              <img
+                src="/images/logo.png"
+                alt="HONG-YEON"
+                className="w-[240px] sm:w-[300px] md:w-[420px] lg:w-[520px] max-w-[90vw] h-auto select-none"
+                draggable={false}
+                style={{
+                  filter:
+                    'drop-shadow(0 0 14px rgba(212, 175, 55, 0.55)) drop-shadow(0 0 28px rgba(212, 175, 55, 0.35))',
+                }}
+              />
             </h1>
             <p className="text-lg text-foreground/80 max-w-2xl mx-auto">
               영화 속 수사반장의 화이트보드를 디지털로 구현한 추리 게임<br />
