@@ -21,7 +21,7 @@ export function Turntable() {
     const [isPlaying, setIsPlaying] = useState(true);
 
     // 2. [변경됨] 기본 상태: 펼쳐짐(false) - 처음에 팝업이 열려있음
-    const [isMinimized, setIsMinimized] = useState(false);
+    const [isMinimized, setIsMinimized] = useState(true);
 
     const [trackIndex, setTrackIndex] = useState(0);
     const [volume, setVolume] = useState(0.15);
