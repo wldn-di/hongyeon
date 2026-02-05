@@ -207,17 +207,6 @@ const helperInfo = {
   isHelper: true,
 }
 
-// 조력자 초기 메시지
-const getHelperInitialMessage = (scenarioTitle) => ({
-  id: Date.now(),
-  sender: "helper",
-  text: `안녕하세요, 탐정님. "${scenarioTitle}" 사건 수사를 도와드리겠습니다. 궁금한 점이 있으시면 언제든 물어보세요!`,
-  time: new Date().toLocaleTimeString("ko-KR", {
-    hour: "2-digit",
-    minute: "2-digit",
-  }),
-})
-
 const clampFloor = (value, fallback = 1) => {
   const num = Number(value)
   if (!Number.isFinite(num)) return fallback
@@ -775,12 +764,9 @@ export default function GameRoom() {
 
     // 시스템 로그는 initializeNewGame/resumeGame에서 추가하므로 여기서 중복 제거
 
-    const initialMsg = getHelperInitialMessage(scenario?.title || '사건')
-    setChatHistories({ helper: [initialMsg] })
-
-    setPhoneNotification(initialMsg.text)
-    const timer = setTimeout(() => setPhoneNotification(null), 3000)
-    return () => clearTimeout(timer)
+    // 조력자 자동 인사/알림 제거
+    setChatHistories({ helper: [] })
+    setPhoneNotification(null)
   }, [activeScenarioId, scenario?.title, resetSession])
 
   useEffect(() => {
@@ -821,7 +807,7 @@ export default function GameRoom() {
     return () => window.removeEventListener('keydown', handleKeyDown)
   }, [pendingAssistantComment, showAssistantDialog])
 
-    //처음ㅁ&이어하기
+    //처음&이어하기
     const handleEvidenceClick = useCallback(async (item) => {
       if (!sessionId || !item?.id) {
         setSelectedEvidence(item)
