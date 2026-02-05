@@ -131,11 +131,6 @@ export default function NotificationBell() {
 
         <div style={{ padding: 8 }}>
           <ScenarioGenerationStatusPanel compact />
-          {!generation.isScenarioGenerating && (
-            <div style={{ marginTop: 10, color: "rgba(255,255,255,0.55)", fontSize: 13 }}>
-              새 알림이 없어요.
-            </div>
-          )}
         </div>
       </div>
     </div>
