@@ -489,7 +489,6 @@ export const normalizeResumeResponse = (response) => {
       currentFloor: 1,
       visitedFloors: [],
       health: 0,
-      submitAttempts: 0,
       playTime: 0,
       submitAttempts: response.submitAttempts || 0,
       remainingAttempts: Math.max(0, 3 - (response.submitAttempts || 0)),

@@ -137,7 +137,7 @@ export default function CreateScenario() {
               <textarea
                 value={formData.synopsis}
                 onChange={(e) => handleChange("synopsis", e.target.value)}
-                placeholder="대략적인 스토리를 적어주세요&#10;&#10;예시:&#10;- 폐쇄된 섬에서 일어난 연쇄 살인&#10;- 키워드: 복수, 유산 분쟁, 과거의 비밀&#10;- 반전: 피해자가 실은 범인이었다"
+                placeholder="대략적인 스토리를 적어주세요&#10;&#10;예시:&#10;- 폐쇄된 섬에서 일어난 연쇄 살인&#10;- 키워드: 복수, 유산 분쟁, 과거의 비밀&#10;- 참고: 기존 작품의 오마주 가능 (예: 셜록홈즈 등 각종 작품)"
                 rows={6}
                 className="w-full bg-muted border border-border rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-primary resize-none"
                 disabled={locked}
