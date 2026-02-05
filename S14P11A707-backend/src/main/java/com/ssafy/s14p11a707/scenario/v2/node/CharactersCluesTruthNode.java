@@ -7,10 +7,12 @@ import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -31,21 +33,12 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class CharactersCluesTruthNode implements ScenarioV2Node {
 
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
-
-    public CharactersCluesTruthNode(
-            @Qualifier("scenarioGenChatClient") ChatClient chatClient,
-            ObjectMapper objectMapper,
-            ScenarioV2EventPublisher eventPublisher
-    ) {
-        this.chatClient = chatClient;
-        this.objectMapper = objectMapper;
-        this.eventPublisher = eventPublisher;
-    }
 
     /**
      * 인물/단서/진실 JSON을 생성하고 상태에 반영
@@ -98,19 +91,25 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 - suspects에서 is_culprit=true 인 용의자는 정확히 1명
                 - clues는 반드시 배열이며 길이는 8~12
 
-                단서 조수 코멘트(assistant_comment) 규칙(HARD):
-                - assistant_comment는 단서의 분위기/감각적 인상만 1문장으로 말한다.
-                - 정답/범인/수법/동기/알리바이/흉기/타임라인/진실(revealed_truth) 또는 그에 준하는 결론·추론을 절대 말하지 않는다.
-                - 특정 인물(피해자/용의자)의 이름이나 지칭(예: "범인", "용의자")을 사용하지 않는다.
-                - 다른 단서/방/증언과 연결하거나, 다음 수사 행동을 지시하지 않는다.
-                - 길이는 60자 이내.
-                - (좋은 예) "마치 급히 숨기려다 놓친 듯한 어수선한 흔적이 남아 있다."
-                - (나쁜 예) "이 단서는 A의 알리바이를 깨는 결정적 증거다."
+                단서 텍스트 규칙(HARD):
+                - clues[].assistant_comment, clues[].clue_detail_json.revealed_truth, clues[].clue_detail_json.discovery_script 는 "플레이어 UI에 노출"될 수 있다.
+                - 따라서 추리 정답/결론을 직접 말하지 말고, 관찰 가능한 사실만 짧게 쓴다.
+                - 피해자/용의자 실명(예: "박서연", "김민준")을 직접 언급하지 않는다. ("누군가", "어떤 인물" 등으로 익명화)
+                - 아래 단어/표현은 사용 금지: 범인, 용의자, 알리바이, 흉기, 살해, 살인, 범행, 결정적, 반박, 의미, 거짓, 거짓말, 모순
+
+                조력자 멘트(assistant_comment) 규칙(HARD):
+                - "탐정님," 으로 시작하는 1문장(60자 이내).
+                - 공손한 구어체(~요/~니다)로 끝낸다. 서술체(~다) 금지.
+                - 감정/심리(분노/억울함 등)를 단정하지 말고, 보이는 흔적(구김/찢김/필압 등)으로만 표현한다.
+                - 감정 단어 사용 금지: 분노, 억울
+
+                clue_detail_json 규칙(HARD):
+                - revealed_truth: 단서에서 "확인 가능한 사실"만 1문장으로 요약(120자 이내). 추론/판정 금지.
+                - discovery_script: 단서 발견 순간의 짧은 대사(120자 이내). 발견 묘사만, 추론/판정 금지.
 
                 외모 정보(appearance 필드):
-                - ethnicity, hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
+                - hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
                 - 모든 값은 구체적이고 생생하게 작성 (빈 문자열 금지)
-                - ethnicity는 시나리오의 시대/지역/배경에 어울리도록 설정한다(단, 편견/차별적 묘사는 금지).
 
                 피해자 추가 정보:
                 - personality(성격), last_known_action(마지막 행동), physical_condition(신체 상태)
@@ -145,7 +144,6 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                     "last_known_action": string,
                     "physical_condition": string,
                     "appearance": {
-                      "ethnicity": string,
                       "hair_style": string,
                       "hair_color": string,
                       "eye_color": string,
@@ -179,7 +177,6 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                     "deflection_strategy": { "target_name": string, "suspicion_point": string, "dialogue_hint": string },
                     "timeline_alibi": [ { "time": "HH:MM", "location": string, "activity": string, "is_verified": false } ],
                     "appearance": {
-                      "ethnicity": string,
                       "hair_style": string,
                       "hair_color": string,
                       "eye_color": string,
@@ -284,6 +281,8 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
             return issues;
         }
 
+        Set<String> personNames = collectPersonNames(root);
+
         JsonNode victim = root.path("victim");
         if (!victim.isObject()) {
             issues.add("victim must be an object");
@@ -303,6 +302,32 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                     continue;
                 }
                 clueNames.add(name);
+
+                String assistantComment = clue.path("assistant_comment").asText("").trim();
+                if (assistantComment.isEmpty()) {
+                    issues.add("clue.assistant_comment is missing (" + name + ")");
+                } else {
+                    validateUiText(issues, personNames, "clue.assistant_comment", assistantComment, name, true, 60);
+                }
+
+                JsonNode clueDetail = clue.path("clue_detail_json");
+                if (!clueDetail.isObject()) {
+                    issues.add("clue.clue_detail_json must be an object (" + name + ")");
+                } else {
+                    String revealedTruth = clueDetail.path("revealed_truth").asText("").trim();
+                    if (revealedTruth.isEmpty()) {
+                        issues.add("clue.clue_detail_json.revealed_truth is missing (" + name + ")");
+                    } else {
+                        validateUiText(issues, personNames, "clue.clue_detail_json.revealed_truth", revealedTruth, name, false, 120);
+                    }
+
+                    String discoveryScript = clueDetail.path("discovery_script").asText("").trim();
+                    if (discoveryScript.isEmpty()) {
+                        issues.add("clue.clue_detail_json.discovery_script is missing (" + name + ")");
+                    } else {
+                        validateUiText(issues, personNames, "clue.clue_detail_json.discovery_script", discoveryScript, name, false, 120);
+                    }
+                }
             }
             if (clueNames.stream().distinct().count() != clueNames.size()) {
                 issues.add("clue names must be unique");
@@ -353,6 +378,131 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
         }
 
         return issues;
+    }
+
+    private static final String[] BANNED_UI_TOKENS = {
+            "범인", "용의자", "알리바이", "흉기", "살해", "살인", "범행", "결정적", "반박", "의미", "거짓", "거짓말", "모순"
+    };
+
+    private static final String[] BANNED_EMOTION_TOKENS = {
+            "분노", "억울"
+    };
+
+    private static void validateUiText(
+            List<String> issues,
+            Set<String> personNames,
+            String field,
+            String text,
+            String clueName,
+            boolean requireAssistantTone,
+            int maxLen
+    ) {
+        if (text.length() > maxLen) {
+            issues.add(field + " must be <= " + maxLen + " chars (" + clueName + ")");
+        }
+        if (containsAnyToken(text, BANNED_UI_TOKENS) || containsAnyToken(text, BANNED_EMOTION_TOKENS)) {
+            issues.add(field + " must avoid banned tokens (" + clueName + ")");
+        }
+        if (containsAnyPersonName(text, personNames)) {
+            issues.add(field + " must not mention person names (" + clueName + ")");
+        }
+        if (requireAssistantTone) {
+            if (!startsWithDetectiveAddress(text)) {
+                issues.add(field + " must start with '탐정님' (" + clueName + ")");
+            }
+            if (!hasPoliteEnding(text)) {
+                issues.add(field + " must end politely (~요/~니다) (" + clueName + ")");
+            }
+        }
+    }
+
+    private static Set<String> collectPersonNames(JsonNode root) {
+        Set<String> names = new HashSet<>();
+        if (root == null) {
+            return names;
+        }
+
+        JsonNode victim = root.path("victim");
+        String victimName = victim.path("name").asText("").trim();
+        if (!victimName.isEmpty()) {
+            names.add(victimName);
+        }
+
+        JsonNode suspects = root.path("suspects");
+        if (suspects != null && suspects.isArray()) {
+            for (JsonNode suspect : suspects) {
+                String suspectName = suspect.path("name").asText("").trim();
+                if (!suspectName.isEmpty()) {
+                    names.add(suspectName);
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private static boolean containsAnyPersonName(String text, Set<String> personNames) {
+        if (text == null || text.isBlank() || personNames == null || personNames.isEmpty()) {
+            return false;
+        }
+        String compact = text.replace(" ", "");
+        for (String name : personNames) {
+            if (name == null) {
+                continue;
+            }
+            String token = name.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            if (compact.contains(token.replace(" ", ""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsAnyToken(String text, String[] tokens) {
+        if (text == null) {
+            return false;
+        }
+        String compact = text.replace(" ", "");
+        for (String token : tokens) {
+            if (compact.contains(token)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean hasPoliteEnding(String text) {
+        String t = stripTrailingPunctuation(text);
+        if (t.isEmpty()) {
+            return false;
+        }
+        return t.endsWith("요") || t.endsWith("니다");
+    }
+
+    private static boolean startsWithDetectiveAddress(String text) {
+        if (text == null) {
+            return false;
+        }
+        return text.trim().startsWith("탐정님");
+    }
+
+    private static String stripTrailingPunctuation(String text) {
+        if (text == null) {
+            return "";
+        }
+        String t = text.trim();
+        while (!t.isEmpty()) {
+            char last = t.charAt(t.length() - 1);
+            if (last == '.' || last == '!' || last == '?' || last == '…' || last == '"' || last == '\'' || last == '”' || last == '’') {
+                t = t.substring(0, t.length() - 1).trim();
+                continue;
+            }
+            break;
+        }
+        return t;
     }
 
     private int countArray(String json, String field) {

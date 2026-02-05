@@ -4,9 +4,9 @@ import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -28,15 +28,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class RoomsNode implements ScenarioV2Node {
 
     private final ChatClient chatClient;
     private final ScenarioV2EventPublisher eventPublisher;
-
-    public RoomsNode(@Qualifier("scenarioGenChatClient") ChatClient chatClient, ScenarioV2EventPublisher eventPublisher) {
-        this.chatClient = chatClient;
-        this.eventPublisher = eventPublisher;
-    }
 
     /**
      * 방/나레이션 JSON을 생성하고 상태에 반영
@@ -79,7 +75,7 @@ public class RoomsNode implements ScenarioV2Node {
                 [작성 규칙]
                 1. 층수: 1층부터 6층까지 순차적으로 floor_number를 할당하고 층별 유형과 이름을 정하십시오.
                 2. 단서 배치: [필수 참고 데이터]의 clues들을 각 방의 description에 자연스럽게 녹여내십시오. (예: 주방 묘사 시 '싱크대 위의 혈흔' 언급)
-                3. 조수 코멘트: assistant_comment는 추리에 직접적인 정답을 주지 말고 기괴함이나 의문점만 친근하게 제시하십시오.
+                3. 조수 코멘트: assistant_comment는 "탐정님,"으로 시작하는 공손한 구어체(~요/~니다) 1문장(60자 이내)으로, 관찰 가능한 사실만 말하고 정답/추론을 금지하십시오. (금지어: 범인, 용의자, 알리바이, 흉기, 살해, 살인, 범행, 결정적, 반박, 의미, 거짓, 거짓말, 모순)
                 4. 현장 묘사: "여기가 범행 장소다"라는 확정적 서술을 피하고 객관적인 상태만 묘사하십시오.
                 5. narration 섹션(오프닝, 에필로그 등)을 극적인 톤으로 작성하십시오.
 

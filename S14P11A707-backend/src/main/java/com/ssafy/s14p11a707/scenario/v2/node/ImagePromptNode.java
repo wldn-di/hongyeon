@@ -96,19 +96,18 @@ public class ImagePromptNode implements ScenarioV2Node {
         List<Room> rooms = roomRepository.findByScenarioIdOrderByFloorNumberAsc(state.getScenarioId());
 
         List<ScenarioV2ImageJob> jobs = new ArrayList<>();
-        String commonImagePrefix = buildCommonImagePrefix(scenario, state);
 
         jobs.add(new ScenarioV2ImageJob(
                 ScenarioV2ImageJob.Target.SCENARIO_THUMBNAIL,
                 scenario.getId(),
                 "scenarios/%d/thumbnail.png".formatted(scenario.getId()),
                 """
-                %s
-
-                Create a single cinematic noir scene image for a mystery detective game.
-                Depict a single atmospheric scene that suggests mystery and danger through lighting, props, and setting.
-                One continuous scene only: no collage, no montage, no split-screen, no panels, no grids, no inset images.
-                """.formatted(commonImagePrefix)
+                Create a cinematic thumbnail image for a mystery detective game.
+                Genre: %s
+                Title: %s
+                Synopsis: %s
+                Style: %s
+                """.formatted(scenario.getGenre(), scenario.getTitle(), scenario.getSynopsis(), safe(state.getRequest().style()))
         ));
 
         // Victim portrait
@@ -116,41 +115,44 @@ public class ImagePromptNode implements ScenarioV2Node {
                 ? victim.getVictimDetailJson().path("appearance")
                 : null;
         String victimGender = safe(victim.getGender());
-        String victimGenderWord = toGenderWord(victimGender);
-        String victimGenderFaceCue = toGenderFaceCue(victimGender);
-        String victimOccupation = truncate(safe(victim.getOccupation()), 80);
-        if (victimOccupation.isEmpty()) {
-            victimOccupation = "their profession";
-        }
-        String victimMoodCue = truncate(safe(victim.getBackground()), 180);
-        if (victimMoodCue.isEmpty()) {
-            victimMoodCue = "none";
-        }
+        String victimGenderInst = victimGender.contains("남") || victimGender.toLowerCase().contains("male")
+                ? "(male: masculine face, strong jawline)"
+                : victimGender.contains("여") || victimGender.toLowerCase().contains("female")
+                    ? "(female: feminine face)"
+                    : "";
         String victimAppearanceDetails = victimAppearance != null && !victimAppearance.isMissingNode() && !victimAppearance.isNull()
                 ? buildAppearanceText(victimAppearance)
-                : "Realistic hair, " + (victimGenderFaceCue.isEmpty() ? "realistic facial features" : victimGenderFaceCue) + ", normal build, appropriate attire, neutral expression.";
+                : "- Hair: realistic style\n- Face: " + (victimGender.contains("남") || victimGender.toLowerCase().contains("male") ? "masculine features, strong jawline" : "feminine features") + "\n- Body: normal build\n- Clothing: appropriate attire\n- Expression: neutral\n";
 
         jobs.add(new ScenarioV2ImageJob(
                 ScenarioV2ImageJob.Target.VICTIM_PORTRAIT,
                 victim.getId(),
                 "scenarios/%d/victim/%d.png".formatted(scenario.getId(), victim.getId()),
                 """
-                %s
+                MUST CREATE a photorealistic portrait for a mystery detective game victim.
 
-                Create a photorealistic black-and-white portrait image for a mystery detective game.
-                Depict an adult %s, around %s years old, with %s.
-                Clothing and props should subtly match a %s.
+                REQUIRED GENDER:
+                - GENDER: %s %s
+
+                IDENTITY:
+                - Name: %s
+                - Occupation: %s
+                - Age: %s
+                - Background: %s
+
+                APPEARANCE:
                 %s
-                Tragic, mysterious mood; cinematic noir lighting with dramatic shadows.
-                Mood cue is %s.
+                STYLE:
+                - cinematic noir lighting, realistic textures, 8k quality
+                - dramatic shadows, professional photography
+                - Atmosphere: mysterious, crime scene victim, tragic mood
                 """.formatted(
-                commonImagePrefix,
-                victimGenderWord,
+                victimGender, victimGenderInst,
+                victim.getName(),
+                safe(victim.getOccupation()),
                 victim.getAge() != null ? victim.getAge().toString() : "adult",
-                victimGenderFaceCue.isEmpty() ? "realistic facial features" : victimGenderFaceCue,
-                victimOccupation,
-                victimAppearanceDetails,
-                victimMoodCue
+                safe(victim.getBackground()),
+                victimAppearanceDetails
         )
         ));
 
@@ -159,74 +161,59 @@ public class ImagePromptNode implements ScenarioV2Node {
                     ? suspect.getAiConfigJson().path("appearance")
                     : null;
             String suspectGender = safe(suspect.getGender());
-            String suspectGenderWord = toGenderWord(suspectGender);
-            String suspectGenderFaceCue = toGenderFaceCue(suspectGender);
-            String suspectOccupation = truncate(safe(suspect.getOccupation()), 80);
-            if (suspectOccupation.isEmpty()) {
-                suspectOccupation = "their profession";
-            }
-            String suspectMoodCue = truncate(safe(suspect.getOneLiner()), 180);
-            if (suspectMoodCue.isEmpty()) {
-                suspectMoodCue = "none";
-            }
+            String suspectGenderInst = suspectGender.contains("남") || suspectGender.toLowerCase().contains("male")
+                    ? "(male: masculine face, strong jawline)"
+                    : suspectGender.contains("여") || suspectGender.toLowerCase().contains("female")
+                        ? "(female: feminine face)"
+                        : "";
             String suspectAppearanceDetails = suspectAppearance != null && !suspectAppearance.isMissingNode() && !suspectAppearance.isNull()
                     ? buildAppearanceText(suspectAppearance)
-                    : "Realistic hair, " + (suspectGenderFaceCue.isEmpty() ? "realistic facial features" : suspectGenderFaceCue) + ", normal build, appropriate attire, neutral expression.";
+                    : "- Hair: realistic style\n- Face: " + (suspectGender.contains("남") || suspectGender.toLowerCase().contains("male") ? "masculine features, strong jawline" : "feminine features") + "\n- Body: normal build\n- Clothing: appropriate attire\n- Expression: neutral\n";
 
             jobs.add(new ScenarioV2ImageJob(
                     ScenarioV2ImageJob.Target.SUSPECT_PORTRAIT,
                     suspect.getId(),
                     "scenarios/%d/suspects/%d.png".formatted(scenario.getId(), suspect.getId()),
                     """
-                    %s
+                    MUST CREATE a photorealistic portrait for a mystery detective game suspect.
 
-                    Create a photorealistic black-and-white portrait image for a mystery detective game.
-                    Depict an adult %s, around %s years old, with %s.
-                    Clothing and props should subtly match a %s.
+                    REQUIRED GENDER:
+                    - GENDER: %s %s
+
+                    IDENTITY:
+                    - Name: %s
+                    - Occupation: %s
+                    - Age: %s
+                    - Personality hint: %s
+
+                    APPEARANCE:
                     %s
-                    Suspicious, tense mood; cinematic noir lighting with dramatic shadows.
-                    Mood cue is %s.
+                    STYLE:
+                    - cinematic noir lighting, realistic textures, 8k quality
+                    - dramatic shadows, professional photography
+                    - Atmosphere: suspicious, hiding something, interrogation room mood
                     """.formatted(
-                    commonImagePrefix,
-                    suspectGenderWord,
+                    suspectGender, suspectGenderInst,
+                    suspect.getName(),
+                    safe(suspect.getOccupation()),
                     suspect.getAge() != null ? suspect.getAge().toString() : "adult",
-                    suspectGenderFaceCue.isEmpty() ? "realistic facial features" : suspectGenderFaceCue,
-                    suspectOccupation,
-                    suspectAppearanceDetails,
-                    suspectMoodCue
+                    safe(suspect.getOneLiner()),
+                    suspectAppearanceDetails
             )
             ));
         }
 
         for (Clue clue : clues) {
-            Room foundIn = clue.getRoom();
-            String foundInText = foundIn == null
-                    ? ""
-                    : "%s (%s)".formatted(safe(foundIn.getRoomName()), safe(foundIn.getRoomType()));
-            String clueMoodCue = truncate(safe(clue.getDescription()), 220);
-            if (clueMoodCue.isEmpty()) {
-                clueMoodCue = "none";
-            }
-
             jobs.add(new ScenarioV2ImageJob(
                     ScenarioV2ImageJob.Target.CLUE_IMAGE,
                     clue.getId(),
                     "scenarios/%d/clues/%d.png".formatted(scenario.getId(), clue.getId()),
                     """
-                    %s
-
-                    Create a photorealistic black-and-white macro close-up image of a clue object for a mystery detective game.
-                    Depict a single physical clue object, %s.
-                    If the clue would normally contain writing (paper, label, screen), render it blank with no visible characters.
-                    Mood cue is %s.
-                    Location cue is %s.
-                    Composition should be a single object centered on a surface, shallow depth of field, cinematic noir lighting.
-                    """.formatted(
-                            commonImagePrefix,
-                            truncate(safe(clue.getName()), 80),
-                            clueMoodCue,
-                            truncate(foundInText, 80)
-                    )
+                    Close-up evidence photo for a mystery detective game.
+                    Clue name: %s
+                    Description: %s
+                    Tone: realistic, cinematic, detailed
+                    """.formatted(clue.getName(), safe(clue.getDescription()))
             ));
         }
 
@@ -236,17 +223,17 @@ public class ImagePromptNode implements ScenarioV2Node {
                     room.getId(),
                     "scenarios/%d/rooms/%d.png".formatted(scenario.getId(), room.getId()),
                     """
-                    %s
-
-                    Create a photorealistic black-and-white room interior image for a mystery detective game.
-                    Depict the interior of a %s (%s).
-                    %s
-                    Composition should be first-person view, atmospheric, cinematic noir lighting, realistic textures.
+                    Background image of a room interior for a mystery detective game.
+                    Floor: %d
+                    Room Type: %s
+                    Room Name: %s
+                    Description: %s
+                    Style: first-person view, atmospheric, noir, cinematic, realistic
                     """.formatted(
-                            commonImagePrefix,
-                            truncate(safe(room.getRoomType()), 60),
-                            truncate(safe(room.getRoomName()), 60),
-                            truncate(safe(room.getDescription()), 260)
+                            room.getFloorNumber(),
+                            safe(room.getRoomType()),
+                            safe(room.getRoomName()),
+                            safe(room.getDescription())
                     )
             ));
         }
@@ -267,50 +254,7 @@ public class ImagePromptNode implements ScenarioV2Node {
         return value == null ? "" : value;
     }
 
-    /**
-     * Collapse all whitespace (including newlines) into single spaces so long narrative fields
-     * don't accidentally become multi-paragraph prompts.
-     */
-    private String compact(String value) {
-        if (value == null) {
-            return "";
-        }
-        StringBuilder sb = new StringBuilder(value.length());
-        boolean lastWasSpace = false;
-        for (int i = 0; i < value.length(); i++) {
-            char c = value.charAt(i);
-            if (Character.isWhitespace(c)) {
-                if (!lastWasSpace) {
-                    sb.append(' ');
-                    lastWasSpace = true;
-                }
-                continue;
-            }
-            sb.append(c);
-            lastWasSpace = false;
-        }
-        return sb.toString().trim();
-    }
-
-    /**
-     * Keep prompts bounded. Imagen calls are repeated per image job, so we should not repeat
-     * extremely long fields verbatim.
-     */
-    private String truncate(String value, int maxChars) {
-        String v = compact(value);
-        if (v.isEmpty()) {
-            return "";
-        }
-        if (maxChars <= 0 || v.length() <= maxChars) {
-            return v;
-        }
-        int suffixLen = 3; // "..."
-        int end = Math.max(1, maxChars - suffixLen);
-        return v.substring(0, end).trim() + "...";
-    }
-
     private String buildAppearanceText(JsonNode appearance) {
-        String ethnicity = safe(appearance.path("ethnicity").asText());
         String hairStyle = safe(appearance.path("hair_style").asText());
         String hairColor = safe(appearance.path("hair_color").asText());
         String eyeColor = safe(appearance.path("eye_color").asText());
@@ -322,162 +266,20 @@ public class ImagePromptNode implements ScenarioV2Node {
 
         StringBuilder sb = new StringBuilder();
 
-        if (!ethnicity.isEmpty()) {
-            sb.append(ethnicity).append(" appearance, ");
-        }
+        String hair = hairStyle.isEmpty() ? "realistic style" : hairStyle;
+        if (!hairColor.isEmpty()) hair += ", " + hairColor;
+        sb.append("- Hair: ").append(hair).append("\n");
 
-        String hair = hairStyle.isEmpty() ? "realistic hair" : hairStyle;
-        if (!hairColor.isEmpty()) {
-            hair += " (" + hairColor + ")";
-        }
-        sb.append(hair);
+        sb.append("- Eyes: ").append(eyeColor.isEmpty() ? "natural color" : eyeColor).append("\n");
+        sb.append("- Face: ").append(facialFeatures.isEmpty() ? "realistic features" : facialFeatures).append("\n");
+        sb.append("- Body: ").append(bodyType.isEmpty() ? "normal build" : bodyType).append("\n");
+        sb.append("- Clothing: ").append(clothingStyle.isEmpty() ? "appropriate attire" : clothingStyle).append("\n");
+        sb.append("- Expression: ").append(expression.isEmpty() ? "natural" : expression).append("\n");
 
-        if (!eyeColor.isEmpty()) {
-            sb.append(", ").append(eyeColor).append(" eyes");
-        }
-        if (!facialFeatures.isEmpty()) {
-            sb.append(", ").append(facialFeatures);
-        }
-        if (!bodyType.isEmpty()) {
-            sb.append(", ").append(bodyType).append(" build");
-        }
-        if (!clothingStyle.isEmpty()) {
-            sb.append(", wearing ").append(clothingStyle);
-        }
-        if (!expression.isEmpty()) {
-            sb.append(", ").append(expression).append(" expression");
-        }
         if (!distinctiveTrait.isEmpty() && !distinctiveTrait.equals("없음")) {
-            sb.append(", ").append(distinctiveTrait);
+            sb.append("- Distinctive: ").append(distinctiveTrait).append("\n");
         }
 
-        String out = compact(sb.toString());
-        if (out.endsWith(",")) {
-            out = out.substring(0, out.length() - 1).trim();
-        }
-        if (!out.endsWith(".")) {
-            out += ".";
-        }
-        return out;
-    }
-
-    private String buildCommonImagePrefix(Scenario scenario, ScenarioV2State state) {
-        StringBuilder sb = new StringBuilder();
-
-        sb.append("Photorealistic black-and-white monochrome, cinematic noir.\n");
-        sb.append("Single full-bleed image that fills the entire canvas edge-to-edge.\n");
-        sb.append("Centered composition; keep key subjects within safe margins.\n");
-        sb.append("No visible text, letters, numbers, symbols, logos, watermarks, UI, or readable writing.\n");
-        sb.append("One continuous scene only: no collage, no montage, no split-screen, no panels, no grids, no inset images.\n");
-        sb.append("Consistent worldbuilding across all images (props, clothing, architecture).\n");
-
-        JsonNode storyConfig = scenario.getStoryConfigJson();
-        JsonNode visualBible = storyConfig == null ? null : storyConfig.path("visual_bible_json");
-        if (visualBible != null && visualBible.isObject()) {
-            String era = truncate(safe(visualBible.path("era").asText(null)), 80);
-            String locale = truncate(safe(visualBible.path("locale").asText(null)), 80);
-            String season = truncate(safe(visualBible.path("season").asText(null)), 60);
-            String timeOfDay = truncate(safe(visualBible.path("time_of_day").asText(null)), 60);
-            String lighting = truncate(safe(visualBible.path("lighting").asText(null)), 80);
-            String palette = truncate(safe(visualBible.path("color_palette").asText(null)), 80);
-
-            // These fields often contain "polaroid/instant-film/frame" style words from the LLM. Strip them.
-            String visualStyle = sanitizeStyleKeywords(truncate(safe(visualBible.path("visual_style").asText(null)), 120));
-            String camera = sanitizeStyleKeywords(truncate(safe(visualBible.path("camera").asText(null)), 120));
-
-            if (!era.isEmpty() || !locale.isEmpty() || !season.isEmpty() || !timeOfDay.isEmpty()) {
-                sb.append("Set in ");
-                if (!era.isEmpty()) sb.append(era).append(" ");
-                if (!locale.isEmpty()) sb.append(locale).append(" ");
-                if (!season.isEmpty()) sb.append(season).append(" ");
-                if (!timeOfDay.isEmpty()) sb.append(timeOfDay).append(" ");
-                sb.append(".\n");
-            }
-            if (!lighting.isEmpty()) sb.append("Lighting is ").append(lighting).append(".\n");
-            if (!palette.isEmpty()) sb.append("Palette is ").append(palette).append(".\n");
-            if (!visualStyle.isEmpty()) sb.append("Style is ").append(visualStyle).append(".\n");
-            if (!camera.isEmpty()) sb.append("Camera look is ").append(camera).append(".\n");
-
-            String avoid = joinArray(visualBible.path("avoid"));
-            if (!avoid.isEmpty()) {
-                sb.append("Avoid ").append(truncate(avoid, 160)).append(".\n");
-            }
-        }
-
-        String styleKeywords = sanitizeStyleKeywords(safe(state.getRequest().style()));
-        if (!styleKeywords.isEmpty()) {
-            sb.append("Style keywords include ").append(truncate(styleKeywords, 160)).append(".\n");
-        }
-
-        return sb.toString();
-    }
-
-    private String toGenderWord(String gender) {
-        String g = gender == null ? "" : gender.toLowerCase();
-        if ((gender != null && gender.contains("남")) || g.contains("male") || g.contains("man")) {
-            return "man";
-        }
-        if ((gender != null && gender.contains("여")) || g.contains("female") || g.contains("woman")) {
-            return "woman";
-        }
-        return "person";
-    }
-
-    private String toGenderFaceCue(String gender) {
-        String g = gender == null ? "" : gender.toLowerCase();
-        if ((gender != null && gender.contains("남")) || g.contains("male") || g.contains("man")) {
-            return "masculine facial features (strong jawline)";
-        }
-        if ((gender != null && gender.contains("여")) || g.contains("female") || g.contains("woman")) {
-            return "feminine facial features";
-        }
-        return "";
-    }
-
-    private String sanitizeStyleKeywords(String styleKeywords) {
-        String s = compact(styleKeywords);
-        if (s.isEmpty()) {
-            return "";
-        }
-
-        // Remove terms that tend to create frames/printouts or readable text in the generated image.
-        s = s.replace("폴라로이드", "");
-        s = s.replace("인스턴트필름", "");
-        s = s.replace("인스턴트 필름", "");
-        s = s.replace("액자", "");
-        s = s.replace("프레임", "");
-        s = s.replace("테두리", "");
-        s = s.replace("여백", "");
-        s = s.replace("텍스트", "");
-        s = s.replace("자막", "");
-        s = s.replace("워터마크", "");
-
-        s = s.replaceAll("(?i)polaroid", "");
-        s = s.replaceAll("(?i)instant[- ]?film", "");
-        s = s.replaceAll("(?i)frame", "");
-        s = s.replaceAll("(?i)border", "");
-        s = s.replaceAll("(?i)margin", "");
-        s = s.replaceAll("(?i)text", "");
-
-        return compact(s);
-    }
-
-    private String joinArray(JsonNode node) {
-        if (node == null || !node.isArray()) {
-            return "";
-        }
-
-        StringBuilder sb = new StringBuilder();
-        for (JsonNode item : node) {
-            String text = safe(item.asText(null)).trim();
-            if (text.isEmpty()) {
-                continue;
-            }
-            if (!sb.isEmpty()) {
-                sb.append(", ");
-            }
-            sb.append(text);
-        }
         return sb.toString();
     }
 }

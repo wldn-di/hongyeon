@@ -4,9 +4,9 @@ import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
@@ -22,15 +22,11 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
+@RequiredArgsConstructor
 public class ScenarioBaseNode implements ScenarioV2Node {
 
     private final ChatClient chatClient;
     private final ScenarioV2EventPublisher eventPublisher;
-
-    public ScenarioBaseNode(@Qualifier("scenarioGenChatClient") ChatClient chatClient, ScenarioV2EventPublisher eventPublisher) {
-        this.chatClient = chatClient;
-        this.eventPublisher = eventPublisher;
-    }
 
     /**
      * 시나리오 기본 설정 JSON을 생성하고 상태에 반영
@@ -64,7 +60,6 @@ public class ScenarioBaseNode implements ScenarioV2Node {
                                     1. 유저가 입력한 제목과 시놉시스를 확장하여 200자 내외의 synopsisDetail을 작성하십시오.
                                     2. story_config_json 내의 timeline에는 1단계의 내용을 사용하여 필드를 추가하십시오.
                                     3. 인명 준수: 반드시 1단계에서 생성된 이름(cast 데이터)만 사용하십시오.
-                                    4. story_config_json.visual_bible_json을 작성하십시오. 이는 이미지 생성에 사용되며, 시나리오 전체 이미지의 시대/장소/톤 일관성을 위한 공통 가이드입니다.
 
                                     [1단계 데이터]:
                                     %s
@@ -82,17 +77,6 @@ public class ScenarioBaseNode implements ScenarioV2Node {
                      "story_config_json": {
                        "incident_time": "[YYYY-MM-DD HH:MM 형식의 발생 시각]",
                        "twist": "[반전 요소]",
-                       "visual_bible_json": {
-                         "era": "string (e.g., 1990s / modern / 1920s)",
-                         "locale": "string (e.g., Seoul / New York / rural village)",
-                         "season": "string",
-                         "time_of_day": "string",
-                         "lighting": "string (e.g., neon, tungsten, daylight, candlelight)",
-                         "color_palette": "string",
-                         "visual_style": "string (e.g., cinematic noir, realistic, film grain)",
-                         "camera": "string (e.g., 35mm, shallow depth of field)",
-                         "avoid": ["string (e.g., text, watermark, logo, anachronistic props)"]
-                       },
                        "timeline": [
                          {
                            "time": "HH:MM",
