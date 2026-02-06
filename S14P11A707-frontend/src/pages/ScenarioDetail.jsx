@@ -4,7 +4,6 @@ import { useScenarioById } from '@/features/scenarios/hooks/useScenarioById'
 import { useScenarioPlayStatus } from '@/features/scenarios/hooks/useScenarioPlayStatus'
 import ScenarioDetailCard from '@/features/scenarios/components/ScenarioDetailCard'
 import { ReplayConfirmModal } from '@/components/ui/ReplayConfirmModal'
-import { showLoginRequired } from '@/components/ui/LoginRequiredModal'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function ScenarioDetail() {
@@ -12,7 +11,7 @@ export default function ScenarioDetail() {
   const [, setLocation] = useLocation()
   const scenarioId = params?.id ? parseInt(params.id, 10) : 0
 
-  const { state } = useAuth()
+  const { state, actions } = useAuth()
   const user = state.user
 
   const { scenario, loading, error } = useScenarioById(scenarioId)
@@ -24,7 +23,9 @@ export default function ScenarioDetail() {
   // 게임하기 버튼 클릭 핸들러
   const handlePlayClick = useCallback(() => {
     if (!user) {
-      showLoginRequired({ redirectTo: `/game/${scenarioId}` })
+      actions.openLoginGate(() => setLocation(`/game/${scenarioId}`), {
+        redirectTo: `/game/${scenarioId}`,
+      })
       return
     }
 
@@ -36,7 +37,7 @@ export default function ScenarioDetail() {
 
     // 나머지(NONE, PLAYING) → 백엔드 startGame이 알아서 처리
     setLocation(`/game/${scenarioId}`)
-  }, [user, scenarioId, hasPlayed, setLocation])
+  }, [actions, user, scenarioId, hasPlayed, setLocation])
 
   // 재플레이 확인 핸들러 - 단순히 게임 페이지로 이동 (백엔드가 알아서 처리)
   const handleReplayConfirm = useCallback(() => {

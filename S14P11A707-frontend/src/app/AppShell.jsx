@@ -10,12 +10,10 @@ import { Turntable } from "@/components/ui/Turntable";
 import { Atmosphere } from "@/components/ui/Atmosphere";
 import { AlertModal } from "@/components/ui/AlertModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { LoginRequiredModal } from "@/components/ui/LoginRequiredModal";
-
-const POST_LOGIN_REDIRECT_KEY = "post_login_redirect";
+import { LoginGate } from "@/components/ui/LoginGate";
 
 function AppShellInner() {
-    const [location, setLocation] = useLocation();
+    const [location] = useLocation();
     const { state: auth } = useAuth();
     const hideHeader =
         location.startsWith("/room/") ||
@@ -31,33 +29,6 @@ function AppShellInner() {
             page_title: document.title,
         });
     }, [location]);
-
-    useEffect(() => {
-        if (auth.loading || !auth.user) return;
-
-        let redirectTo = null;
-        try {
-            redirectTo = window.sessionStorage.getItem(POST_LOGIN_REDIRECT_KEY);
-        } catch {
-            // ignore
-        }
-
-        if (!redirectTo) return;
-
-        try {
-            window.sessionStorage.removeItem(POST_LOGIN_REDIRECT_KEY);
-        } catch {
-            // ignore
-        }
-
-        if (
-            typeof redirectTo === "string" &&
-            redirectTo.startsWith("/") &&
-            redirectTo !== location
-        ) {
-            setLocation(redirectTo);
-        }
-    }, [auth.loading, auth.user, location, setLocation]);
 
     return (
         <div className="dark">
@@ -84,7 +55,7 @@ function AppShellInner() {
             <Turntable />
             <AlertModal />
             <ConfirmModal />
-            <LoginRequiredModal />
+            <LoginGate />
         </div>
     );
 }

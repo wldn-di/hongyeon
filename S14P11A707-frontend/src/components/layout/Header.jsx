@@ -10,6 +10,14 @@ export function Header() {
   const user = state.user
   const [, setLocation] = useLocation()
 
+  const handleBookshelfClick = (e) => {
+    if (user) return
+    e?.preventDefault?.()
+    actions.openLoginGate(() => setLocation("/my-bookshelf"), {
+      redirectTo: "/my-bookshelf",
+    })
+  }
+
   return (
     <header className="border-b border-border bg-card/50 backdrop-blur-sm sticky top-0 z-50">
       <div className="container mx-auto px-4 py-4">
@@ -37,7 +45,7 @@ export function Header() {
                 시나리오
               </span>
             </Link>
-            <Link href="/my-bookshelf">
+            <Link href="/my-bookshelf" onClick={handleBookshelfClick}>
               <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer flex items-center gap-1">
                 <BookOpen className="w-4 h-4" />
                 내 수사록

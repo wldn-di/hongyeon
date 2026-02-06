@@ -1,12 +1,18 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer } from "react"
+import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from "react"
 import { alertError, alertWarning,alertInfo } from "@/components/ui/AlertModal"
 
+let externalOpenLoginGate = null
+let externalCloseLoginGate = null
 
 const AuthContext = createContext(null)
 
 const initialState = {
   user: null,
   loading: true,
+  loginGate: {
+    open: false,
+    redirectTo: null,
+  },
 }
 
 function reducer(state, action) {
@@ -23,6 +29,25 @@ function reducer(state, action) {
         user: state.user ? { ...state.user, ...action.patch } : state.user,
         loading: false,
       }
+    case "OPEN_LOGIN_GATE":
+      return {
+        ...state,
+        loginGate: {
+          open: true,
+          redirectTo:
+            typeof action.redirectTo === "string"
+              ? action.redirectTo
+              : state.loginGate?.redirectTo ?? null,
+        },
+      }
+    case "CLOSE_LOGIN_GATE":
+      return {
+        ...state,
+        loginGate: {
+          open: false,
+          redirectTo: null,
+        },
+      }
     default:
       return state
   }
@@ -30,6 +55,7 @@ function reducer(state, action) {
 
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
+  const loginGateOnSuccessRef = useRef(null)
 
   const rawBase = import.meta.env.VITE_API_BASE_URL
   const base = rawBase ? rawBase.replace(/\/$/, "") : "" // 끝 슬래시 제거로 통일
@@ -66,7 +92,28 @@ export function AuthProvider({ children }) {
   const actions = useMemo(
     () => ({
       // 1) 로그인
-      login() {
+      login(options) {
+        const redirectTo =
+          typeof options === "string" ? options : options?.redirectTo
+
+        const fallback =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search + window.location.hash
+            : "/"
+
+        const normalized =
+          typeof redirectTo === "string" ? redirectTo.trim() : ""
+
+        const safeRedirect =
+          normalized &&
+          normalized.startsWith("/") &&
+          !normalized.startsWith("//") &&
+          !normalized.startsWith("/login")
+            ? normalized
+            : fallback.startsWith("/login")
+              ? "/"
+              : fallback
+
         if (!base) {
           dispatch({
             type: "SET_USER",
@@ -82,9 +129,47 @@ export function AuthProvider({ children }) {
           return
         }
 
-        const url = `${base}/api/auth/login`
-        console.log("LOGIN URL:", url)
+        let redirectParam = safeRedirect
+        try {
+          const frontendOrigin = window.location.origin
+          const apiOrigin = new URL(base).origin
+          if (frontendOrigin && apiOrigin && frontendOrigin !== apiOrigin) {
+            redirectParam = `${frontendOrigin}${safeRedirect}`
+          }
+        } catch {
+          // ignore
+        }
+
+        const url = `${base}/api/auth/login?redirect=${encodeURIComponent(redirectParam)}`
         window.location.href = url
+      },
+
+      openLoginGate(onSuccess, options) {
+        const redirectTo =
+          typeof options === "string" ? options : options?.redirectTo
+
+        const fallback =
+          typeof window !== "undefined"
+            ? window.location.pathname + window.location.search + window.location.hash
+            : "/"
+
+        const normalized =
+          typeof redirectTo === "string" ? redirectTo.trim() : ""
+
+        const safeRedirect =
+          normalized && normalized.startsWith("/") && !normalized.startsWith("//")
+            ? normalized
+            : fallback
+
+        loginGateOnSuccessRef.current =
+          typeof onSuccess === "function" ? onSuccess : null
+
+        dispatch({ type: "OPEN_LOGIN_GATE", redirectTo: safeRedirect })
+      },
+
+      closeLoginGate() {
+        loginGateOnSuccessRef.current = null
+        dispatch({ type: "CLOSE_LOGIN_GATE" })
       },
 
       // 2) 로그아웃
@@ -207,6 +292,32 @@ export function AuthProvider({ children }) {
     [base]
   )
 
+  useEffect(() => {
+    if (!state.loginGate?.open) return
+    if (state.loading || !state.user) return
+
+    const onSuccess = loginGateOnSuccessRef.current
+    loginGateOnSuccessRef.current = null
+
+    try {
+      onSuccess?.()
+    } catch (e) {
+      console.error("[AUTH] loginGate onSuccess failed:", e)
+    } finally {
+      dispatch({ type: "CLOSE_LOGIN_GATE" })
+    }
+  }, [state.loading, state.loginGate?.open, state.user])
+
+  useEffect(() => {
+    externalOpenLoginGate = actions.openLoginGate
+    externalCloseLoginGate = actions.closeLoginGate
+
+    return () => {
+      externalOpenLoginGate = null
+      externalCloseLoginGate = null
+    }
+  }, [actions])
+
   const value = useMemo(() => ({ state, actions }), [state, actions])
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
@@ -215,4 +326,16 @@ export function useAuth() {
   const ctx = useContext(AuthContext)
   if (!ctx) throw new Error("useAuth must be used within <AuthProvider>")
   return ctx
+}
+
+export function openLoginGateExternally(onSuccess, options) {
+  if (typeof externalOpenLoginGate !== "function") return false
+  externalOpenLoginGate(onSuccess, options)
+  return true
+}
+
+export function closeLoginGateExternally() {
+  if (typeof externalCloseLoginGate !== "function") return false
+  externalCloseLoginGate()
+  return true
 }

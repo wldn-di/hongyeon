@@ -7,6 +7,7 @@ import { PageLayout } from '@/components/layout/PageLayout'
 import { useTopScenarios } from '@/features/scenarios/hooks/useTopScenarios'
 import { useAuth } from '@/contexts/AuthContext'
 import { isVisibleInAll } from '@/features/scenarios/api/scenarioMappers'
+import { FEATURE_FLAGS } from '@/app/featureFlags'
 
 function SectionHeader({ title, to = '/scenarios', rightText = '전체 보기 →' }) {
   return (
@@ -86,7 +87,11 @@ export default function Home() {
                   ▶ 튜토리얼 하러 가기
                 </Button>
               </Link>
-              {user ? (
+              {FEATURE_FLAGS.disableScenarioCreation ? (
+                <Button variant="neon" size="lg" className="text-lg px-8" disabled>
+                  ▶ 시나리오 생성 점검중
+                </Button>
+              ) : user ? (
                 <Link href="/create-scenario">
                   <Button variant="neon" size="lg" className="text-lg px-8">
                     ▶ 나만의 시나리오 만들러 가기

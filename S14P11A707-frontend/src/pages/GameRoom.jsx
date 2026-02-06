@@ -250,7 +250,17 @@ export default function GameRoom() {
   const { state, actions } = useAuth()
   const user = state.user
   const authLoading = state.loading
+  const loginGateAutoOpenedRef = useRef(false)
   const [, setLocation] = useLocation()
+
+  useEffect(() => {
+    if (loginGateAutoOpenedRef.current) return
+    if (authLoading) return
+    if (user) return
+
+    loginGateAutoOpenedRef.current = true
+    actions.openLoginGate(null)
+  }, [actions, authLoading, user])
 
   // /game/:scenarioId 경로 (새 게임)
   const [matchGame, paramsGame] = useRoute('/game/:scenarioId')
@@ -1383,15 +1393,15 @@ export default function GameRoom() {
   if (!user) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="bg-card/40 border border-border rounded-xl p-10 text-center">
-          <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
-          <p className="text-muted-foreground mb-6">게임을 시작하려면 Google 로그인이 필요해요.</p>
-          <Button variant="neon" onClick={() => actions.login()}>
-            구글 로그인
-          </Button>
+          <div className="bg-card/40 border border-border rounded-xl p-10 text-center">
+            <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
+            <p className="text-muted-foreground mb-6">게임을 시작하려면 Google 로그인이 필요해요.</p>
+            <Button variant="neon" onClick={() => actions.openLoginGate(null)}>
+              구글 로그인
+            </Button>
+          </div>
         </div>
-      </div>
-    )
+      )
   }
 
   // 로딩 상태 렌더링

@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/contexts/AuthContext'
+import { FEATURE_FLAGS } from '@/app/featureFlags'
 
 
 export function ScenarioHeader({ activeTab = 'all', onChangeTab }) {
@@ -18,7 +19,12 @@ export function ScenarioHeader({ activeTab = 'all', onChangeTab }) {
           <p className="text-muted-foreground">당신의 추리력을 시험해보세요</p>
         </div>
 
-        {user ? (
+        {FEATURE_FLAGS.disableScenarioCreation ? (
+          <Button variant="neon" className="flex items-center gap-2" disabled>
+            <Plus className="w-5 h-5" />
+            시나리오 생성 점검중
+          </Button>
+        ) : user ? (
           <Link href="/create-scenario">
             <Button variant="neon" className="flex items-center gap-2">
               <Plus className="w-5 h-5" />
