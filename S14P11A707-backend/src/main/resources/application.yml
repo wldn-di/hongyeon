@@ -115,7 +115,7 @@ management:
 app:
   vertex:
     # Vertex AI 기반 GenAI 연동 사용 여부
-    enabled: ${APP_VERTEX_ENABLED:false}
+    enabled: ${APP_VERTEX_ENABLED:true}
     # Vertex AI 프로젝트/리전 (enabled=true일 때 필수, 레거시 fallback용)
     project-id: ${APP_VERTEX_PROJECT_ID:}
     location: ${APP_VERTEX_LOCATION:}
