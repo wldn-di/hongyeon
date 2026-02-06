@@ -159,7 +159,7 @@ public class VertexGenAiClientConfig {
             ));
         }
 
-        return new VertexAiAccountPool(accounts);
+        return new VertexAiAccountPool(accounts, properties.rpm());
     }
 
     private GoogleCredentials resolveCredentials(String credentialsUri, String accessToken) throws IOException {

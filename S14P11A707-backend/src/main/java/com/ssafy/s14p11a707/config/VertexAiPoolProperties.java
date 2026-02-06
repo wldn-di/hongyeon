@@ -11,6 +11,7 @@ public record VertexAiPoolProperties(
         String credentialsUri,
         String accessToken,
         int semaphorePerAccount,
+        int rpm,
         List<AccountEntry> accounts
 ) {
     public record AccountEntry(
