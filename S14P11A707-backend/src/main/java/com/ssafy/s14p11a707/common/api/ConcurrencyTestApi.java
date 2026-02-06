@@ -26,6 +26,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequiredArgsConstructor
 public class ConcurrencyTestApi {
 
+
     private final ScenarioGenerationGate scenarioGate;
     private final ChatConcurrencyGate chatGate;
     private final VertexAiAccountPool vertexAiPool;
