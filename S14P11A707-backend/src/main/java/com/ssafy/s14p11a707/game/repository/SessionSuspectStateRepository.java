@@ -12,5 +12,19 @@ public interface SessionSuspectStateRepository extends JpaRepository<SessionSusp
     @Modifying(clearAutomatically = true)
     @Query("DELETE FROM SessionSuspectState sss WHERE sss.session.id = :sessionId")
     int deleteBySessionId(@Param("sessionId") Long sessionId);
+
+    @Modifying(clearAutomatically = true)
+    @Query("""
+        UPDATE SessionSuspectState sss
+        SET sss.conversationSummary = :summary,
+            sss.summarizedMessageCount = :count
+        WHERE sss.session.id = :sessionId
+        AND sss.suspect.id = :suspectId
+        """)
+    int updateSummary(
+            @Param("sessionId") long sessionId,
+            @Param("suspectId") long suspectId,
+            @Param("summary") String summary,
+            @Param("count") int count);
 }
 

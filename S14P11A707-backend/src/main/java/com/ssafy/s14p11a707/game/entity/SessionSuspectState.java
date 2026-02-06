@@ -6,6 +6,7 @@ import jakarta.persistence.EmbeddedId;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
+import jakarta.persistence.Lob;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.MapsId;
 import jakarta.persistence.Table;
@@ -41,6 +42,13 @@ public class SessionSuspectState {
     @Column(name = "is_secret_revealed", nullable = false)
     private boolean secretRevealed;
 
+    @Lob
+    @Column(name = "conversation_summary")
+    private String conversationSummary;
+
+    @Column(name = "summarized_message_count", nullable = false)
+    private int summarizedMessageCount;
+
     @Builder
     public SessionSuspectState(
             GameSession session,
@@ -53,5 +61,6 @@ public class SessionSuspectState {
         this.suspect = suspect;
         this.currentInterrogationLevel = currentInterrogationLevel;
         this.secretRevealed = secretRevealed;
+        this.summarizedMessageCount = 0;
     }
 }

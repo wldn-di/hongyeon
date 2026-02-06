@@ -7,9 +7,13 @@ import com.ssafy.s14p11a707.game.repository.ChatMessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.messages.AssistantMessage;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
@@ -18,12 +22,15 @@ import java.util.List;
 public class SuspectChatV2Service {
 
     private static final String AI_FAILURE_MESSAGE = "용의자가 잠시 침묵합니다... 다시 한 번 말을 걸어보세요.";
+    private static final int RECENT_MESSAGE_LIMIT = 6; // 최근 3턴 (user + assistant)
+    private static final int SUMMARIZATION_THRESHOLD = 10; // 요약 이후 메시지 5턴 초과 시 요약 트리거
 
     private final SuspectChatV2ContextService contextService;
     private final SuspectChatV2PromptBuilder promptBuilder;
     private final SuspectChatV2AiClient aiClient;
     private final SuspectChatV2PersistService persistService;
     private final ChatMessageRepository chatMessageRepository;
+    private final ConversationSummarizationService summarizationService;
     @Qualifier("gmsChatClient")
     private final ChatClient gmsChatClient;
     private final ChatConcurrencyGate chatGate;
@@ -60,10 +67,23 @@ public class SuspectChatV2Service {
         SuspectChatV2Context context = contextService.load(sessionId, suspectId, request);
         long contextMs = toMsSince(t0);
 
-        String systemMessage = promptBuilder.buildSystemMessage(context);
+        // DB 쿼리 1회: 전체 대화 이력 로드
+        List<ChatMessage> allMessages = chatMessageRepository
+                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
+
+        // 시스템 메시지 구성 (요약 포함)
+        String systemMessage = buildSystemMessageWithSummary(context);
+
+        // 요약 이후 메시지만 추출
+        List<ChatMessage> messagesAfterSummary = allMessages.size() > context.summarizedMessageCount()
+                ? allMessages.subList(context.summarizedMessageCount(), allMessages.size())
+                : List.of();
+
+        // 최근 메시지 구성 (최대 6개 = 3턴)
+        List<Message> recentHistory = buildRecentHistory(messagesAfterSummary);
 
         long t1 = System.nanoTime();
-        AiResult aiResult = callAi(context, systemMessage);
+        AiResult aiResult = callAi(context, systemMessage, recentHistory, allMessages);
         long aiMs = toMsSince(t1);
 
         long t2 = System.nanoTime();
@@ -74,6 +94,21 @@ public class SuspectChatV2Service {
                 aiResult.success()
         );
         long persistMs = toMsSince(t2);
+
+        // 비동기 요약 트리거: persist 후 요약 이후 메시지 수가 임계값 초과 시
+        // +2는 방금 persist한 user + assistant 메시지
+        int messagesAfterSummaryCount = messagesAfterSummary.size() + 2;
+        if (messagesAfterSummaryCount > SUMMARIZATION_THRESHOLD) {
+            // 요약할 메시지: 요약 이후 메시지 전체 (방금 저장한 2개는 제외 - 아직 allMessages에 없음)
+            List<ChatMessage> messagesToSummarize = new ArrayList<>(messagesAfterSummary);
+            summarizationService.summarizeAsync(
+                    sessionId,
+                    suspectId,
+                    context.conversationSummary(),
+                    messagesToSummarize,
+                    context.summarizedMessageCount() + messagesToSummarize.size()
+            );
+        }
 
         long totalMs = toMsSince(startNs);
         log.info(
@@ -97,17 +132,37 @@ public class SuspectChatV2Service {
         );
     }
 
-    private AiResult callAi(SuspectChatV2Context context, String systemMessage) {
+    private String buildSystemMessageWithSummary(SuspectChatV2Context context) {
+        String baseSystemMessage = promptBuilder.buildSystemMessage(context);
+        if (context.conversationSummary() != null && !context.conversationSummary().isBlank()) {
+            return baseSystemMessage + "\n\n## 이전 대화 요약\n" + context.conversationSummary();
+        }
+        return baseSystemMessage;
+    }
+
+    private List<Message> buildRecentHistory(List<ChatMessage> messagesAfterSummary) {
+        List<Message> history = new ArrayList<>();
+        int startIndex = Math.max(0, messagesAfterSummary.size() - RECENT_MESSAGE_LIMIT);
+        for (int i = startIndex; i < messagesAfterSummary.size(); i++) {
+            ChatMessage msg = messagesAfterSummary.get(i);
+            if ("user".equals(msg.getRole())) {
+                history.add(new UserMessage(msg.getContent()));
+            } else {
+                history.add(new AssistantMessage(msg.getContent()));
+            }
+        }
+        return history;
+    }
+
+    private AiResult callAi(SuspectChatV2Context context, String systemMessage,
+                            List<Message> recentHistory, List<ChatMessage> allMessages) {
         try {
-            // 질문 재작성: 맥락 의존적인 질문을 명확한 질문으로 변환
             String rewrittenUserMessage = rewriteQuestionWithContext(
-                    context.conversationId(),
                     context.userMessage(),
-                    context.sessionId(),
-                    context.suspectId()
+                    allMessages
             );
 
-            String fullResponse = aiClient.generate(context.conversationId(), systemMessage, rewrittenUserMessage);
+            String fullResponse = aiClient.generate(systemMessage, rewrittenUserMessage, recentHistory);
             return parseAiResponse(fullResponse);
         } catch (Exception ex) {
             log.warn(
@@ -149,18 +204,16 @@ public class SuspectChatV2Service {
 
     /**
      * 맥락 의존적인 질문을 명확한 질문으로 재작성
-     * 대화 기록을 바탕으로 "그때", "그거", "얘" 등 맥락 의존적인 표현을 구체적인 정보로 변환
+     * 이미 로드된 대화 이력을 파라미터로 받아 별도 DB 쿼리를 하지 않음
      */
-    private String rewriteQuestionWithContext(String conversationId, String userMessage, long sessionId, long suspectId) {
+    private String rewriteQuestionWithContext(String userMessage, List<ChatMessage> allMessages) {
         // 단서 제시 메시지는 재작성하지 않음
         if (userMessage.startsWith("[단서 제시:") || userMessage.startsWith("[단서 ID")) {
             return userMessage;
         }
 
         // 첫 대화이거나 너무 짧은 메시지는 재작성하지 않음
-        List<ChatMessage> history = chatMessageRepository
-                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
-        if (history.isEmpty() || userMessage.length() < 5) {
+        if (allMessages.isEmpty() || userMessage.length() < 5) {
             return userMessage;
         }
 
@@ -170,13 +223,13 @@ public class SuspectChatV2Service {
             return userMessage;
         }
 
-        // 이전 대화 기록을 텍스트로 변환
+        // 이전 대화 기록을 텍스트로 변환 (최근 5개)
         StringBuilder contextBuilder = new StringBuilder();
-        int recentCount = Math.min(5, history.size());
-        int startIndex = Math.max(0, history.size() - recentCount);
+        int recentCount = Math.min(5, allMessages.size());
+        int startIndex = Math.max(0, allMessages.size() - recentCount);
 
-        for (int i = startIndex; i < history.size(); i++) {
-            ChatMessage msg = history.get(i);
+        for (int i = startIndex; i < allMessages.size(); i++) {
+            ChatMessage msg = allMessages.get(i);
             String role = "user".equals(msg.getRole()) ? "수사관" : "용의자";
             contextBuilder.append(String.format("%s: %s\n", role, msg.getContent()));
         }
@@ -208,7 +261,6 @@ public class SuspectChatV2Service {
         );
 
         try {
-            // AI로 질문 재작성
             String rewritten = gmsChatClient.prompt()
                     .user(rewritePrompt)
                     .call()
@@ -229,4 +281,3 @@ public class SuspectChatV2Service {
     private record AiResult(boolean success, String reply, boolean keyTalk) {
     }
 }
-

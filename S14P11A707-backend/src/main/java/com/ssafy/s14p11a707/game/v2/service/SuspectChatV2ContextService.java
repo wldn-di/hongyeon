@@ -87,9 +87,10 @@ public class SuspectChatV2ContextService {
         }
 
         SessionSuspectStateId stateId = new SessionSuspectStateId(session.getId(), suspect.getId());
-        int currentInterrogationLevel = sessionSuspectStateRepository.findById(stateId)
-                .map(SessionSuspectState::getCurrentInterrogationLevel)
-                .orElse(1);
+        SessionSuspectState state = sessionSuspectStateRepository.findById(stateId).orElse(null);
+        int currentInterrogationLevel = state != null ? state.getCurrentInterrogationLevel() : 1;
+        String conversationSummary = state != null ? state.getConversationSummary() : null;
+        int summarizedMessageCount = state != null ? state.getSummarizedMessageCount() : 0;
 
         Long usedClueId = request == null ? null : request.usedClueId();
         int promptInterrogationLevel = currentInterrogationLevel;
@@ -135,7 +136,9 @@ public class SuspectChatV2ContextService {
                 promptInterrogationLevel,
                 userMessage,
                 usedClueId,
-                currentHealth
+                currentHealth,
+                conversationSummary,
+                summarizedMessageCount
         );
     }
 

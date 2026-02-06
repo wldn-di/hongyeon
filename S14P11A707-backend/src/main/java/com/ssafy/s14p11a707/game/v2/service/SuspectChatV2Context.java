@@ -21,7 +21,9 @@ public record SuspectChatV2Context(
         int promptInterrogationLevel,
         String userMessage,
         Long usedClueId,
-        int currentHealth
+        int currentHealth,
+        String conversationSummary,
+        int summarizedMessageCount
 ) {
 }
 
