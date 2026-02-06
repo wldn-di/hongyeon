@@ -97,22 +97,10 @@ public class User extends BaseEntity {
         this.totalAttempts++;
     }
 
-    // 게임 완료 시 호출(첫 클리어)
-    public void addFirstClearStats(long playTime, int score) {
-        this.totalPlayTime += playTime;
+    // 게임 완료 시 호출(첫 클리어) — playTime은 게임 중 incrementTotalPlayTime으로 이미 누적됨
+    public void addFirstClearStats(int score) {
         this.totalScore += score;
         this.totalClears++;
-    }
-
-    // 게임 완료 시 호출(재 클리어)
-    public void addReClearStats(long playTime, int score) {
-        this.totalPlayTime += playTime;
-        this.totalScore += score;
-    }
-
-    // 게임 실패 시 호출
-    public void addPlayTime(long playTime) {
-        this.totalPlayTime += playTime;
     }
 
     public enum UserRole {

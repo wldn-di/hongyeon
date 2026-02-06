@@ -4,8 +4,14 @@ import com.ssafy.s14p11a707.user.entity.User;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.data.jpa.repository.Query;
 
 public interface UserRepository extends JpaRepository<User, Long> {
+
+    @Modifying
+    @Query("UPDATE User u SET u.totalPlayTime = u.totalPlayTime + :delta WHERE u.id = :userId")
+    void incrementTotalPlayTime(Long userId, long delta);
 
     Optional<User> findByGoogleId(String googleId);
 
