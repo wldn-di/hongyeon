@@ -13,8 +13,13 @@ import com.ssafy.s14p11a707.scenario.v2.node.ScenarioBaseNode;
 import com.ssafy.s14p11a707.scenario.v2.node.ScenarioV2Node;
 import com.ssafy.s14p11a707.scenario.v2.node.TimelineNode;
 import com.ssafy.s14p11a707.scenario.v2.node.ValidateNode;
+import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
+import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
+import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
+import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -26,8 +31,8 @@ import org.springframework.stereotype.Component;
  * <p><b>루프 전략</b></p>
  * <ul>
  *   <li>정적 검증({@link ValidateNode}) → LLM 평가({@link CritiqueNode}) → (필요 시) 보강({@link RefineNode}) 순으로 수행</li>
- *   <li>평가 점수가 {@code PASS_SCORE} 이상이면 통과</li>
- *   <li>최대 {@code MAX_RETRY}회까지 보강 후 다음 단계로 진행</li>
+ *   <li>평가 점수가 {@code passScore} 이상이면 통과</li>
+ *   <li>최대 {@code maxRetry}회까지 보강 후 다음 단계로 진행</li>
  * </ul>
  * <p><b>설계 메모</b></p>
  * <ul>
@@ -53,8 +58,11 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ScenarioV2GraphRunner {
 
-    private static final int PASS_SCORE = 85;
-    private static final int MAX_RETRY = 3;
+    @Value("${app.scenario.v2.pass-score:85}")
+    private int passScore;
+
+    @Value("${app.scenario.v2.max-retry:3}")
+    private int maxRetry;
 
     private final TimelineNode timelineNode;
     private final ScenarioBaseNode scenarioBaseNode;
@@ -67,6 +75,7 @@ public class ScenarioV2GraphRunner {
     private final ImagePromptNode imagePromptNode;
     private final ImageBatchNode imageBatchNode;
     private final FinalizeNode finalizeNode;
+    private final ScenarioV2EventPublisher eventPublisher;
 
     /**
      * v2 생성 그래프를 실행하고 최종 상태 반환
@@ -109,11 +118,11 @@ public class ScenarioV2GraphRunner {
                         "[v2] validation checkpoint. scenarioId={}, attempts={}/{}, report={}",
                         scenarioId,
                         fixAttempts,
-                        MAX_RETRY,
+                        maxRetry,
                         summarize(report, 160)
                 );
 
-                if (fixAttempts >= MAX_RETRY) {
+                if (fixAttempts >= maxRetry) {
                     throw new IllegalStateException("validation failed after retries: " + summarize(report, 500));
                 }
 
@@ -123,7 +132,7 @@ public class ScenarioV2GraphRunner {
             }
 
             state = runNode("CritiqueNode", critiqueNode, state);
-            boolean scoreOk = state.getCritiqueScore() >= PASS_SCORE;
+            boolean scoreOk = state.getCritiqueScore() >= passScore;
 
             log.info(
                     "[v2] critique checkpoint. scenarioId={}, score={}, retryCount={}, attempts={}/{}, validationReport={}",
@@ -131,7 +140,7 @@ public class ScenarioV2GraphRunner {
                     state.getCritiqueScore(),
                     state.getRetryCount(),
                     fixAttempts,
-                    MAX_RETRY,
+                    maxRetry,
                     summarize(report, 160)
             );
 
@@ -139,7 +148,7 @@ public class ScenarioV2GraphRunner {
                 break;
             }
 
-            if (fixAttempts >= MAX_RETRY) {
+            if (fixAttempts >= maxRetry) {
                 log.warn(
                         "[v2] critique did not reach pass score, but validation OK. proceeding. scenarioId={}, score={}, retryCount={}, attempts={}",
                         scenarioId,
@@ -155,9 +164,13 @@ public class ScenarioV2GraphRunner {
         }
 
         state = runNode("PersistNode", persistNode, state);
+
+        // FinalizeNode를 이미지 생성 전에 실행 → 시나리오가 즉시 COMPLETED(플레이 가능) 상태로 전환
+        // 이미지는 이후 백그라운드에서 생성되며, 프론트엔드는 다음 로드 시 이미지 URL을 갱신
+        state = runNode("FinalizeNode", finalizeNode, state);
+
         state = runNode("ImagePromptNode", imagePromptNode, state);
         state = runNode("ImageBatchNode", imageBatchNode, state);
-        state = runNode("FinalizeNode", finalizeNode, state);
 
         log.info(
                 "[v2] graph finished. scenarioId={}, retryCount={}, score={}, victimId={}, suspects={}, clues={}, imageJobs={}",
@@ -172,34 +185,76 @@ public class ScenarioV2GraphRunner {
         return state;
     }
 
+    private static final int MAX_RATE_LIMIT_RETRIES = 3;
+    private static final long RATE_LIMIT_BACKOFF_SEC = 30;
+
     private ScenarioV2State runNode(String nodeName, ScenarioV2Node node, ScenarioV2State state) {
         long startedAt = System.nanoTime();
         log.info("[v2] node started. scenarioId={}, node={}, retryCount={}, score={}", state.getScenarioId(), nodeName, state.getRetryCount(), state.getCritiqueScore());
-        try {
-            ScenarioV2State next = node.execute(state);
-            long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
-            log.info(
-                    "[v2] node finished. scenarioId={}, node={}, elapsedMs={}, summary={}",
-                    next.getScenarioId(),
-                    nodeName,
-                    elapsedMs,
-                    stateSummary(next)
-            );
-            return next;
-        } catch (Exception e) {
-            long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
-            log.error(
-                    "[v2] node failed. scenarioId={}, node={}, elapsedMs={}, retryCount={}, score={}, summary={}",
-                    state.getScenarioId(),
-                    nodeName,
-                    elapsedMs,
-                    state.getRetryCount(),
-                    state.getCritiqueScore(),
-                    stateSummary(state),
-                    e
-            );
-            throw e;
+
+        for (int rateLimitAttempt = 0; rateLimitAttempt <= MAX_RATE_LIMIT_RETRIES; rateLimitAttempt++) {
+            try {
+                ScenarioV2State next = node.execute(state);
+                long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
+                log.info(
+                        "[v2] node finished. scenarioId={}, node={}, elapsedMs={}, summary={}",
+                        next.getScenarioId(),
+                        nodeName,
+                        elapsedMs,
+                        stateSummary(next)
+                );
+                return next;
+            } catch (Exception e) {
+                if (isRateLimitError(e) && rateLimitAttempt < MAX_RATE_LIMIT_RETRIES) {
+                    long waitSec = RATE_LIMIT_BACKOFF_SEC * (rateLimitAttempt + 1);
+                    log.warn(
+                            "[v2] rate limit hit. scenarioId={}, node={}, attempt={}/{}, waitSec={}",
+                            state.getScenarioId(), nodeName, rateLimitAttempt + 1, MAX_RATE_LIMIT_RETRIES, waitSec
+                    );
+                    eventPublisher.publish(new ScenarioV2EventMessage(
+                            state.getUserId(),
+                            state.getScenarioId(),
+                            EventType.PING,
+                            0,
+                            "API 요청 한도 초과로 " + waitSec + "초 대기 중...",
+                            Map.of("rateLimitRetry", rateLimitAttempt + 1, "waitSec", waitSec)
+                    ));
+                    try {
+                        Thread.sleep(waitSec * 1000);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException("Rate limit wait interrupted", ie);
+                    }
+                    continue;
+                }
+
+                long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
+                log.error(
+                        "[v2] node failed. scenarioId={}, node={}, elapsedMs={}, retryCount={}, score={}, summary={}",
+                        state.getScenarioId(),
+                        nodeName,
+                        elapsedMs,
+                        state.getRetryCount(),
+                        state.getCritiqueScore(),
+                        stateSummary(state),
+                        e
+                );
+                throw e;
+            }
         }
+
+        throw new RuntimeException("Rate limit retries exhausted for node: " + nodeName);
+    }
+
+    private static boolean isRateLimitError(Throwable t) {
+        while (t != null) {
+            String msg = t.getMessage();
+            if (msg != null && (msg.contains("429") || msg.contains("Resource exhausted") || msg.contains("RESOURCE_EXHAUSTED"))) {
+                return true;
+            }
+            t = t.getCause();
+        }
+        return false;
     }
 
     private ScenarioV2State repairForValidationIssues(ScenarioV2State state, String report) {

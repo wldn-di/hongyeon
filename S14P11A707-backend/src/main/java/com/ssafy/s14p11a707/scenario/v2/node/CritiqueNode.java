@@ -10,6 +10,8 @@ import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -35,6 +37,9 @@ public class CritiqueNode implements ScenarioV2Node {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
+
+    @Value("${app.scenario.v2.critique-model:}")
+    private String critiqueModel;
 
     /**
      * draft에 대한 개연성 점수와 피드백을 평가하여 상태에 반영
@@ -90,11 +95,13 @@ public class CritiqueNode implements ScenarioV2Node {
                 %s
                 """.formatted(state.getValidationReport(), toJson(state.getDraftJson()));
 
-        String content = chatClient.prompt()
+        var promptSpec = chatClient.prompt()
                 .system(system)
-                .user(user)
-                .call()
-                .content();
+                .user(user);
+        if (critiqueModel != null && !critiqueModel.isBlank()) {
+            promptSpec = promptSpec.options(ChatOptions.builder().model(critiqueModel).build());
+        }
+        String content = promptSpec.call().content();
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
         ScenarioV2CritiqueResult result = parseCritique(cleaned);

@@ -92,6 +92,17 @@ management:
       mode: full
 
 app:
+  ai:
+    # 쉼표 구분 API 키 목록 (Round-Robin 로테이션). 미지정 시 spring.ai.google.genai.api-key 단일 키 사용.
+    api-keys: ${APP_AI_API_KEYS:${SPRING_AI_GOOGLE_GENAI_API_KEY:}}
+    chat:
+      # 채팅에 사용할 모델: gemini-2.5-flash | gemini-2.5-flash-lite
+      model: ${APP_AI_CHAT_MODEL:gemini-2.5-flash}
+      max-tokens: ${APP_AI_CHAT_MAX_TOKENS:500}
+    rate-limit:
+      chat-rpm: ${APP_AI_RATE_LIMIT_CHAT_RPM:7}
+      scenario-rpm: ${APP_AI_RATE_LIMIT_SCENARIO_RPM:3}
+      chat-max-concurrent: ${APP_AI_RATE_LIMIT_CHAT_MAX_CONCURRENT:5}
   vertex:
     # Vertex AI 기반 GenAI 연동 사용 여부
     enabled: ${APP_VERTEX_ENABLED:false}
@@ -112,6 +123,12 @@ app:
     allowed-redirect-origins: ${APP_AUTH_ALLOWED_REDIRECT_ORIGINS:}
   scenario:
     v2:
+      # 개연성 평가 합격 점수 (낮추면 재시도 감소 → 생성 시간 단축)
+      pass-score: ${APP_SCENARIO_V2_PASS_SCORE:85}
+      # 검증/보강 최대 재시도 횟수
+      max-retry: ${APP_SCENARIO_V2_MAX_RETRY:3}
+      # 검증/평가 노드용 모델 (flash-lite 사용 시 별도 RPM 풀 활용)
+      critique-model: ${APP_SCENARIO_V2_CRITIQUE_MODEL:gemini-2.5-flash}
       image:
         # 예) imagen-4.0-fast-generate-001 / imagen-4.0-generate-001 / imagen-4.0-ultra-generate-001
         model: ${APP_SCENARIO_V2_IMAGE_MODEL:imagen-4.0-fast-generate-001}

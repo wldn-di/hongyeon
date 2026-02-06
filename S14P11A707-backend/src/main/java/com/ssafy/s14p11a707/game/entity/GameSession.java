@@ -125,20 +125,23 @@ public class GameSession extends BaseEntity {
         this.expiresAt = expiresAt;
     }
 
-    // 중간저장
-    public void updateProgress() {
+    // 중간저장 — 추가된 delta(초)를 반환
+    public long updateProgress() {
         Instant now = Instant.now();
+        long added = 0;
 
         if (this.lastSavedAt != null) {
             long delta = Duration.between(this.lastSavedAt, now).getSeconds();
             // 10분 이상 공백이면 이탈로 간주
             if (delta < 600) {
                 this.playTime = (this.playTime != null ? this.playTime : 0) + delta;
+                added = delta;
             }
         }
 
         this.lastSavedAt = now;
         this.expiresAt = now.plusSeconds(7 * 24 * 60 * 60);
+        return added;
     }
 
     // 층이동

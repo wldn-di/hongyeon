@@ -238,8 +238,8 @@ public class ValidateNode implements ScenarioV2Node {
         Set<String> clueNames = new HashSet<>();
         if (!clues.isArray()) {
             issues.add("clues must be an array");
-        } else if (clues.size() < 8 || clues.size() > 12) {
-            issues.add("clues size must be between 8 and 12");
+        } else if (clues.size() < 6 || clues.size() > 12) {
+            issues.add("clues size must be between 6 and 12");
         } else {
             for (JsonNode clue : clues) {
                 String name = clue.path("name").asText("").trim();

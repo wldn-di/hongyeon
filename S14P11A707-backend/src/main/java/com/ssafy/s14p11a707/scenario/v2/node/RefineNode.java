@@ -15,6 +15,8 @@ import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 /**
@@ -40,6 +42,9 @@ public class RefineNode implements ScenarioV2Node {
     private final ChatClient chatClient;
     private final ObjectMapper objectMapper;
     private final ScenarioV2EventPublisher eventPublisher;
+
+    @Value("${app.scenario.v2.critique-model:}")
+    private String critiqueModel;
 
     /**
      * 피드백을 반영해 draft JSON을 보강하고 상태에 반영
@@ -75,7 +80,7 @@ public class RefineNode implements ScenarioV2Node {
                 - Output JSON only, no prose, no markdown.
                 - Top-level keys must be exactly: scenario, victim, suspects, clues, rooms
                 - suspects length must be exactly %d
-                - clues length must be between 8 and 12
+                - clues length must be between 6 and 12
                 - rooms length must be exactly 6 with floor_number 1..6
                 - Do NOT change the structure of rooms (keep rooms array exactly as provided)
                 - Do NOT change clue names or suspect weakness_clue names (keep them to match existing clues)
@@ -93,11 +98,13 @@ public class RefineNode implements ScenarioV2Node {
                 %s
                 """.formatted(state.getValidationReport(), state.getCritiqueFeedback(), toJson(state.getDraftJson()));
 
-        String content = chatClient.prompt()
+        var promptSpec = chatClient.prompt()
                 .system(system)
-                .user(user)
-                .call()
-                .content();
+                .user(user);
+        if (critiqueModel != null && !critiqueModel.isBlank()) {
+            promptSpec = promptSpec.options(ChatOptions.builder().model(critiqueModel).build());
+        }
+        String content = promptSpec.call().content();
 
         String cleaned = ScenarioV2JsonUtils.normalizeJsonText(content);
 
@@ -330,7 +337,7 @@ public class RefineNode implements ScenarioV2Node {
     }
 
     private ArrayNode selectClues(JsonNode refinedClues, JsonNode baseClues) {
-        if (refinedClues != null && refinedClues.isArray() && refinedClues.size() >= 8 && refinedClues.size() <= 12 && clueNamesCompatible(refinedClues, baseClues)) {
+        if (refinedClues != null && refinedClues.isArray() && refinedClues.size() >= 6 && refinedClues.size() <= 12 && clueNamesCompatible(refinedClues, baseClues)) {
             return (ArrayNode) refinedClues.deepCopy();
         }
         if (baseClues != null && baseClues.isArray()) {

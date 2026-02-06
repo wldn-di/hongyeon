@@ -365,12 +365,28 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
       handleFail(payload, { sourceEvent: "error.event" });
     };
 
-    // connect/ping은 상태 갱신 없이 무시
+    // connect는 상태 갱신 없이 무시
     const noop = () => {};
+
+    // ping: rate limit 대기 등 서버 알림 메시지 표시
+    const onPing = (event) => {
+      const payload = safeJsonParse(event?.data);
+      if (!payload) return;
+      if (!shouldHandlePayload(payload)) return;
+
+      const msg = normalizeMessage(payload.message);
+      if (!msg) return;
+
+      sseLog("ping", { message: msg, data: payload.data });
+      setGeneration((prev) => {
+        if (!prev?.isScenarioGenerating) return prev;
+        return { ...prev, generationMessage: msg, meta: payload.data ?? prev.meta };
+      });
+    };
 
     // 서버 이벤트
     es.addEventListener("connect", noop);
-    es.addEventListener("ping", noop);
+    es.addEventListener("ping", onPing);
     // 기본 message 이벤트로 status(COMPLETED/FAILED) 등을 보내는 서버 대응
     es.addEventListener("message", (event) => {
       const payload = safeJsonParse(event?.data);

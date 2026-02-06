@@ -7,9 +7,11 @@ import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
 import com.ssafy.s14p11a707.scenario.entity.Suspect;
 import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.UserMessage;
@@ -56,8 +58,10 @@ public class CustomChatMemoryRepository implements ChatMemoryRepository {
     public List<Message> findByConversationId(@NonNull String conversationId) {
         ConversationKey key = parseConversationId(conversationId);
 
-        List<ChatMessage> chatMessages = chatMessageRepository
-                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(key.sessionId, key.suspectId);
+        // 최근 10개만 DB에서 조회 (DESC) 후 시간순으로 뒤집기
+        List<ChatMessage> chatMessages = new ArrayList<>(chatMessageRepository
+                .findRecentBySessionAndSuspect(key.sessionId, key.suspectId, PageRequest.of(0, 10)));
+        Collections.reverse(chatMessages);
 
         List<Message> messages = new ArrayList<>();
         for (ChatMessage chatMessage : chatMessages) {
@@ -105,6 +109,9 @@ public class CustomChatMemoryRepository implements ChatMemoryRepository {
     }
 
     private Message createMessageFromRole(String role, String content) {
+        if (content == null || content.isBlank()) {
+            return null;
+        }
         return switch (role.toLowerCase()) {
             case "user" -> new UserMessage(content);
             case "suspect", "assistant", "ai" -> new AssistantMessage(content);

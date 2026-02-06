@@ -9,6 +9,7 @@ import java.util.Optional;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -38,5 +39,12 @@ public interface GameSessionRepository extends JpaRepository<GameSession, Long> 
     // LOB 문제 회피: 권한 체크를 위해 ownerId만 조회
     @Query("SELECT s.user.id FROM GameSession s WHERE s.id = :sessionId")
     Optional<Long> findOwnerIdById(@Param("sessionId") long sessionId);
+
+    @Modifying
+    @Query(value = "UPDATE game_sessions SET health = GREATEST(0, COALESCE(health, 100) - :amount) WHERE id = :id", nativeQuery = true)
+    int decrementHealth(@Param("id") long id, @Param("amount") int amount);
+
+    @Query("SELECT g.health FROM GameSession g WHERE g.id = :id")
+    Integer findHealthById(@Param("id") long id);
 
 }

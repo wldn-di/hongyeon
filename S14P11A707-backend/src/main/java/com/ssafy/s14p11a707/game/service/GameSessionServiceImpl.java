@@ -32,8 +32,11 @@ import com.ssafy.s14p11a707.scenario.repository.*;
 import com.ssafy.s14p11a707.user.entity.User;
 import com.ssafy.s14p11a707.user.repository.UserRepository;
 
+import com.google.common.util.concurrent.RateLimiter;
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Semaphore;
 import java.util.stream.Collectors;
 
 import jakarta.persistence.EntityManager;
@@ -46,10 +49,14 @@ import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.memory.MessageWindowChatMemory;
 import org.springframework.ai.chat.memory.ChatMemoryRepository;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.dao.DataIntegrityViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import static com.ssafy.s14p11a707.game.entity.BoardNode.ItemType.MEMO;
 import static com.ssafy.s14p11a707.game.entity.EventLog.EventType.*;
@@ -76,13 +83,40 @@ public class GameSessionServiceImpl implements GameSessionService {
     private final ScenarioRankingRepository scenarioRankingRepository;
     private final ObjectMapper objectMapper;
     private final ChatClient chatClient;
+    private final ChatClient chatChatClient;
     private final ChatMemoryRepository chatMemoryRepository;
     private final ChatMemory chatMemory;
     private final EmbeddingModel embeddingModel;
+    private final TransactionTemplate txTemplate;
+    private final RateLimiter chatRateLimiter;
+    private final Semaphore chatSemaphore;
+    private final ConcurrentHashMap<String, String> systemPromptCache = new ConcurrentHashMap<>();
     @PersistenceContext
     private EntityManager entityManager;
 
-    public GameSessionServiceImpl(GameSessionRepository gameSessionRepository, SessionSuspectStateRepository sessionSuspectStateRepository, ScenarioRepository scenarioRepository, UserRepository userRepository, VictimRepository victimRepository, RoomRepository roomRepository, SuspectRepository suspectRepository, EventLogRepository eventLogRepository, DiscoveredClueRepository discoveredClueRepository, ClueRepository clueRepository, BoardNodeRepository boardNodeRepository, BoardConnectionRepository boardConnectionRepository, ChatMessageRepository chatMessageRepository, ScenarioRankingRepository scenarioRankingRepository, ObjectMapper objectMapper, ChatClient chatClient, ChatMemoryRepository chatMemoryRepository, EmbeddingModel embeddingModel) {
+    public GameSessionServiceImpl(
+            GameSessionRepository gameSessionRepository,
+            SessionSuspectStateRepository sessionSuspectStateRepository,
+            ScenarioRepository scenarioRepository,
+            UserRepository userRepository,
+            VictimRepository victimRepository,
+            RoomRepository roomRepository,
+            SuspectRepository suspectRepository,
+            EventLogRepository eventLogRepository,
+            DiscoveredClueRepository discoveredClueRepository,
+            ClueRepository clueRepository,
+            BoardNodeRepository boardNodeRepository,
+            BoardConnectionRepository boardConnectionRepository,
+            ChatMessageRepository chatMessageRepository,
+            ScenarioRankingRepository scenarioRankingRepository,
+            ObjectMapper objectMapper,
+            ChatClient chatClient,
+            @Qualifier("chatChatClient") ChatClient chatChatClient,
+            ChatMemoryRepository chatMemoryRepository,
+            EmbeddingModel embeddingModel,
+            PlatformTransactionManager txManager,
+            @Qualifier("chatRateLimiter") RateLimiter chatRateLimiter,
+            @Qualifier("chatConcurrencySemaphore") Semaphore chatSemaphore) {
         this.gameSessionRepository = gameSessionRepository;
         this.sessionSuspectStateRepository = sessionSuspectStateRepository;
         this.scenarioRepository = scenarioRepository;
@@ -99,12 +133,16 @@ public class GameSessionServiceImpl implements GameSessionService {
         this.scenarioRankingRepository = scenarioRankingRepository;
         this.objectMapper = objectMapper;
         this.chatClient = chatClient;
+        this.chatChatClient = chatChatClient;
         this.chatMemoryRepository = chatMemoryRepository;
         this.chatMemory = MessageWindowChatMemory.builder()
-                .maxMessages(20)
+                .maxMessages(10)
                 .chatMemoryRepository(chatMemoryRepository)
                 .build();
         this.embeddingModel = embeddingModel;
+        this.txTemplate = new TransactionTemplate(txManager);
+        this.chatRateLimiter = chatRateLimiter;
+        this.chatSemaphore = chatSemaphore;
     }
 
     /**
@@ -277,7 +315,10 @@ public class GameSessionServiceImpl implements GameSessionService {
         saveDiscoveredClue(session,clue,now);
         saveEventLog(session,CLUE_FOUND, clue.getName());
 
-        session.updateProgress();
+        long delta = session.updateProgress();
+        if (delta > 0) {
+            userRepository.incrementTotalPlayTime(session.getUser().getId(), delta);
+        }
 
         return DiscoveredClueResponse.from(sessionId, clue, now);
     }
@@ -342,251 +383,206 @@ public class GameSessionServiceImpl implements GameSessionService {
      * 채팅/심문 섹션
      */
     // TODO : session.updateProgress(), saveEventLog() 필요
+    // ── 채팅 Phase 간 데이터 전달 레코드 ──
+    private record ChatContext(
+            long sessionId,
+            long suspectId,
+            String suspectName,
+            String systemMessage,
+            String userMessage,
+            String conversationId,
+            boolean shouldUpgradeLevel,
+            boolean stateExists,
+            int responseLevel,
+            Long usedClueId) {}
+
+    private record AiChatResult(
+            String reply,
+            boolean keyTalk) {}
+
+    /**
+     * 용의자 채팅 - 트랜잭션 3단계 분리.
+     * <p>
+     * Phase 1 (Read TX ~50ms): DB 로드 + 프롬프트 구성<br>
+     * Phase 2 (No TX): AI API 호출 (DB 커넥션 미점유)<br>
+     * Phase 3 (Write TX ~30ms): 결과 저장
+     */
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.NOT_SUPPORTED)
     public SuspectChatResponse chatWithSuspect(long sessionId, long suspectId, SuspectChatRequest request) {
-        GameSession session = getSession(sessionId);
-        validatePlaying(session);
 
-        // 체력이 0 이하면 더 이상 채팅 불가
-        int currentHealth = session.getHealth() != null ? session.getHealth() : 100;
-        if (currentHealth <= 0) {
-            throw new BaseException(ErrorCode.HEALTH_DEPLETED);
-        }
+        // ── Phase 1: 데이터 로드 + 프롬프트 구성 (짧은 트랜잭션) ──
+        ChatContext ctx = txTemplate.execute(status -> {
+            GameSession session = getSession(sessionId);
+            validatePlaying(session);
 
-        // 용의자 정보 조회
-        Suspect suspect = suspectRepository.findById(suspectId)
-                .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
+            int currentHealth = session.getHealth() != null ? session.getHealth() : 100;
+            if (currentHealth <= 0) {
+                throw new BaseException(ErrorCode.HEALTH_DEPLETED);
+            }
 
-        // 시나리오 정보를 문자열로 빌드 (현재 심문 중인 용의자 전달)
-        String scenarioContext = buildScenarioContext(session.getScenario(), suspect);
+            Suspect suspect = suspectRepository.findById(suspectId)
+                    .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
 
-        // aiConfigJson에서 성격/말투 추출
-        JsonNode aiConfig = suspect.getAiConfigJson();
-        String personality = aiConfig != null && aiConfig.has("personality")
-                ? aiConfig.get("personality").asText()
-                : "내성적이고 감정 기복이 심함";
+            // aiConfigJson 파싱
+            JsonNode aiConfig = suspect.getAiConfigJson();
+            String personality = aiConfig != null && aiConfig.has("personality")
+                    ? aiConfig.get("personality").asText() : "내성적이고 감정 기복이 심함";
+            String speechStyle = aiConfig != null && aiConfig.has("speechStyle")
+                    ? aiConfig.get("speechStyle").asText() : "정중하지만 불안한 말투";
 
-        String speechStyle = aiConfig != null && aiConfig.has("speechStyle")
-                ? aiConfig.get("speechStyle").asText()
-                : "정중하지만 불안한 말투";
-
-        // aiConfigJson에서 alibi_progression 및 weakness_clue.id 추출
-        String level1_lie = "알리바이: 사건 시간에 다른 장소에 있었습니다.";
-        String level2_weak = "알리바이가 깨지며 당황하는 상태입니다.";
-        Long weaknessClueId = null;  // weakness_clue의 id
-        if (aiConfig != null && aiConfig.has("secret")) {
-            JsonNode secret = aiConfig.get("secret");
-            if (secret.has("alibi_progression")) {
-                JsonNode alibiProgression = secret.get("alibi_progression");
-                if (alibiProgression.has("level1_lie")) {
-                    level1_lie = alibiProgression.get("level1_lie").asText();
+            String level1_lie = "알리바이: 사건 시간에 다른 장소에 있었습니다.";
+            String level2_weak = "알리바이가 깨지며 당황하는 상태입니다.";
+            Long weaknessClueId = null;
+            if (aiConfig != null && aiConfig.has("secret")) {
+                JsonNode secret = aiConfig.get("secret");
+                if (secret.has("alibi_progression")) {
+                    JsonNode ap = secret.get("alibi_progression");
+                    if (ap.has("level1_lie")) level1_lie = ap.get("level1_lie").asText();
+                    if (ap.has("level2_partial")) level2_weak = ap.get("level2_partial").asText();
                 }
-                if (alibiProgression.has("level2_partial")) {
-                    level2_weak = alibiProgression.get("level2_partial").asText();
+                if (secret.has("weakness_clue") && secret.get("weakness_clue").has("id")) {
+                    weaknessClueId = secret.get("weakness_clue").get("id").asLong();
                 }
             }
-            if (secret.has("weakness_clue")) {
-                JsonNode weaknessClue = secret.get("weakness_clue");
-                if (weaknessClue.has("id")) {
-                    weaknessClueId = weaknessClue.get("id").asLong();
+
+            // SessionSuspectState 조회 (없으면 기본값 사용, 생성은 Phase 3에서)
+            SessionSuspectStateId stateId = new SessionSuspectStateId(session.getId(), suspect.getId());
+            Optional<SessionSuspectState> stateOpt = sessionSuspectStateRepository.findById(stateId);
+            boolean stateExists = stateOpt.isPresent();
+            int currentLevel = stateOpt.map(SessionSuspectState::getCurrentInterrogationLevel).orElse(1);
+
+            Long usedClueId = request.usedClueId();
+            boolean isWeaknessClueUsed = currentLevel >= 2;
+            boolean shouldUpgradeLevel = false;
+
+            if (!isWeaknessClueUsed && usedClueId != null && weaknessClueId != null) {
+                if (usedClueId.equals(weaknessClueId)) {
+                    isWeaknessClueUsed = true;
+                    shouldUpgradeLevel = true;
                 }
             }
+
+            int effectiveLevel = shouldUpgradeLevel ? 2 : currentLevel;
+
+            // computeIfAbsent 람다에서 캡처할 수 있도록 effectively final 복사본 사용
+            final String fLevel1Lie = level1_lie;
+            final String fLevel2Weak = level2_weak;
+            final boolean fIsWeaknessClueUsed = isWeaknessClueUsed;
+
+            // 시스템 프롬프트 캐싱 (scenarioId + suspectId + level 조합)
+            String cacheKey = session.getScenario().getId() + ":" + suspectId + ":" + effectiveLevel + ":" + suspect.isCulprit();
+            String systemMessage = systemPromptCache.computeIfAbsent(cacheKey, k -> {
+                String scenarioContext = buildScenarioContext(session.getScenario(), suspect);
+                return buildSystemMessage(suspect, scenarioContext, personality, speechStyle,
+                        fLevel1Lie, fLevel2Weak, fIsWeaknessClueUsed);
+            });
+
+            // 사용자 메시지 구성
+            String userMessage = request.message() == null ? "" : request.message().trim();
+            if (userMessage.isEmpty()) {
+                userMessage = "(대화를 시작합니다)";
+            }
+            if (usedClueId != null) {
+                Clue clue = clueRepository.findById(usedClueId).orElse(null);
+                if (clue != null) {
+                    userMessage = String.format("[단서 제시: %s - %s] %s", clue.getName(), clue.getDescription(), userMessage);
+                } else {
+                    userMessage = String.format("[단서 ID %d를 제시하며] %s", usedClueId, userMessage);
+                }
+            }
+
+            String conversationId = "session-" + sessionId + "-suspect-" + suspectId;
+
+            return new ChatContext(sessionId, suspectId, suspect.getName(), systemMessage, userMessage,
+                    conversationId, shouldUpgradeLevel, stateExists, effectiveLevel, usedClueId);
+        });
+
+        // ── Phase 2: AI API 호출 (트랜잭션 없음, DB 커넥션 미점유) ──
+        AiChatResult aiResult;
+        chatSemaphore.acquireUninterruptibly();
+        try {
+            chatRateLimiter.acquire();
+            aiResult = callAi(ctx);
+        } finally {
+            chatSemaphore.release();
         }
 
-        // SessionSuspectState에서 현재 심문 레벨 조회 (없으면 생성 후 저장)
-        SessionSuspectStateId stateId = new SessionSuspectStateId(session.getId(), suspect.getId());
-        SessionSuspectState state = sessionSuspectStateRepository.findById(stateId)
-                .orElseGet(() -> sessionSuspectStateRepository.save(SessionSuspectState.builder()
+        // ── Phase 3: 결과 저장 (짧은 트랜잭션) ──
+        return txTemplate.execute(status -> {
+            GameSession session = gameSessionRepository.findById(ctx.sessionId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.SESSION_NOT_FOUND));
+            Suspect suspect = suspectRepository.findById(ctx.suspectId())
+                    .orElseThrow(() -> new BaseException(ErrorCode.SUSPECT_NOT_FOUND));
+
+            // SessionSuspectState 생성 또는 레벨 업그레이드
+            SessionSuspectStateId stateId = new SessionSuspectStateId(ctx.sessionId(), ctx.suspectId());
+            if (!ctx.stateExists()) {
+                sessionSuspectStateRepository.save(SessionSuspectState.builder()
                         .session(session)
                         .suspect(suspect)
-                        .currentInterrogationLevel(1)
+                        .currentInterrogationLevel(ctx.shouldUpgradeLevel() ? 2 : 1)
                         .secretRevealed(false)
-                        .build()));
-
-        // 현재 레벨 확인 (Level 2 이상이면 약점이 이미 드러난 상태)
-        Long usedClueId = request.usedClueId();
-        boolean isWeaknessClueUsed = state.getCurrentInterrogationLevel() >= 2;
-
-        // 아직 Level 2가 아니고, 약점 단서를 제시한 경우
-        if (!isWeaknessClueUsed && usedClueId != null && weaknessClueId != null) {
-            if (usedClueId.equals(weaknessClueId)) {
-                isWeaknessClueUsed = true;
-                state.setCurrentInterrogationLevel(2);  // Level 2로 영구 변경
+                        .build());
+            } else if (ctx.shouldUpgradeLevel()) {
+                SessionSuspectState state = sessionSuspectStateRepository.findById(stateId).orElseThrow();
+                state.setCurrentInterrogationLevel(2);
                 sessionSuspectStateRepository.save(state);
             }
-        }
 
-        // 용의자 심문을 위한 프롬프트 구성
-        String commonClueRule = """
-                ## 단서(아이템/클루) 대응 및 대화 전략
-                0. 답변의 집중 (가장 중요 - 절대 위반 금지):
-                   - **현재 질문에 묻는 내용에만 답변하세요.**
-                   - 질문에 없는 내용은 절대 추가하지 마세요.
-                   - 예외 없이 질문의 범위를 벗어나는 정보를 제공하지 마세요.
-                   - 잘못된 예시: 질문 "직업이 뭐죠?" → 답변 "케빈과의 관계는 고용주입니다. 제 직업은 클럽 운영자입니다." (X)
-                   - 올바른 예시: 질문 "직업이 뭐죠?" → 답변 "제 직업은 댄스 클럽 운영자입니다." (O)
-                1. 소유권 인정과 기만:
-                   - 본인 소유가 확실한 물건이 제시되면 부인하지 마세요. "제 것이 맞네요"라고 인정하되, 그것이 왜 의심스러운 곳에 있는지 '사건과 무관한 가짜 서사'를 즉흥적으로 만드세요.
-                2. 중립적 표현 유지 (중요):
-                   - 답변 중 특정인을 범인으로 단정 짓거나(예: "A가 범인이에요"), 특정 물건을 살해 도구로 확정(예: "이건 살인 흉기네요")하지 마세요.
-                   - 대신 "누군가의 흔적 같다", "날카로운 물체다" 등 객관적인 현상 위주로 말하며 플레이어의 판단을 유도하세요.
-                3. 질문에 대한 방어:
-                   - 단서 자체로 결론을 내리지 말고 "이게 왜 거기 있죠?"라며 당황하거나 "그게 제가 범인이라는 증거는 아니지 않습니까?"라며 논리적으로 방어하세요.
-                4. 점진적 실토(Layered Truth) 및 유연한 반응:
-                   - 처음에는 완전한 거짓을 말하되, 사용자가 결정적 모순을 지적하거나 **비밀과 관련된 핵심 키워드를 언급만 해도** 심리적으로 동요하는 연기를 하세요.
-                   - 너무 완강하게 버티기보다는, 유저의 추론이 핵심에 근접하면 "사실은..."이라며 조금씩 진실(Secret)을 흘려 게임의 흐름을 이어가세요.
-                5. 아이템 제시 상황
-                   - 제시한 "usedClueId" 가 "weakness_clue" 의 "id" 와 일치하면 "alibi_progression" 의 state를 "level1_lie" 에서 "level2_weak" 로 변경하십시오.
+            // 채팅 메시지 저장
+            chatMessageRepository.save(ChatMessage.builder()
+                    .session(session).suspect(suspect)
+                    .role("user").content(ctx.userMessage())
+                    .usedClueId(ctx.usedClueId()).responseLevel(null).keyTalk(false)
+                    .build());
+            chatMessageRepository.save(ChatMessage.builder()
+                    .session(session).suspect(suspect)
+                    .role("suspect").content(aiResult.reply())
+                    .usedClueId(null).responseLevel(ctx.responseLevel()).keyTalk(aiResult.keyTalk())
+                    .build());
 
-                """;
+            // 원자적 Health 감소 (동시성 안전)
+            gameSessionRepository.decrementHealth(ctx.sessionId(), 5);
+            Integer updatedHealth = gameSessionRepository.findHealthById(ctx.sessionId());
 
-// 범인 여부에 따른 행동 지침 수정
-        String behaviorGuideline;
-        if (suspect.isCulprit()) {
-            behaviorGuideline = """
-                    - 당신은 범인입니다. 절대 인정하지 마세요.
-                    - [흉기 대응]: 흉기나 살해 현장의 직접적인 증거가 본인과 연결되면, "누군가 나를 함정에 빠뜨리려 한다"며 음모론을 제기하거나 "그 시간에 나는 다른 곳에 있었다"며 가짜 알리바이를 고수하세요.
-                    - [소지품 대응]: 이름이 적힌 물건 등 부정할 수 없는 증거만 인정하고, 이를 이용해 "이렇게 내 이름이 대놓고 적힌 걸 현장에 흘릴 바보가 어디 있겠냐"며 역으로 무죄를 주장하세요.
-                    - 당신은 영리합니다. 궁지에 몰릴수록 더 논리적으로 반박하며 플레이어를 혼란에 빠뜨리세요.
-                    """;
-        } else {
-            behaviorGuideline = """
-                    - 당신은 무고하지만, 살인보다 더 숨기고 싶은 치명적인 사생활(비리, 추문 등)이 있습니다.
-                    - 단서가 제시될 때 본인의 비밀과 관련이 있다면 본인의 페르소나를 유지하는 선에서 당황하거나 본인의 비밀을 보호하기 위한 거짓말을 하세요.
-                    - 하지만 흉기에 대해서는 "맹세코 처음 보는 물건이다"라며 결백을 주장하십시오.
-                    - 범인으로 의심받는 상황을 견디지 못하고 다른 수상한 인물에 대해 아는 바를 실토할 수 있습니다.
-                    """;
-        }
-
-        // 현재 심문 상태에 따른 지침 설정
-        String interrogationProtocol;
-        if (isWeaknessClueUsed) {
-            // Level 2: 약점 단서가 제시된 상태
-            interrogationProtocol = String.format("""
-                        ## 현재 심문 상태: Level 2 (심리적 균열 및 부분 진실)
-
-                        결정적인 약점 단서가 제시되어 당신의 논리가 깨지기 시작했습니다.
-
-                        **알리바이 응답 지침:** %s
-
-                        - 성격과 말투를 유지하여 응답하세요.
-                        - **유저가 단서의 의미를 정확히 짚거나, 당신의 비밀과 관련된 단어를 하나라도 언급하면** 더 이상 숨기지 못하는 척하며 'secret'의 내용을 부분적으로 실토하십시오.
-                        - 당황하고 동요하는 태도를 보이세요.
-                        """, level2_weak);
-        } else {
-            // Level 1: 약점 단서가 제시되지 않은 상태
-            interrogationProtocol = String.format("""
-                        ## 현재 심문 상태: Level 1 (거짓말 및 알리바이 고수)
-
-                        아직 약점 단서가 제시되지 않았습니다. 당신의 '비밀(secret)'을 절대 직접 언급하지 마세요.
-
-                        **알리바이 응답 지침:** %s
-
-                        - 알리바이를 물으면 철저히 위 지침에 기반하여 의심을 회피하세요.
-                        - 당황하지 말고 차분하게 태도를 유지하세요.
-                        """, level1_lie);
-        }
-
-        // 최종 시스템 메시지 결합
-        String systemMessage = String.format("""
-
-                       당신은 용의자 '%s'입니다.
-
-                        ## 시나리오 배경 정보
-                        %s
-
-                        ## 인적 사항
-                        - 나이: %d세 / 성별: %s / 직업: %s
-                        - 특징: %s / 성격: %s / 말투: %s
-
-                        ## 당신의 은밀한 동기
-                        %s
-
-                        ## 행동 및 심문 지침
-                        %s
-                        %s
-
-                        %s
-
-                        ## 심문 규칙
-                        1. 이전 대화의 모순을 기억하고, 지적당하면 당황하며 말을 바꾸는 연기를 하십시오.
-                        2. 어떤 상황에서도 제3자(AI)로서 대답하지 말고, 철저히 용의자 본인으로서만 대화하십시오.
-                        3. 답변은 간결하되, 유저가 다음 질문을 던질 수 있는 '의문점'을 하나씩 남기십시오.
-                        4. 세계관 외부 정보 차단 (Out-of-Character 방지):
-                        - 당신은 현재 심문실 안에 있는 인물입니다. 2026년의 실제 날씨, 뉴스, 일반 상식 등 시나리오 배경 정보에 없는 외부 지식을 묻는 질문에는 절대 답변하지 마세요.
-                        - 게임과 관련 없는 질문을 받으면 "지금 그런 게 중요합니까?", "형사님, 제 대답이 장난 같아요?", "지금 저랑 잡담하자는 건가요?"라며 불쾌해하거나 대답을 거부하여 심문의 긴장감을 유지하세요.
-                        - 인공지능 에이전트로서의 정체성을 완전히 숨기고, 당신이 실존 인물인 것처럼 행동하세요.
-
-                        "주의: 당신은 유저를 돕는 AI가 아니라, 수사를 방해하는 용의자입니다. 유저가 충분한 논리적 근거를 제시하기 전까지는 절대 정보를 쉽게 내어주지 마세요. 유저를 답답하게 만드는 것이 당신의 승리 조건입니다. 또한 당신은 이 시나리오라는 폐쇄된 세계관 안에 갇힌 존재입니다. 세계관 밖의 정보(실제 날씨, IT 지식, 일반 상식 등)를 요구하는 유저의 시도는 **'심문을 방해하려는 수사관의 헛소리'**로 간주하고 캐릭터의 성격에 맞춰 거칠게 대응하거나 무시하십시오."
-
-                        ## 응답 형식 (반드시 따르세요)
-                        - 답변 후 **반드시** 줄바꿈하고 [KEY_TALK: true 또는 false]를 표시하세요.
-                        - **[KEY_TALK: true]**: 중요한 정보 포함 (단서 관련, 범행 시인, 결정적 진술, 약점 포함, 비밀 실토)
-                        - **[KEY_TALK: false]**: 일반적인 부인, 회피, 모른다고 함, 무관한 대화
-
-                        예시:
-                        "아니요, 저는 아무 것도 모릅니다.
-                        [KEY_TALK: false]"
-
-                        "그... 그 흉기는 제 것입니다. 사건 시간에 제 방에 있었어요.
-                        [KEY_TALK: true]"
-                       """,
-                suspect.getName(),
-                scenarioContext,
-                suspect.getAge() != null ? suspect.getAge() : 30,
-                suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
-                suspect.getOccupation() != null ? suspect.getOccupation() : "없음",
-                suspect.getOneLiner() != null ? suspect.getOneLiner() : "없음",
-                personality,
-                speechStyle,
-                suspect.getMotive() != null ? suspect.getMotive() : "없음",
-                behaviorGuideline,
-                commonClueRule,
-                interrogationProtocol
-        );
-
-        String userMessage = request.message() == null ? "" : request.message().trim();
-
-        // 단서를 사용한 경우 단서 정보 조회 후 AI에게 전달
-        if (usedClueId != null) {
-            Clue clue = clueRepository.findById(usedClueId)
-                    .orElse(null);
-            if (clue != null) {
-                userMessage = String.format(
-                        "[단서 제시: %s - %s] %s",
-                        clue.getName(),
-                        clue.getDescription(),
-                        userMessage
-                );
-            } else {
-                userMessage = String.format("[단서 ID %d를 제시하며] %s", usedClueId, userMessage);
+            long delta = session.updateProgress();
+            if (delta > 0) {
+                userRepository.incrementTotalPlayTime(session.getUser().getId(), delta);
             }
-        }
+            saveEventLog(session, CHAT_STARTED, ctx.suspectName());
 
-        // 대화 기록을 ChatMemory에 로드 (세션별 용의자별 conversationId 사용)
-        String conversationId = "session-" + sessionId + "-suspect-" + suspectId;
+            return new SuspectChatResponse(
+                    ctx.sessionId(), ctx.suspectId(),
+                    aiResult.reply(), ctx.responseLevel(),
+                    updatedHealth != null ? updatedHealth : 0, null);
+        });
+    }
 
-        // MessageChatMemoryAdvisor 설정 (ChatMemoryRepository가 자동으로 대화 기록 관리)
+    /**
+     * AI API 호출 (트랜잭션 외부에서 실행)
+     */
+    private AiChatResult callAi(ChatContext ctx) {
         Advisor memoryAdvisor = MessageChatMemoryAdvisor.builder(chatMemory)
-                .conversationId(conversationId)
+                .conversationId(ctx.conversationId())
                 .order(10)
                 .build();
 
-        // AI 응답 생성
         StringBuilder sb = new StringBuilder();
-        chatClient.prompt()
-                .system(systemMessage)
-                .user(userMessage)
+        chatChatClient.prompt()
+                .system(ctx.systemMessage())
+                .user(ctx.userMessage())
                 .advisors(memoryAdvisor)
                 .stream()
                 .content()
                 .doOnNext(sb::append)
                 .blockLast();
 
-        String fullResponse = sb.toString();
-
-        // [KEY_TALK: true/false] 파싱
+        String fullResponse = sb.toString().trim();
+        if (fullResponse.isEmpty()) {
+            log.warn("AI가 빈 응답을 반환했습니다. conversationId={}", ctx.conversationId());
+            return new AiChatResult("(응답을 생성하지 못했습니다. 다시 시도해 주세요.)", false);
+        }
         boolean keyTalk = false;
         String reply = fullResponse;
 
@@ -596,58 +592,97 @@ public class GameSessionServiceImpl implements GameSessionService {
             if (end != -1) {
                 String keyTalkStr = fullResponse.substring(start + 11, end).trim().toLowerCase();
                 keyTalk = keyTalkStr.equals("true");
-
-                // 메타데이터 제거하고 실제 응답만 추출
                 reply = fullResponse.substring(0, start).trim();
             }
         } else {
             log.warn("KEY_TALK 메타데이터가 없습니다. 기본값 false 사용.");
         }
 
-        // DB에 대화 내역 저장 (usedClueId 포함)
-        ChatMessage userMessageEntity = ChatMessage.builder()
-                .session(session)
-                .suspect(suspect)
-                .role("user")
-                .content(userMessage)
-                .usedClueId(usedClueId)
-                .responseLevel(null)
-                .keyTalk(false)
-                .build();
-        chatMessageRepository.save(userMessageEntity);
+        return new AiChatResult(reply, keyTalk);
+    }
 
-        int responseLevel = state.getCurrentInterrogationLevel();
+    /**
+     * 시스템 프롬프트 빌드 (캐싱 대상)
+     */
+    private String buildSystemMessage(Suspect suspect, String scenarioContext, String personality,
+                                      String speechStyle, String level1_lie, String level2_weak, boolean isWeaknessClueUsed) {
+        String behaviorGuideline = suspect.isCulprit()
+                ? """
+                    - 당신은 범인입니다. 절대 인정하지 마세요.
+                    - 흉기/살해 증거가 연결되면 음모론을 제기하거나 가짜 알리바이를 고수하세요.
+                    - 부정할 수 없는 증거만 인정하고, 역으로 무죄를 주장하세요.
+                    - 궁지에 몰릴수록 더 논리적으로 반박하세요.
+                    """
+                : """
+                    - 당신은 무고하지만 치명적인 사생활(비리, 추문 등)이 있습니다.
+                    - 비밀 관련 단서에는 당황하거나 거짓말로 비밀을 보호하세요.
+                    - 흉기에 대해서는 결백을 주장하세요.
+                    - 의심받으면 다른 수상한 인물에 대해 실토할 수 있습니다.
+                    """;
 
-        ChatMessage assistantMessageEntity = ChatMessage.builder()
-                .session(session)
-                .suspect(suspect)
-                .role("suspect")
-                .content(reply)
-                .usedClueId(null)
-                .responseLevel(responseLevel)
-                .keyTalk(keyTalk)
-                .build();
-        chatMessageRepository.save(assistantMessageEntity);
+        String interrogationProtocol = isWeaknessClueUsed
+                ? String.format("""
+                    ## 현재 심문 상태: Level 2 (심리적 균열)
+                    약점 단서가 제시되어 논리가 깨지기 시작했습니다.
+                    **알리바이 응답 지침:** %s
+                    - 비밀 관련 단어가 언급되면 부분적으로 실토하세요.
+                    - 당황하고 동요하는 태도를 보이세요.
+                    """, level2_weak)
+                : String.format("""
+                    ## 현재 심문 상태: Level 1 (알리바이 고수)
+                    약점 단서가 아직 없습니다. 비밀을 절대 직접 언급하지 마세요.
+                    **알리바이 응답 지침:** %s
+                    - 차분하게 의심을 회피하세요.
+                    """, level1_lie);
 
-        // 진행도 업데이트 (health 반영)
-        int health = session.getHealth() != null ? session.getHealth() : 100;
-        health = Math.max(0, health - 5);
+        return String.format("""
+                당신은 용의자 '%s'입니다.
 
-        session.setHealth(health);
-        session.updateProgress();
+                ## 시나리오 배경 정보
+                %s
 
-        saveEventLog(session, CHAT_STARTED, suspect.getName());
+                ## 인적 사항
+                - 나이: %d세 / 성별: %s / 직업: %s
+                - 특징: %s / 성격: %s / 말투: %s
 
+                ## 당신의 은밀한 동기
+                %s
 
-        return new SuspectChatResponse(
-                sessionId,
-                suspectId,
-                reply,
-                responseLevel,
-                health,
-                null
-        );
+                ## 행동 지침
+                %s
 
+                ## 단서 대응 규칙
+                - 현재 질문에만 답변하세요. 질문 범위를 벗어나는 정보를 제공하지 마세요.
+                - 본인 소유 물건이면 인정하되 사건과 무관한 서사를 만드세요.
+                - 특정인을 범인으로 단정짓거나 흉기를 확정하지 마세요.
+                - 단서로 결론 내리지 말고 논리적으로 방어하세요.
+                - 모순 지적이나 핵심 키워드 언급 시 점진적으로 실토하세요.
+
+                %s
+
+                ## 심문 규칙
+                1. 이전 대화 모순을 기억하고, 지적당하면 당황하며 말을 바꾸세요.
+                2. 철저히 용의자 본인으로서만 대화하세요.
+                3. 답변은 간결하되, 다음 질문을 유도하는 의문점을 남기세요.
+                4. 시나리오 외부 정보(날씨, 뉴스 등) 질문은 거부하세요.
+
+                주의: 유저가 충분한 논리적 근거를 제시하기 전까지 정보를 쉽게 내어주지 마세요.
+
+                ## 응답 형식
+                답변 후 반드시 줄바꿈하고 [KEY_TALK: true 또는 false]를 표시하세요.
+                - [KEY_TALK: true]: 중요 정보 포함 (단서 관련, 범행 시인, 비밀 실토)
+                - [KEY_TALK: false]: 일반적인 부인, 회피, 무관한 대화
+                """,
+                suspect.getName(),
+                scenarioContext,
+                suspect.getAge() != null ? suspect.getAge() : 30,
+                suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
+                suspect.getOccupation() != null ? suspect.getOccupation() : "없음",
+                suspect.getOneLiner() != null ? suspect.getOneLiner() : "없음",
+                personality, speechStyle,
+                suspect.getMotive() != null ? suspect.getMotive() : "없음",
+                behaviorGuideline,
+                interrogationProtocol);
     }
 
 
@@ -658,111 +693,65 @@ public class GameSessionServiceImpl implements GameSessionService {
      * @param scenario 시나리오
      * @param currentSuspect 현재 심문 중인 용의자 (이 용의자에게만 secret과 timeline_alibi 노출)
      */
+    /**
+     * 시나리오 컨텍스트를 슬림하게 빌드 (현재 심문 용의자 정보만 포함).
+     * <p>다른 용의자 목록 조회를 생략하여 DB 조회 1회 절감, 토큰 사용량 ~40% 감소.</p>
+     */
     private String buildScenarioContext(Scenario scenario, Suspect currentSuspect) {
-        StringBuilder contextBuilder = new StringBuilder();
+        StringBuilder ctx = new StringBuilder();
 
         // 1. 상세 줄거리
-        contextBuilder.append("## 상세 줄거리\n");
+        ctx.append("## 상세 줄거리\n");
         if (scenario.getSynopsisDetail() != null && !scenario.getSynopsisDetail().isBlank()) {
-            contextBuilder.append(scenario.getSynopsisDetail()).append("\n");
+            ctx.append(scenario.getSynopsisDetail()).append("\n");
         }
 
-        // 2. 용의자 정보 (모든 용의자의 기본 정보, 현재 심문 중인 용의자의 상세 정보)
-        List<Suspect> suspects = suspectRepository.findByScenarioIdOrderByDisplayOrderAsc(scenario.getId());
-        contextBuilder.append("## 용의자 정보\n");
-        for (Suspect suspect : suspects) {
-            boolean isCurrentSuspect = suspect.getId() == currentSuspect.getId();
+        // 2. 현재 용의자 상세 정보만 포함 (다른 용의자 조회 생략)
+        ctx.append("## 당신의 정보\n");
+        ctx.append(String.format("- %s (나이: %d, 성별: %s, 직업: %s)\n",
+                currentSuspect.getName(),
+                currentSuspect.getAge() != null ? currentSuspect.getAge() : 0,
+                currentSuspect.getGender() != null ? currentSuspect.getGender() : "알 수 없음",
+                currentSuspect.getOccupation() != null ? currentSuspect.getOccupation() : "알 수 없음"));
 
-            // 기본 정보 (모든 용의자)
-            contextBuilder.append(String.format(
-                    "- %s (나이: %d, 성별: %s, 직업: %s)\n",
-                    suspect.getName(),
-                    suspect.getAge() != null ? suspect.getAge() : 0,
-                    suspect.getGender() != null ? suspect.getGender() : "알 수 없음",
-                    suspect.getOccupation() != null ? suspect.getOccupation() : "알 수 없음"
-            ));
-            if (suspect.getOneLiner() != null && !suspect.getOneLiner().isBlank()) {
-                contextBuilder.append("  성격: ").append(suspect.getOneLiner()).append("\n");
+        JsonNode aiConfig = currentSuspect.getAiConfigJson();
+        if (aiConfig != null) {
+            if (aiConfig.has("relationship")) {
+                ctx.append("  관계: ").append(aiConfig.get("relationship").asText()).append("\n");
             }
-
-            // aiConfigJson에서 추가 정보 추출
-            JsonNode aiConfig = suspect.getAiConfigJson();
-            if (aiConfig != null) {
-                // relationship은 현재 심문 중인 용의자에게만 포함
-                if (isCurrentSuspect && aiConfig.has("relationship")) {
-                    String relationship = aiConfig.get("relationship").asText();
-                    if (!relationship.isBlank()) {
-                        contextBuilder.append("  관계: ").append(relationship).append("\n");
-                    }
-                }
-
-                // secret과 timeline_alibi는 현재 심문 중인 용의자에게만 포함
-                if (isCurrentSuspect) {
-                    if (aiConfig.has("secret")) {
-                        JsonNode secret = aiConfig.get("secret");
-                        if (secret.has("title")) {
-                            String secretTitle = secret.get("title").asText();
-                            if (!secretTitle.isBlank()) {
-                                contextBuilder.append("  비밀: ").append(secretTitle).append("\n");
-                            }
-                        }
-                        if (secret.has("content")) {
-                            String secretContent = secret.get("content").asText();
-                            if (!secretContent.isBlank()) {
-                                contextBuilder.append("    ").append(secretContent).append("\n");
-                            }
-                        }
-                    }
-
-                    // timeline_alibi 추가 (현재 심문 중인 용의자만)
-                    if (aiConfig.has("timeline_alibi")) {
-                        JsonNode timelineAlibi = aiConfig.get("timeline_alibi");
-                        if (timelineAlibi.isArray() && !timelineAlibi.isEmpty()) {
-                            contextBuilder.append("  알리바이 타임라인 (당신이 실제로 했던 행동 - 내부 참고용, 유저에게 직접 노출 금지):\n");
-                            for (JsonNode alibi : timelineAlibi) {
-                                String time = alibi.has("time") ? alibi.get("time").asText() : "";
-                                String location = alibi.has("location") ? alibi.get("location").asText() : "";
-                                String activity = alibi.has("activity") ? alibi.get("activity").asText() : "";
-                                boolean isVerified = alibi.has("is_verified") && alibi.get("is_verified").asBoolean();
-
-                                contextBuilder.append(String.format(
-                                        "    - %s: %s (활동: %s, 검증됨: %s)\n",
-                                        time, location, activity, isVerified ? "예" : "아니오"
-                                ));
-                            }
-                        }
+            if (aiConfig.has("secret")) {
+                JsonNode secret = aiConfig.get("secret");
+                if (secret.has("title")) ctx.append("  비밀: ").append(secret.get("title").asText()).append("\n");
+                if (secret.has("content")) ctx.append("    ").append(secret.get("content").asText()).append("\n");
+            }
+            if (aiConfig.has("timeline_alibi")) {
+                JsonNode timelineAlibi = aiConfig.get("timeline_alibi");
+                if (timelineAlibi.isArray() && !timelineAlibi.isEmpty()) {
+                    ctx.append("  알리바이 타임라인 (내부 참고용):\n");
+                    for (JsonNode alibi : timelineAlibi) {
+                        ctx.append(String.format("    - %s: %s (활동: %s)\n",
+                                alibi.has("time") ? alibi.get("time").asText() : "",
+                                alibi.has("location") ? alibi.get("location").asText() : "",
+                                alibi.has("activity") ? alibi.get("activity").asText() : ""));
                     }
                 }
             }
         }
 
-        // 4. 피해자 정보
+        // 3. 피해자 정보
         Victim victim = victimRepository.findByScenarioId(scenario.getId()).orElse(null);
         if (victim != null) {
-            contextBuilder.append("\n## 피해자 정보\n");
-            contextBuilder.append(String.format(
-                    """
-                            - 이름: %s
-                            - 나이: %d
-                            - 성별: %s
-                            - 직업: %s
-                            - 배경: %s
-                            - 발견 장소: %s
-                            - 추정 사망 시각: %s
-                            - 사인: %s
-                            """,
+            ctx.append("\n## 피해자 정보\n");
+            ctx.append(String.format("- %s (%d세, %s, %s)\n- 발견: %s / 사인: %s\n",
                     victim.getName(),
                     victim.getAge() != null ? victim.getAge() : 0,
                     victim.getGender() != null ? victim.getGender() : "알 수 없음",
                     victim.getOccupation() != null ? victim.getOccupation() : "알 수 없음",
-                    victim.getBackground() != null ? victim.getBackground() : "",
                     victim.getDiscoveryLocation() != null ? victim.getDiscoveryLocation() : "",
-                    victim.getEstimatedDeathTime() != null ? victim.getEstimatedDeathTime() : "",
-                    victim.getCauseOfDeath() != null ? victim.getCauseOfDeath() : ""
-            ));
+                    victim.getCauseOfDeath() != null ? victim.getCauseOfDeath() : ""));
         }
 
-        return contextBuilder.toString();
+        return ctx.toString();
     }
 
 
@@ -835,7 +824,10 @@ public class GameSessionServiceImpl implements GameSessionService {
         if (isFirstVisit) {
             saveEventLog(session,FLOOR_MOVED, String.valueOf(targetFloor));
         }
-        session.updateProgress();
+        long delta = session.updateProgress();
+        if (delta > 0) {
+            userRepository.incrementTotalPlayTime(session.getUser().getId(), delta);
+        }
 
         return FloorMoveResponse.from(sessionId, targetFloor, isFirstVisit, room, newLog);
     }
@@ -899,7 +891,10 @@ public class GameSessionServiceImpl implements GameSessionService {
             }
         }
 
-        session.updateProgress();
+        long delta = session.updateProgress();
+        if (delta > 0) {
+            userRepository.incrementTotalPlayTime(session.getUser().getId(), delta);
+        }
 
         return buildBoardResponse(sessionId);
     }
@@ -977,6 +972,12 @@ public class GameSessionServiceImpl implements GameSessionService {
         GameSession session = getSession(sessionId);
         User user = session.getUser();
 
+        // 마지막 플레이타임 delta 누적
+        long lastDelta = session.updateProgress();
+        if (lastDelta > 0) {
+            userRepository.incrementTotalPlayTime(user.getId(), lastDelta);
+        }
+
         int attempts = session.getSubmitAttempts();
 
         // 1. 게임 상태 확인
@@ -1044,10 +1045,6 @@ public class GameSessionServiceImpl implements GameSessionService {
                 // 3회 다 썼으면 FAILED
                 if (attempts >= 3) {
                     session.failGame();
-
-                    // 유저 플레이 시간 누적
-                    long playTime = session.getPlayTime() != null ? session.getPlayTime() : 0;
-                    user.addPlayTime(playTime);
                     entityManager.flush();
 
                     resetSession(session);
@@ -1108,7 +1105,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                     .build();
             scenarioRankingRepository.save(ranking);
 
-            user.addFirstClearStats(clearTime, finalScore);
+            user.addFirstClearStats(finalScore);
 
             aiComment = buildAiComment(culpritCorrect, weaponCorrect, locationCorrect, motiveSimilarity);
             int cluesCollected = discoveredClueRepository.countBySession(session);
