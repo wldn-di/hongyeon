@@ -17,8 +17,8 @@ import java.util.concurrent.Semaphore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
-import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
+import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.google.genai.GoogleGenAiEmbeddingConnectionDetails;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -36,6 +36,7 @@ import org.springframework.util.StringUtils;
 public class VertexGenAiClientConfig {
 
     private static final String CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+    private static final String DEFAULT_MODEL = "gemini-2.5-flash";
 
     @Bean
     @Primary
@@ -96,15 +97,16 @@ public class VertexGenAiClientConfig {
 
                     GoogleGenAiChatModel chatModel = GoogleGenAiChatModel.builder()
                             .genAiClient(client)
+                            .defaultOptions(GoogleGenAiChatOptions.builder()
+                                    .model(DEFAULT_MODEL)
+                                    .temperature(0.7)
+                                    .maxOutputTokens(30000)
+                                    .build())
                             .build();
                     var loggerAdvisor = SimpleLoggerAdvisor.builder()
                             .order(Ordered.LOWEST_PRECEDENCE - 1)
                             .build();
                     ChatClient chatClient = ChatClient.builder(chatModel)
-                            .defaultOptions(ChatOptions.builder()
-                                    .temperature(0.7)
-                                    .maxTokens(30000)
-                                    .build())
                             .defaultAdvisors(loggerAdvisor)
                             .build();
 
@@ -137,15 +139,16 @@ public class VertexGenAiClientConfig {
 
             GoogleGenAiChatModel chatModel = GoogleGenAiChatModel.builder()
                     .genAiClient(client)
+                    .defaultOptions(GoogleGenAiChatOptions.builder()
+                            .model(DEFAULT_MODEL)
+                            .temperature(0.7)
+                            .maxOutputTokens(30000)
+                            .build())
                     .build();
             var loggerAdvisor = SimpleLoggerAdvisor.builder()
                     .order(Ordered.LOWEST_PRECEDENCE - 1)
                     .build();
             ChatClient chatClient = ChatClient.builder(chatModel)
-                    .defaultOptions(ChatOptions.builder()
-                            .temperature(0.7)
-                            .maxTokens(30000)
-                            .build())
                     .defaultAdvisors(loggerAdvisor)
                     .build();
 
