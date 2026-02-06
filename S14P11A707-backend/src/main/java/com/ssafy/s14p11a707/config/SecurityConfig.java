@@ -144,6 +144,7 @@ public class SecurityConfig {
                         .requestMatchers(SWAGGER_WHITELIST).permitAll()
                         .requestMatchers(PUBLIC_WHITELIST).permitAll()
                         .requestMatchers("/api/v1/**").permitAll()
+                        .requestMatchers("/api/test/**").permitAll()
                         .requestMatchers(HttpMethod.GET, PUBLIC_GET_WHITELIST).permitAll()
                         .anyRequest().authenticated()
                 )

@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>홍연 - 동시성 테스트</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Pretendard', -apple-system, sans-serif; background: #0f0f0f; color: #e0e0e0; padding: 20px; }
+h1 { color: #ff6b6b; margin-bottom: 8px; font-size: 1.4em; }
+h2 { color: #ffa94d; margin: 16px 0 8px; font-size: 1.1em; border-bottom: 1px solid #333; padding-bottom: 4px; }
+.section { background: #1a1a1a; border: 1px solid #333; border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+.row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+label { font-size: 0.85em; color: #aaa; min-width: 80px; }
+input, select { background: #2a2a2a; border: 1px solid #444; color: #e0e0e0; padding: 6px 10px; border-radius: 4px; font-size: 0.9em; }
+input:focus, select:focus { outline: none; border-color: #ff6b6b; }
+button { background: #ff6b6b; color: #fff; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 0.85em; font-weight: 600; }
+button:hover { background: #e05555; }
+button:disabled { background: #555; cursor: not-allowed; }
+button.secondary { background: #444; }
+button.secondary:hover { background: #555; }
+button.warn { background: #e67700; }
+button.warn:hover { background: #cc6a00; }
+.log-box { background: #111; border: 1px solid #333; border-radius: 4px; padding: 12px; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.8em; line-height: 1.6; max-height: 400px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+.log-box .info { color: #74c0fc; }
+.log-box .ok { color: #69db7c; }
+.log-box .err { color: #ff6b6b; }
+.log-box .warn { color: #ffa94d; }
+.log-box .dim { color: #666; }
+.log-box .bold { font-weight: 700; color: #fff; }
+.status-bar { display: flex; gap: 16px; font-size: 0.8em; color: #888; margin-bottom: 12px; }
+.status-bar span { padding: 2px 8px; background: #222; border-radius: 3px; }
+table { width: 100%; border-collapse: collapse; font-size: 0.8em; margin-top: 8px; }
+th, td { padding: 6px 8px; border: 1px solid #333; text-align: left; }
+th { background: #222; color: #aaa; }
+td { color: #ccc; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<h1>홍연 동시성 테스트</h1>
+<div class="status-bar">
+  <span id="authStatus">인증: 확인중...</span>
+  <span id="dbStatus">DB: -</span>
+</div>
+
+<!-- DB 상태 -->
+<div class="section">
+  <h2>DB 상태</h2>
+  <div class="row">
+    <button onclick="loadStatus()">새로고침</button>
+    <button class="warn" onclick="resetGenerating()">GENERATING 초기화</button>
+  </div>
+  <div id="dbTables"></div>
+</div>
+
+<div class="grid">
+  <!-- 시나리오 생성 테스트 -->
+  <div class="section">
+    <h2>시나리오 생성 테스트</h2>
+    <div class="row">
+      <label>제목</label>
+      <input id="scTitle" value="테스트 살인사건" style="flex:1">
+    </div>
+    <div class="row">
+      <label>장르</label>
+      <input id="scGenre" value="미스터리" style="width:120px">
+      <label>용의자수</label>
+      <input id="scSuspectCount" type="number" value="3" min="1" max="6" style="width:60px">
+    </div>
+    <div class="row">
+      <label>시놉시스</label>
+      <input id="scSynopsis" value="한 부유한 사업가가 자신의 저택에서 살해된 채 발견되었다" style="flex:1">
+    </div>
+    <div class="row">
+      <button id="btnScenario" onclick="startScenarioTest()">시나리오 생성</button>
+    </div>
+    <div id="scenarioLog" class="log-box"></div>
+  </div>
+
+  <!-- 채팅 테스트 -->
+  <div class="section">
+    <h2>채팅 동시성 테스트</h2>
+    <div class="row">
+      <label>시나리오ID</label>
+      <input id="chatScenarioId" type="number" style="width:80px">
+      <button class="secondary" onclick="startGameSession()">게임 시작</button>
+    </div>
+    <div class="row">
+      <label>세션ID</label>
+      <input id="chatSessionId" type="number" style="width:80px">
+      <label>용의자ID</label>
+      <input id="chatSuspectId" type="number" style="width:80px">
+    </div>
+    <div class="row">
+      <label>메시지</label>
+      <input id="chatMessage" value="사건 당일 어디에 있었나요?" style="flex:1">
+    </div>
+    <div class="row">
+      <label>동시 요청</label>
+      <select id="chatConcurrency">
+        <option value="1">1건 (순차)</option>
+        <option value="3" selected>3건</option>
+        <option value="5">5건</option>
+        <option value="7">7건</option>
+      </select>
+      <button id="btnChat" onclick="startChatTest()">채팅 테스트</button>
+      <button class="secondary" onclick="resetHealth()">Health 리셋</button>
+    </div>
+    <div id="chatLog" class="log-box"></div>
+  </div>
+</div>
+
+<script>
+const BASE = '';
+
+// ── 로그 헬퍼 ──
+function log(el, msg, cls = '') {
+  const t = new Date();
+  const ts = `${String(t.getMinutes()).padStart(2,'0')}:${String(t.getSeconds()).padStart(2,'0')}.${String(t.getMilliseconds()).padStart(3,'0')}`;
+  const span = document.createElement('div');
+  span.className = cls;
+  span.textContent = `[${ts}] ${msg}`;
+  el.appendChild(span);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog(el) { el.innerHTML = ''; }
+
+// ── 인증 확인 ──
+async function checkAuth() {
+  try {
+    const r = await fetch(BASE + '/api/test/status', { credentials: 'include' });
+    if (r.ok) {
+      document.getElementById('authStatus').textContent = '인증: OK';
+      document.getElementById('authStatus').style.color = '#69db7c';
+      return true;
+    }
+  } catch(e) {}
+  document.getElementById('authStatus').textContent = '인증: 필요 (로그인 먼저)';
+  document.getElementById('authStatus').style.color = '#ff6b6b';
+  return false;
+}
+
+// ── DB 상태 조회 ──
+async function loadStatus() {
+  try {
+    const r = await fetch(BASE + '/api/test/status', { credentials: 'include' });
+    const data = await r.json();
+    document.getElementById('dbStatus').textContent = `DB: 시나리오 ${data.scenarios.length}개, 세션 ${data.sessions.length}개, 용의자 ${data.suspects.length}명`;
+    renderTables(data);
+  } catch(e) {
+    document.getElementById('dbStatus').textContent = 'DB: 연결 실패';
+  }
+}
+
+function renderTables(data) {
+  let html = '';
+  // 시나리오
+  html += '<h3 style="color:#aaa;font-size:0.85em;margin:8px 0 4px">시나리오</h3>';
+  if (data.scenarios.length === 0) {
+    html += '<p style="color:#666;font-size:0.8em">없음</p>';
+  } else {
+    html += '<table><tr><th>ID</th><th>제목</th><th>장르</th><th>용의자</th><th>상태</th></tr>';
+    data.scenarios.forEach(s => {
+      const statusColor = s.generation_status === 'COMPLETED' ? '#69db7c' : s.generation_status === 'FAILED' ? '#ff6b6b' : '#ffa94d';
+      html += `<tr><td>${s.id}</td><td>${s.title}</td><td>${s.genre}</td><td>${s.suspect_count||'-'}</td><td style="color:${statusColor}">${s.generation_status}</td></tr>`;
+    });
+    html += '</table>';
+  }
+  // 세션
+  html += '<h3 style="color:#aaa;font-size:0.85em;margin:8px 0 4px">게임 세션</h3>';
+  if (data.sessions.length === 0) {
+    html += '<p style="color:#666;font-size:0.8em">없음</p>';
+  } else {
+    html += '<table><tr><th>ID</th><th>시나리오</th><th>유저</th><th>Health</th><th>상태</th></tr>';
+    data.sessions.forEach(s => {
+      html += `<tr><td>${s.id}</td><td>${s.scenario_id}</td><td>${s.user_id}</td><td>${s.health}</td><td>${s.status}</td></tr>`;
+    });
+    html += '</table>';
+  }
+  // 용의자
+  html += '<h3 style="color:#aaa;font-size:0.85em;margin:8px 0 4px">용의자</h3>';
+  if (data.suspects.length === 0) {
+    html += '<p style="color:#666;font-size:0.8em">없음</p>';
+  } else {
+    html += '<table><tr><th>ID</th><th>이름</th><th>시나리오</th><th>범인</th></tr>';
+    data.suspects.forEach(s => {
+      html += `<tr><td>${s.id}</td><td>${s.name}</td><td>${s.scenario_id}</td><td>${s.is_culprit ? 'O' : ''}</td></tr>`;
+    });
+    html += '</table>';
+  }
+  document.getElementById('dbTables').innerHTML = html;
+}
+
+// ── GENERATING 초기화 ──
+async function resetGenerating() {
+  const r = await fetch(BASE + '/api/test/reset-generating', { method: 'POST', credentials: 'include' });
+  const data = await r.json();
+  alert(`GENERATING → FAILED 전환: ${data.updated}건`);
+  loadStatus();
+}
+
+// ── Health 리셋 ──
+async function resetHealth() {
+  const sid = document.getElementById('chatSessionId').value;
+  if (!sid) { alert('세션ID를 입력하세요'); return; }
+  const r = await fetch(BASE + `/api/test/reset-health/${sid}`, { method: 'POST', credentials: 'include' });
+  const data = await r.json();
+  alert(`Health 리셋: ${data.updated}건`);
+  loadStatus();
+}
+
+// ── 시나리오 생성 테스트 ──
+let scenarioStartTime = null;
+
+async function startScenarioTest() {
+  const logEl = document.getElementById('scenarioLog');
+  const btn = document.getElementById('btnScenario');
+  clearLog(logEl);
+  btn.disabled = true;
+
+  const title = document.getElementById('scTitle').value;
+  const genre = document.getElementById('scGenre').value;
+  const suspectCount = parseInt(document.getElementById('scSuspectCount').value);
+  const userSynopsis = document.getElementById('scSynopsis').value;
+
+  log(logEl, `시나리오 생성 시작 (title: "${title}", genre: "${genre}", suspects: ${suspectCount})`, 'bold');
+  scenarioStartTime = performance.now();
+
+  // 1) SSE 스트림 연결
+  log(logEl, 'SSE 스트림 연결중...', 'dim');
+  const sse = new EventSource(BASE + '/api/v2/scenarios/stream', { withCredentials: true });
+
+  const eventTypes = [
+    'CONNECT', 'TIMELINE', 'CHARACTERS_CLUES_TRUTH', 'ROOMS',
+    'VALIDATE', 'CRITIQUE', 'REFINE', 'PERSIST',
+    'IMAGE_PROMPT', 'IMAGE_PROGRESS', 'FINALIZE', 'COMPLETE', 'ERROR', 'PING'
+  ];
+
+  eventTypes.forEach(type => {
+    sse.addEventListener(type, (e) => {
+      const elapsed = ((performance.now() - scenarioStartTime) / 1000).toFixed(1);
+      let data;
+      try { data = JSON.parse(e.data); } catch { data = e.data; }
+
+      if (type === 'CONNECT') {
+        log(logEl, `SSE 연결 완료`, 'ok');
+        return;
+      }
+      if (type === 'PING') return;
+
+      if (type === 'COMPLETE') {
+        const totalSec = ((performance.now() - scenarioStartTime) / 1000).toFixed(1);
+        log(logEl, `COMPLETE - 시나리오 생성 완료! (총 ${totalSec}s)`, 'ok');
+        if (data && data.scenarioId) {
+          log(logEl, `scenarioId: ${data.scenarioId}`, 'bold');
+          document.getElementById('chatScenarioId').value = data.scenarioId;
+        }
+        sse.close();
+        btn.disabled = false;
+        loadStatus();
+        return;
+      }
+
+      if (type === 'ERROR') {
+        log(logEl, `ERROR - ${data.message || JSON.stringify(data)}`, 'err');
+        sse.close();
+        btn.disabled = false;
+        loadStatus();
+        return;
+      }
+
+      // 노드 이벤트
+      let msg = `[${elapsed}s] ${type}`;
+      if (data) {
+        if (data.progress !== undefined) msg += ` (${data.progress}%)`;
+        if (data.message) msg += ` - ${data.message}`;
+        if (data.data) {
+          const d = data.data;
+          if (d.score !== undefined) msg += ` [score: ${d.score}]`;
+          if (d.retry !== undefined) msg += ` [retry: ${d.retry}/${d.maxRetry || '?'}]`;
+          if (d.done !== undefined) msg += ` [${d.done}/${d.total}]`;
+        }
+      }
+      const cls = type === 'VALIDATE' || type === 'CRITIQUE' ? 'warn' : 'info';
+      log(logEl, msg, cls);
+    });
+  });
+
+  sse.onerror = (e) => {
+    log(logEl, 'SSE 연결 끊김 또는 에러', 'err');
+    sse.close();
+    btn.disabled = false;
+  };
+
+  // 2) 생성 API 호출
+  try {
+    const r = await fetch(BASE + '/api/v2/scenarios', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, genre, suspectCount, userSynopsis, style: '' })
+    });
+    const data = await r.json();
+    if (r.ok) {
+      log(logEl, `생성 요청 성공 - scenarioId: ${data.scenarioId}, status: ${data.status}`, 'ok');
+    } else {
+      log(logEl, `생성 요청 실패 (${r.status}) - ${data.message || JSON.stringify(data)}`, 'err');
+      sse.close();
+      btn.disabled = false;
+    }
+  } catch(e) {
+    log(logEl, `요청 에러: ${e.message}`, 'err');
+    sse.close();
+    btn.disabled = false;
+  }
+}
+
+// ── 게임 세션 시작 ──
+async function startGameSession() {
+  const scenarioId = document.getElementById('chatScenarioId').value;
+  if (!scenarioId) { alert('시나리오ID를 입력하세요'); return; }
+
+  const logEl = document.getElementById('chatLog');
+  clearLog(logEl);
+  log(logEl, `게임 세션 시작 요청 (scenarioId: ${scenarioId})...`, 'info');
+
+  try {
+    const r = await fetch(BASE + `/api/sessions/${scenarioId}`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' }
+    });
+    const data = await r.json();
+    if (r.ok) {
+      log(logEl, `게임 시작 성공 - sessionId: ${data.sessionId}, status: ${data.status}`, 'ok');
+      document.getElementById('chatSessionId').value = data.sessionId;
+      // 용의자 목록에서 첫번째 용의자 자동 설정
+      loadStatus().then(() => {
+        // status 로드 후 용의자 자동 선택은 DB 테이블에서 확인
+      });
+    } else {
+      log(logEl, `게임 시작 실패 (${r.status}) - ${data.message || JSON.stringify(data)}`, 'err');
+    }
+  } catch(e) {
+    log(logEl, `요청 에러: ${e.message}`, 'err');
+  }
+}
+
+// ── 채팅 동시성 테스트 ──
+async function startChatTest() {
+  const logEl = document.getElementById('chatLog');
+  const btn = document.getElementById('btnChat');
+  clearLog(logEl);
+
+  const sessionId = document.getElementById('chatSessionId').value;
+  const suspectId = document.getElementById('chatSuspectId').value;
+  const message = document.getElementById('chatMessage').value;
+  const concurrency = parseInt(document.getElementById('chatConcurrency').value);
+
+  if (!sessionId || !suspectId) {
+    log(logEl, '세션ID와 용의자ID를 입력하세요', 'err');
+    return;
+  }
+
+  btn.disabled = true;
+  const mode = concurrency === 1 ? '순차' : `동시 ${concurrency}건`;
+  log(logEl, `[${mode} 테스트] sessionId=${sessionId}, suspectId=${suspectId}`, 'bold');
+
+  // Health 조회
+  try {
+    const statusR = await fetch(BASE + '/api/test/status', { credentials: 'include' });
+    const statusData = await statusR.json();
+    const session = statusData.sessions.find(s => s.id == sessionId);
+    if (session) {
+      log(logEl, `Health 시작: ${session.health}`, 'info');
+    }
+  } catch(e) {}
+
+  const testStart = performance.now();
+  const results = [];
+
+  if (concurrency === 1) {
+    // 순차 테스트
+    for (let i = 0; i < 5; i++) {
+      const reqStart = performance.now();
+      log(logEl, `[Req #${i+1}] 전송...`, 'dim');
+      try {
+        const r = await sendChat(sessionId, suspectId, `${message} (${i+1}번째 질문)`);
+        const elapsed = ((performance.now() - reqStart) / 1000).toFixed(2);
+        if (r.ok) {
+          const data = await r.json();
+          const reply = data.response ? data.response.substring(0, 60) + '...' : '(empty)';
+          log(logEl, `[Req #${i+1}] ${elapsed}s (${r.status}) health=${data.health} "${reply}"`, 'ok');
+          results.push({ i: i+1, elapsed: parseFloat(elapsed), status: r.status, health: data.health });
+        } else {
+          const text = await r.text();
+          log(logEl, `[Req #${i+1}] ${elapsed}s (${r.status}) ${text.substring(0, 100)}`, 'err');
+          results.push({ i: i+1, elapsed: parseFloat(elapsed), status: r.status });
+        }
+      } catch(e) {
+        const elapsed = ((performance.now() - reqStart) / 1000).toFixed(2);
+        log(logEl, `[Req #${i+1}] ${elapsed}s ERROR: ${e.message}`, 'err');
+        results.push({ i: i+1, elapsed: parseFloat(elapsed), status: 'ERR' });
+      }
+    }
+  } else {
+    // 동시 테스트
+    const promises = [];
+    for (let i = 0; i < concurrency; i++) {
+      const reqStart = performance.now();
+      log(logEl, `[Req #${i+1}] 전송...`, 'dim');
+      const p = sendChat(sessionId, suspectId, `${message} (${i+1}번째 질문)`)
+        .then(async (r) => {
+          const elapsed = ((performance.now() - reqStart) / 1000).toFixed(2);
+          if (r.ok) {
+            const data = await r.json();
+            const reply = data.response ? data.response.substring(0, 60) + '...' : '(empty)';
+            log(logEl, `[Req #${i+1}] ${elapsed}s (${r.status}) health=${data.health} "${reply}"`, 'ok');
+            return { i: i+1, elapsed: parseFloat(elapsed), status: r.status, health: data.health };
+          } else {
+            const text = await r.text();
+            log(logEl, `[Req #${i+1}] ${elapsed}s (${r.status}) ${text.substring(0, 100)}`, 'err');
+            return { i: i+1, elapsed: parseFloat(elapsed), status: r.status };
+          }
+        })
+        .catch(e => {
+          const elapsed = ((performance.now() - reqStart) / 1000).toFixed(2);
+          log(logEl, `[Req #${i+1}] ${elapsed}s ERROR: ${e.message}`, 'err');
+          return { i: i+1, elapsed: parseFloat(elapsed), status: 'ERR' };
+        });
+      promises.push(p);
+    }
+    const res = await Promise.all(promises);
+    results.push(...res);
+  }
+
+  // 결과 요약
+  const totalElapsed = ((performance.now() - testStart) / 1000).toFixed(2);
+  const successCount = results.filter(r => r.status === 200).length;
+  const avgElapsed = results.length > 0 ? (results.reduce((sum, r) => sum + r.elapsed, 0) / results.length).toFixed(2) : '-';
+  const minElapsed = results.length > 0 ? Math.min(...results.map(r => r.elapsed)).toFixed(2) : '-';
+  const maxElapsed = results.length > 0 ? Math.max(...results.map(r => r.elapsed)).toFixed(2) : '-';
+
+  log(logEl, '', '');
+  log(logEl, `=== 결과 요약 ===`, 'bold');
+  log(logEl, `성공: ${successCount}/${results.length} | 총 소요: ${totalElapsed}s`, successCount === results.length ? 'ok' : 'warn');
+  log(logEl, `응답시간 - 평균: ${avgElapsed}s | 최소: ${minElapsed}s | 최대: ${maxElapsed}s`, 'info');
+
+  // Health 변화 확인
+  try {
+    const statusR = await fetch(BASE + '/api/test/status', { credentials: 'include' });
+    const statusData = await statusR.json();
+    const session = statusData.sessions.find(s => s.id == sessionId);
+    if (session) {
+      const expectedDecrease = successCount * 5;
+      log(logEl, `Health 종료: ${session.health} (감소: ${expectedDecrease} 예상)`, 'info');
+    }
+  } catch(e) {}
+
+  btn.disabled = false;
+  loadStatus();
+}
+
+function sendChat(sessionId, suspectId, message) {
+  return fetch(BASE + `/api/sessions/${sessionId}/suspects/${suspectId}/chat`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, usedClueId: null })
+  });
+}
+
+// ── 초기화 ──
+checkAuth();
+loadStatus();
+</script>
+</body>
+</html>
