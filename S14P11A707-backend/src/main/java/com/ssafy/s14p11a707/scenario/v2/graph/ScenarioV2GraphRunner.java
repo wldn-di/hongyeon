@@ -13,12 +13,13 @@ import com.ssafy.s14p11a707.scenario.v2.node.ScenarioBaseNode;
 import com.ssafy.s14p11a707.scenario.v2.node.ScenarioV2Node;
 import com.ssafy.s14p11a707.scenario.v2.node.TimelineNode;
 import com.ssafy.s14p11a707.scenario.v2.node.ValidateNode;
+import com.google.common.util.concurrent.RateLimiter;
 import com.ssafy.s14p11a707.scenario.v2.dto.ScenarioV2StreamEvent.EventType;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import java.util.Map;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -55,7 +56,6 @@ import org.springframework.stereotype.Component;
  */
 @Component
 @Slf4j
-@RequiredArgsConstructor
 public class ScenarioV2GraphRunner {
 
     @Value("${app.scenario.v2.pass-score:85}")
@@ -76,6 +76,36 @@ public class ScenarioV2GraphRunner {
     private final ImageBatchNode imageBatchNode;
     private final FinalizeNode finalizeNode;
     private final ScenarioV2EventPublisher eventPublisher;
+    private final RateLimiter scenarioRateLimiter;
+
+    public ScenarioV2GraphRunner(
+            TimelineNode timelineNode,
+            ScenarioBaseNode scenarioBaseNode,
+            CharactersCluesTruthNode charactersCluesTruthNode,
+            RoomsNode roomsNode,
+            ValidateNode validateNode,
+            CritiqueNode critiqueNode,
+            RefineNode refineNode,
+            PersistNode persistNode,
+            ImagePromptNode imagePromptNode,
+            ImageBatchNode imageBatchNode,
+            FinalizeNode finalizeNode,
+            ScenarioV2EventPublisher eventPublisher,
+            @Qualifier("scenarioRateLimiter") RateLimiter scenarioRateLimiter) {
+        this.timelineNode = timelineNode;
+        this.scenarioBaseNode = scenarioBaseNode;
+        this.charactersCluesTruthNode = charactersCluesTruthNode;
+        this.roomsNode = roomsNode;
+        this.validateNode = validateNode;
+        this.critiqueNode = critiqueNode;
+        this.refineNode = refineNode;
+        this.persistNode = persistNode;
+        this.imagePromptNode = imagePromptNode;
+        this.imageBatchNode = imageBatchNode;
+        this.finalizeNode = finalizeNode;
+        this.eventPublisher = eventPublisher;
+        this.scenarioRateLimiter = scenarioRateLimiter;
+    }
 
     /**
      * v2 생성 그래프를 실행하고 최종 상태 반환
@@ -194,6 +224,7 @@ public class ScenarioV2GraphRunner {
 
         for (int rateLimitAttempt = 0; rateLimitAttempt <= MAX_RATE_LIMIT_RETRIES; rateLimitAttempt++) {
             try {
+                scenarioRateLimiter.acquire();
                 ScenarioV2State next = node.execute(state);
                 long elapsedMs = (System.nanoTime() - startedAt) / 1_000_000L;
                 log.info(
