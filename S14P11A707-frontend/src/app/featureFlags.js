@@ -1,5 +1,5 @@
 export const FEATURE_FLAGS = {
-  disableScenarioCreation: true,
+  disableScenarioCreation: false,
 };
 
 export default FEATURE_FLAGS;
