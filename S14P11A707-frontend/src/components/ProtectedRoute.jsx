@@ -1,9 +1,7 @@
 import React from 'react'
 import { Redirect } from 'wouter'
 import { useAuth } from '../contexts/AuthContext'
-import { ROUTES } from '../app/routePaths'
-
-const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect'
+import { ROUTES, POST_LOGIN_REDIRECT_KEY } from '../app/routePaths'
 
 /**
  * 인증이 필요한 라우트를 보호하는 컴포넌트

@@ -2,14 +2,12 @@ import React, { useEffect, useState } from 'react'
 import { useLocation } from 'wouter'
 import { Button } from '@/components/ui/Button'
 import { LogIn, User } from 'lucide-react'
-import { ROUTES } from '@/app/routePaths'
+import { ROUTES, POST_LOGIN_REDIRECT_KEY } from '@/app/routePaths'
 
 /**
  * 로그인 필요 안내 모달
  * 인증이 필요한 API 호출 시 자동으로 표시됨
  */
-
-const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect'
 
 // 전역 상태 관리
 let setModalVisible = null

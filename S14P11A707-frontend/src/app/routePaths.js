@@ -1,3 +1,6 @@
+// 세션 스토리지 키
+export const POST_LOGIN_REDIRECT_KEY = "post_login_redirect";
+
 // 경로 상수 - 모든 라우트 경로를 한 곳에서 관리
 export const ROUTES = {
   HOME: "/",
