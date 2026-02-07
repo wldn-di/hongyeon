@@ -7,7 +7,9 @@ import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventMessage;
 import com.ssafy.s14p11a707.scenario.v2.event.ScenarioV2EventPublisher;
 import com.ssafy.s14p11a707.scenario.v2.graph.ScenarioV2State;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import com.ssafy.s14p11a707.vertex.VertexAiAccountPool;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -92,16 +94,19 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 단서 텍스트 규칙(HARD):
                 - clues[].assistant_comment, clues[].clue_detail_json.revealed_truth, clues[].clue_detail_json.discovery_script 는 "플레이어 UI에 노출"될 수 있다.
                 - 따라서 추리 정답/결론을 직접 말하지 말고, 관찰 가능한 사실만 짧게 쓴다.
-                - 필요하면 피해자/용의자 실명을 직접 사용해도 된다.
+                - 아래 단어/표현은 사용 금지: 범인, 용의자, 알리바이, 흉기, 살해, 살인, 범행, 결정적, 반박, 의미, 거짓, 거짓말, 모순
 
                 조력자 멘트(assistant_comment) 규칙(HARD):
                 - "탐정님," 으로 시작하는 1문장(60자 이내).
                 - 공손한 구어체(~요/~니다)로 끝낸다. 서술체(~다) 금지.
                 - 감정/심리(분노/억울함 등)를 단정하지 말고, 보이는 흔적(구김/찢김/필압 등)으로만 표현한다.
+                - 감정 단어 사용 금지: 분노, 억울
+                - assistant_comment에서는 필요하면 피해자/용의자 실명을 직접 언급해도 된다.
 
                 clue_detail_json 규칙(HARD):
                 - revealed_truth: 단서에서 "확인 가능한 사실"만 1문장으로 요약(120자 이내). 추론/판정 금지.
                 - discovery_script: 단서 발견 순간의 짧은 대사(120자 이내). 발견 묘사만, 추론/판정 금지.
+                - revealed_truth, discovery_script에서는 피해자/용의자 실명(예: "박서연", "김민준")을 직접 언급하지 않는다. ("누군가", "어떤 인물" 등으로 익명화)
 
                 외모 정보(appearance 필드):
                 - hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
@@ -273,6 +278,8 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
             return issues;
         }
 
+        Set<String> personNames = collectPersonNames(root);
+
         JsonNode victim = root.path("victim");
         if (!victim.isObject()) {
             issues.add("victim must be an object");
@@ -297,7 +304,16 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 if (assistantComment.isEmpty()) {
                     issues.add("clue.assistant_comment is missing (" + name + ")");
                 } else {
-                    validateUiText(issues, "clue.assistant_comment", assistantComment, name, true, 60);
+                    validateUiText(
+                            issues,
+                            personNames,
+                            "clue.assistant_comment",
+                            assistantComment,
+                            name,
+                            true,
+                            true,
+                            60
+                    );
                 }
 
                 JsonNode clueDetail = clue.path("clue_detail_json");
@@ -308,14 +324,32 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                     if (revealedTruth.isEmpty()) {
                         issues.add("clue.clue_detail_json.revealed_truth is missing (" + name + ")");
                     } else {
-                        validateUiText(issues, "clue.clue_detail_json.revealed_truth", revealedTruth, name, false, 120);
+                        validateUiText(
+                                issues,
+                                personNames,
+                                "clue.clue_detail_json.revealed_truth",
+                                revealedTruth,
+                                name,
+                                false,
+                                false,
+                                120
+                        );
                     }
 
                     String discoveryScript = clueDetail.path("discovery_script").asText("").trim();
                     if (discoveryScript.isEmpty()) {
                         issues.add("clue.clue_detail_json.discovery_script is missing (" + name + ")");
                     } else {
-                        validateUiText(issues, "clue.clue_detail_json.discovery_script", discoveryScript, name, false, 120);
+                        validateUiText(
+                                issues,
+                                personNames,
+                                "clue.clue_detail_json.discovery_script",
+                                discoveryScript,
+                                name,
+                                false,
+                                false,
+                                120
+                        );
                     }
                 }
             }
@@ -372,14 +406,22 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
 
     private static void validateUiText(
             List<String> issues,
+            Set<String> personNames,
             String field,
             String text,
             String clueName,
             boolean requireAssistantTone,
+            boolean allowPersonNameMention,
             int maxLen
     ) {
         if (text.length() > maxLen) {
             issues.add(field + " must be <= " + maxLen + " chars (" + clueName + ")");
+        }
+        if (containsAnyToken(text, BANNED_UI_TOKENS) || containsAnyToken(text, BANNED_EMOTION_TOKENS)) {
+            issues.add(field + " must avoid banned tokens (" + clueName + ")");
+        }
+        if (!allowPersonNameMention && containsAnyPersonName(text, personNames)) {
+            issues.add(field + " must not mention person names (" + clueName + ")");
         }
         if (requireAssistantTone) {
             if (!startsWithDetectiveAddress(text)) {
@@ -389,6 +431,72 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 issues.add(field + " must end politely (~요/~니다) (" + clueName + ")");
             }
         }
+    }
+
+    private static final String[] BANNED_UI_TOKENS = {
+            "범인", "용의자", "알리바이", "흉기", "살해", "살인", "범행", "결정적", "반박", "의미", "거짓", "거짓말", "모순"
+    };
+
+    private static final String[] BANNED_EMOTION_TOKENS = {
+            "분노", "억울"
+    };
+
+    private static Set<String> collectPersonNames(JsonNode root) {
+        Set<String> names = new HashSet<>();
+        if (root == null) {
+            return names;
+        }
+
+        JsonNode victim = root.path("victim");
+        String victimName = victim.path("name").asText("").trim();
+        if (!victimName.isEmpty()) {
+            names.add(victimName);
+        }
+
+        JsonNode suspects = root.path("suspects");
+        if (suspects != null && suspects.isArray()) {
+            for (JsonNode suspect : suspects) {
+                String suspectName = suspect.path("name").asText("").trim();
+                if (!suspectName.isEmpty()) {
+                    names.add(suspectName);
+                }
+            }
+        }
+
+        return names;
+    }
+
+    private static boolean containsAnyPersonName(String text, Set<String> personNames) {
+        if (text == null || text.isBlank() || personNames == null || personNames.isEmpty()) {
+            return false;
+        }
+        String compact = text.replace(" ", "");
+        for (String name : personNames) {
+            if (name == null) {
+                continue;
+            }
+            String token = name.trim();
+            if (token.isEmpty()) {
+                continue;
+            }
+            if (compact.contains(token.replace(" ", ""))) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static boolean containsAnyToken(String text, String[] tokens) {
+        if (text == null) {
+            return false;
+        }
+        String compact = text.replace(" ", "");
+        for (String token : tokens) {
+            if (compact.contains(token)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static boolean hasPoliteEnding(String text) {
