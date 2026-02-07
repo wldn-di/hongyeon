@@ -2,8 +2,6 @@ package com.ssafy.s14p11a707.game.v2.service;
 
 import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.dto.SuspectChatResponse;
-import com.ssafy.s14p11a707.game.entity.ChatMessage;
-import com.ssafy.s14p11a707.game.repository.ChatMessageRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -11,8 +9,6 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -26,7 +22,7 @@ public class SuspectChatV2Service {
     private final SuspectChatV2PromptBuilder promptBuilder;
     private final SuspectChatV2AiClient aiClient;
     private final SuspectChatV2PersistService persistService;
-    private final ChatMessageRepository chatMessageRepository;
+    private final SuspectChatV2HistoryService historyService;
     @Qualifier("gmsChatClient")
     private final ChatClient gmsChatClient;
     private final ChatConcurrencyGate chatGate;
@@ -104,7 +100,6 @@ public class SuspectChatV2Service {
         try {
             // 질문 재작성: 맥락 의존적인 질문을 명확한 질문으로 변환
             String rewrittenUserMessage = rewriteQuestionWithContext(
-                    context.conversationId(),
                     context.userMessage(),
                     context.sessionId(),
                     context.suspectId()
@@ -177,20 +172,32 @@ public class SuspectChatV2Service {
      * 맥락 의존적인 질문을 명확한 질문으로 재작성
      * 대화 기록을 바탕으로 "그때", "그거", "얘" 등 맥락 의존적인 표현을 구체적인 정보로 변환
      */
-    private String rewriteQuestionWithContext(String conversationId, String userMessage, long sessionId, long suspectId) {
+    private String rewriteQuestionWithContext(String userMessage, long sessionId, long suspectId) {
         // 단서 제시 메시지는 재작성하지 않음
         if (userMessage.startsWith("[단서 제시:") || userMessage.startsWith("[단서 ID")) {
             return userMessage;
         }
 
         // 첫 대화이거나 너무 짧은 메시지는 재작성하지 않음
-        List<ChatMessage> history = new ArrayList<>(
-                chatMessageRepository.findTop5BySessionIdAndSuspectIdOrderByCreatedAtDesc(sessionId, suspectId)
-        );
-        if (history.isEmpty() || userMessage.length() < 5) {
+        if (userMessage.length() < 5) {
             return userMessage;
         }
-        Collections.reverse(history);
+
+        List<SuspectChatV2HistoryService.HistoryMessage> history;
+        try {
+            history = historyService.findRecentMessages(sessionId, suspectId);
+        } catch (Exception e) {
+            log.warn(
+                    "suspectChatV2 rewrite history load failed sessionId={} suspectId={} cause={}",
+                    sessionId,
+                    suspectId,
+                    e.getMessage()
+            );
+            return userMessage;
+        }
+        if (history.isEmpty()) {
+            return userMessage;
+        }
 
         // 맥락 의존적인 표현 패턴 확인
         boolean hasContextDependentRef = userMessage.matches(".*(그때|그거|그건|얘|걔|걔는|거기|거긴|그 사람|그분|그때문에).*");
@@ -200,9 +207,9 @@ public class SuspectChatV2Service {
 
         // 이전 대화 기록을 텍스트로 변환
         StringBuilder contextBuilder = new StringBuilder();
-        for (ChatMessage msg : history) {
-            String role = "user".equals(msg.getRole()) ? "수사관" : "용의자";
-            contextBuilder.append(String.format("%s: %s\n", role, msg.getContent()));
+        for (SuspectChatV2HistoryService.HistoryMessage msg : history) {
+            String role = "user".equals(msg.role()) ? "수사관" : "용의자";
+            contextBuilder.append(String.format("%s: %s\n", role, msg.content()));
         }
 
         // 질문 재작성을 위한 프롬프트
