@@ -63,8 +63,8 @@ public class RefineNode implements ScenarioV2Node {
                 state.getScenarioId(),
                 EventType.REFINE,
                 55,
-                "허점을 보강하고 있어요… (재검토 %d/3)".formatted(nextRetry),
-                Map.of("retry", nextRetry, "maxRetry", 3)
+                "허점을 보강하고 있어요… (재검토 %d/2)".formatted(nextRetry),
+                Map.of("retry", nextRetry, "maxRetry", 2)
         ));
 
         String system = """

@@ -68,16 +68,16 @@ spring:
   ai:
     google:
       genai:
-        api-key: ${SPRING_AI_GOOGLE_GENAI_API_KEY:}
+        api-key: ${SPRING_AI_GOOGLE_GENAI_API_KEY:${GMS_KEY:}}
         chat:
           options:
             model: gemini-2.5-flash
         embedding:
           # embedding 커넥션은 별도 prefix(spring.ai.google.genai.embedding.*)를 사용하므로 api-key를 함께 지정
-          api-key: ${SPRING_AI_GOOGLE_GENAI_API_KEY:}
+          api-key: ${SPRING_AI_GOOGLE_GENAI_API_KEY:${GMS_KEY:}}
           options:
             model: gemini-embedding-001
-        base-url: https://generativelanguage.googleapis.com
+        base-url: ${SPRING_AI_GOOGLE_GENAI_BASE_URL:${GMS_GENAI_URL:https://gms.ssafy.io/gmsapi/generativelanguage.googleapis.com}}
 
     openai:
       api-key: ${GMS_KEY}
@@ -146,7 +146,7 @@ app:
         credentials-uri: ${APP_VERTEX_B_CREDENTIALS_URI:${APP_VERTEX_CREDENTIALS_URI:}}
         access-token: ${APP_VERTEX_B_ACCESS_TOKEN:${APP_VERTEX_ACCESS_TOKEN:}}
   concurrency:
-    max-scenario-generation: ${APP_CONCURRENCY_MAX_SCENARIO:10}
+    max-scenario-generation: ${APP_CONCURRENCY_MAX_SCENARIO:6}
     max-chat-concurrent: ${APP_CONCURRENCY_MAX_CHAT:50}
     chat-timeout-seconds: ${APP_CONCURRENCY_CHAT_TIMEOUT:30}
   auth:

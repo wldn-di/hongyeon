@@ -14,8 +14,10 @@ public class SuspectChatV2PromptBuilder {
                    - 예외 없이 질문의 범위를 벗어나는 정보를 제공하지 마세요.
                    - 잘못된 예시: 질문 "직업이 뭐죠?" → 답변 "케빈과의 관계는 고용주입니다. 제 직업은 클럽 운영자입니다." (X)
                    - 올바른 예시: 질문 "직업이 뭐죠?" → 답변 "제 직업은 댄스 클럽 운영자입니다." (O)
-                1. 소유권 인정과 기만:
-                   - 본인 소유가 확실한 물건이 제시되면 부인하지 마세요. "제 것이 맞네요"라고 인정하되, 그것이 왜 의심스러운 곳에 있는지 '사건과 무관한 가짜 서사'를 즉흥적으로 만드세요.
+                1. 소유권 대응 (중요):
+                   - 아래 "현재 제시 단서 메타(서버 판정)"의 ownership_status를 최우선 규칙으로 따르세요.
+                   - ownership_status가 NOT_OWNED_BY_CURRENT_SUSPECT이면 절대 자신의 것이라고 말하지 마세요.
+                   - ownership_status가 OWNED_BY_CURRENT_SUSPECT일 때만 소유를 인정할 수 있습니다.
                 2. 중립적 표현 유지 (중요):
                    - 답변 중 특정인을 범인으로 단정 짓거나(예: "A가 범인이에요"), 특정 물건을 살해 도구로 확정(예: "이건 살인 흉기네요")하지 마세요.
                    - 대신 "누군가의 흔적 같다", "날카로운 물체다" 등 객관적인 현상 위주로 말하며 플레이어의 판단을 유도하세요.
@@ -28,6 +30,7 @@ public class SuspectChatV2PromptBuilder {
                    - 제시한 "usedClueId" 가 "weakness_clue" 의 "id" 와 일치하면 "alibi_progression" 의 state를 "level1_lie" 에서 "level2_weak" 로 변경하십시오.
 
                 """;
+        String clueOwnershipRule = buildClueOwnershipRule(context);
 
         String behaviorGuideline;
         if (context.suspectCulprit()) {
@@ -89,6 +92,7 @@ public class SuspectChatV2PromptBuilder {
                         ## 행동 및 심문 지침
                         %s
                         %s
+                        %s
 
                         %s
 
@@ -126,8 +130,62 @@ public class SuspectChatV2PromptBuilder {
                 context.suspectMotive(),
                 behaviorGuideline,
                 commonClueRule,
+                clueOwnershipRule,
                 interrogationProtocol
         );
+    }
+
+    private String buildClueOwnershipRule(SuspectChatV2Context context) {
+        if (context.usedClueId() == null) {
+            return """
+                    ## 현재 제시 단서 메타(서버 판정)
+                    - 이 턴은 단서 제시가 없습니다.
+                    """;
+        }
+
+        String status = safe(context.usedClueOwnershipStatus());
+        String clueName = safe(context.usedClueName());
+        String clueDescription = safe(context.usedClueDescription());
+        String reason = safe(context.usedClueOwnershipReason());
+
+        String hardRule = switch (status) {
+            case "OWNED_BY_CURRENT_SUSPECT" -> """
+                    - HARD RULE: 이 단서는 당신과 직접 연관된 단서입니다. 소유를 인정할 수 있습니다.
+                    - 인정 후에는 사건과 무관한 맥락(빌려줌/분실/이전 방문)으로 방어하세요.
+                    """;
+            case "NOT_OWNED_BY_CURRENT_SUSPECT" -> """
+                    - HARD RULE: 이 단서는 당신 소유가 아닙니다. 절대 "제 것"이라고 답하지 마세요.
+                    - 반드시 소유를 부인하고, 출처 불명/조작 가능성/타인 물건 가능성을 말하세요.
+                    """;
+            case "UNKNOWN" -> """
+                    - HARD RULE: 소유 정보가 불명확합니다. 소유를 단정하지 말고 기본적으로 부인하세요.
+                    - "제 것이라고 단정할 수 없다"는 톤으로 방어하세요.
+                    """;
+            default -> """
+                    - HARD RULE: 단서 제시가 없으므로 소유권 단정 발언을 자제하세요.
+                    """;
+        };
+
+        return String.format("""
+                ## 현재 제시 단서 메타(서버 판정)
+                - usedClueId: %d
+                - clue_name: %s
+                - clue_description: %s
+                - ownership_status: %s
+                - ownership_reason: %s
+                %s
+                """,
+                context.usedClueId(),
+                clueName,
+                clueDescription,
+                status,
+                reason,
+                hardRule
+        );
+    }
+
+    private String safe(String value) {
+        return value == null ? "" : value;
     }
 }
 

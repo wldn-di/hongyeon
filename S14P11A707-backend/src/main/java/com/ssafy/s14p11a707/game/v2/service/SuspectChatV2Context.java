@@ -21,6 +21,10 @@ public record SuspectChatV2Context(
         int promptInterrogationLevel,
         String userMessage,
         Long usedClueId,
+        String usedClueName,
+        String usedClueDescription,
+        String usedClueOwnershipStatus,
+        String usedClueOwnershipReason,
         int currentHealth
 ) {
 }

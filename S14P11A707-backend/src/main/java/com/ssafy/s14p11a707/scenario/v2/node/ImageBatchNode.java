@@ -62,12 +62,11 @@ public class ImageBatchNode implements ScenarioV2Node {
      * 이미지 작업을 병렬 실행하고 URL을 도메인에 반영
      * <p>
      * 상태에 이미지 작업이 존재하지 않으면 아무 작업도 수행하지 않고 상태를 그대로 반환한다.
-     * 이미지 생성/업로드 중 예외가 발생하면 상위 작업에서 전체 실패로 처리된다.
+     * 개별 이미지 생성/업로드 실패는 로그/진행 이벤트로 기록하고 스킵하며, 가능한 결과만 반영한다.
      * </p>
      *
      * @param state 현재 상태
      * @return 이미지 URL이 반영된 상태
-     * @throws RuntimeException 이미지 생성/업로드/URL 반영 과정에서 문제가 발생했을 때
      */
     @Override
     public ScenarioV2State execute(ScenarioV2State state) {
@@ -81,6 +80,8 @@ public class ImageBatchNode implements ScenarioV2Node {
         log.info("[v2] ImageBatchNode execute. scenarioId={}, jobs={}", state.getScenarioId(), total);
 
         AtomicInteger done = new AtomicInteger(0);
+        AtomicInteger success = new AtomicInteger(0);
+        AtomicInteger failed = new AtomicInteger(0);
         Map<String, String> urlByKey = new ConcurrentHashMap<>();
 
         CompletableFuture<?>[] futures = jobs.stream()
@@ -93,32 +94,65 @@ public class ImageBatchNode implements ScenarioV2Node {
                             job.objectKey()
                     );
 
-                    String url = runJobWithRetry(job);
-                    urlByKey.put(key(job.target(), job.targetId()), url);
-                    log.info(
-                            "[v2] Image job finished. scenarioId={}, target={}, targetId={}, url={}",
-                            state.getScenarioId(),
-                            job.target(),
-                            job.targetId(),
-                            url
-                    );
-
-                    int nowDone = done.incrementAndGet();
-                    int progress = 65 + (int) Math.floor(30.0 * nowDone / total);
-                    eventPublisher.publish(new ScenarioV2EventMessage(
-                            state.getUserId(),
-                            state.getScenarioId(),
-                            EventType.IMAGE_PROGRESS,
-                            progress,
-                            "증거 사진을 확보 중… (%d/%d)".formatted(nowDone, total),
-                            Map.of("done", nowDone, "total", total)
-                    ));
+                    try {
+                        String url = runJobWithRetry(job);
+                        urlByKey.put(key(job.target(), job.targetId()), url);
+                        success.incrementAndGet();
+                        log.info(
+                                "[v2] Image job finished. scenarioId={}, target={}, targetId={}, url={}",
+                                state.getScenarioId(),
+                                job.target(),
+                                job.targetId(),
+                                url
+                        );
+                    } catch (Exception e) {
+                        failed.incrementAndGet();
+                        log.error(
+                                "[v2] Image job skipped after retries. scenarioId={}, target={}, targetId={}, objectKey={}, error={}",
+                                state.getScenarioId(),
+                                job.target(),
+                                job.targetId(),
+                                job.objectKey(),
+                                e.getMessage(),
+                                e
+                        );
+                    } finally {
+                        int nowDone = done.incrementAndGet();
+                        int progress = 65 + (int) Math.floor(30.0 * nowDone / total);
+                        eventPublisher.publish(new ScenarioV2EventMessage(
+                                state.getUserId(),
+                                state.getScenarioId(),
+                                EventType.IMAGE_PROGRESS,
+                                progress,
+                                "증거 사진을 확보 중… (%d/%d)".formatted(nowDone, total),
+                                Map.of(
+                                        "done", nowDone,
+                                        "total", total,
+                                        "success", success.get(),
+                                        "failed", failed.get()
+                                )
+                        ));
+                    }
                 }, imageJobExecutor))
                 .toArray(CompletableFuture[]::new);
 
         CompletableFuture.allOf(futures).join();
 
-        log.info("[v2] ImageBatchNode uploads finished. scenarioId={}, uploadedKeys={}", state.getScenarioId(), urlByKey.size());
+        log.info(
+                "[v2] ImageBatchNode uploads finished. scenarioId={}, uploadedKeys={}, success={}, failed={}, total={}",
+                state.getScenarioId(),
+                urlByKey.size(),
+                success.get(),
+                failed.get(),
+                total
+        );
+        if (urlByKey.isEmpty()) {
+            log.warn(
+                    "[v2] ImageBatchNode completed with no uploaded images. scenarioId={}, totalJobs={}",
+                    state.getScenarioId(),
+                    total
+            );
+        }
         imageUrlUpdater.applyImageUrls(state.getScenarioId(), urlByKey);
         log.info("[v2] ImageBatchNode url apply finished. scenarioId={}", state.getScenarioId());
         return state;
@@ -133,6 +167,17 @@ public class ImageBatchNode implements ScenarioV2Node {
                 byte[] png = imageGenerator.generatePng(job.prompt());
                 return objectStorageService.uploadPng(job.objectKey(), png);
             } catch (Exception e) {
+                if (isNonRetryableImagePayloadError(e)) {
+                    log.warn(
+                            "[v2] Image job failed (non-retryable payload). target={}, targetId={}, objectKey={}, error={}",
+                            job.target(),
+                            job.targetId(),
+                            job.objectKey(),
+                            e.getMessage()
+                    );
+                    throw e;
+                }
+
                 if (attempt == maxAttempts - 1) {
                     log.error(
                             "[v2] Image job failed (final). target={}, targetId={}, objectKey={}",
@@ -165,6 +210,20 @@ public class ImageBatchNode implements ScenarioV2Node {
         }
 
         throw new IllegalStateException("unreachable");
+    }
+
+    private boolean isNonRetryableImagePayloadError(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            String message = t.getMessage();
+            if (message == null || message.isBlank()) {
+                continue;
+            }
+            String normalized = message.toLowerCase();
+            if (normalized.contains("image bytes missing") || normalized.contains("no images returned")) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private Long resolveRetryAfterMillis(Throwable throwable) {

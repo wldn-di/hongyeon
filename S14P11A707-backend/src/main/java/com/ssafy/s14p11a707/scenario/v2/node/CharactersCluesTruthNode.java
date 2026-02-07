@@ -212,7 +212,7 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
 
         String lastCleaned = null;
         List<String> lastIssues = List.of();
-        for (int attempt = 1; attempt <= 3; attempt++) {
+        for (int attempt = 1; attempt <= 2; attempt++) {
             String attemptSystem = system;
             if (attempt > 1) {
                 attemptSystem = system + """

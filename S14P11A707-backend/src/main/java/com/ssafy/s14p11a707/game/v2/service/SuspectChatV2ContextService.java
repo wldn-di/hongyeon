@@ -18,6 +18,7 @@ import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
 import com.ssafy.s14p11a707.scenario.repository.VictimRepository;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import static com.ssafy.s14p11a707.game.entity.GameSession.Status.PLAYING;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class SuspectChatV2ContextService {
 
@@ -59,9 +61,16 @@ public class SuspectChatV2ContextService {
                 ? aiConfig.get("personality").asText()
                 : "내성적이고 감정 기복이 심함";
 
-        String speechStyle = aiConfig != null && aiConfig.has("speechStyle")
-                ? aiConfig.get("speechStyle").asText()
-                : "정중하지만 불안한 말투";
+        String speechStyle = "정중하지만 불안한 말투";
+        if (aiConfig != null) {
+            if (aiConfig.has("speechStyle")) {
+                speechStyle = aiConfig.get("speechStyle").asText();
+            } else if (aiConfig.has("speech_style")) {
+                speechStyle = aiConfig.get("speech_style").asText();
+            } else if (aiConfig.path("deflection_strategy").has("dialogue_hint")) {
+                speechStyle = aiConfig.path("deflection_strategy").path("dialogue_hint").asText(speechStyle);
+            }
+        }
 
         String level1Lie = "알리바이: 사건 시간에 다른 장소에 있었습니다.";
         String level2Weak = "알리바이가 깨지며 당황하는 상태입니다.";
@@ -100,9 +109,26 @@ public class SuspectChatV2ContextService {
         }
 
         String userMessage = request == null || request.message() == null ? "" : request.message().trim();
+        String usedClueName = null;
+        String usedClueDescription = null;
+        String usedClueOwnershipStatus = ClueOwnershipStatus.NONE.name();
+        String usedClueOwnershipReason = "no clue presented";
         if (usedClueId != null) {
             Clue clue = clueRepository.findById(usedClueId).orElse(null);
             if (clue != null) {
+                usedClueName = clue.getName();
+                usedClueDescription = clue.getDescription();
+                ClueOwnershipAssessment ownership = assessClueOwnership(clue, suspect, weaknessClueId);
+                usedClueOwnershipStatus = ownership.status().name();
+                usedClueOwnershipReason = ownership.reason();
+                log.info(
+                        "suspectChatV2 clue ownership assessed. sessionId={} suspectId={} clueId={} status={} reason={}",
+                        sessionId,
+                        suspectId,
+                        clue.getId(),
+                        usedClueOwnershipStatus,
+                        usedClueOwnershipReason
+                );
                 userMessage = String.format(
                         "[단서 제시: %s - %s] %s",
                         clue.getName(),
@@ -110,6 +136,8 @@ public class SuspectChatV2ContextService {
                         userMessage
                 );
             } else {
+                usedClueOwnershipStatus = ClueOwnershipStatus.UNKNOWN.name();
+                usedClueOwnershipReason = "used clue not found";
                 userMessage = String.format("[단서 ID %d를 제시하며] %s", usedClueId, userMessage);
             }
         }
@@ -137,6 +165,10 @@ public class SuspectChatV2ContextService {
                 promptInterrogationLevel,
                 userMessage,
                 usedClueId,
+                usedClueName,
+                usedClueDescription,
+                usedClueOwnershipStatus,
+                usedClueOwnershipReason,
                 currentHealth
         );
     }
@@ -245,6 +277,125 @@ public class SuspectChatV2ContextService {
         }
 
         return contextBuilder.toString();
+    }
+
+    private ClueOwnershipAssessment assessClueOwnership(Clue clue, Suspect suspect, Long weaknessClueId) {
+        if (clue == null || suspect == null) {
+            return new ClueOwnershipAssessment(ClueOwnershipStatus.UNKNOWN, "clue or suspect missing");
+        }
+
+        if (weaknessClueId != null && weaknessClueId.equals(clue.getId())) {
+            return new ClueOwnershipAssessment(
+                    ClueOwnershipStatus.OWNED_BY_CURRENT_SUSPECT,
+                    "used clue matches suspect weakness_clue.id"
+            );
+        }
+
+        JsonNode detail = clue.getClueDetailJson();
+        SuspectRefEvaluation related = evaluateRelatedSuspects(detail == null ? null : detail.path("related_suspect_ids"), suspect);
+        if (related.hasAnyReference()) {
+            if (related.matchesCurrentSuspect()) {
+                return new ClueOwnershipAssessment(
+                        ClueOwnershipStatus.OWNED_BY_CURRENT_SUSPECT,
+                        "clue_detail_json.related_suspect_ids includes current suspect"
+                );
+            }
+            return new ClueOwnershipAssessment(
+                    ClueOwnershipStatus.NOT_OWNED_BY_CURRENT_SUSPECT,
+                    "clue_detail_json.related_suspect_ids points to other suspect"
+            );
+        }
+
+        SuspectRefEvaluation weaknessFor = evaluateSingleSuspect(detail == null ? null : detail.path("is_weakness_clue_for"), suspect);
+        if (weaknessFor.hasAnyReference()) {
+            if (weaknessFor.matchesCurrentSuspect()) {
+                return new ClueOwnershipAssessment(
+                        ClueOwnershipStatus.OWNED_BY_CURRENT_SUSPECT,
+                        "clue_detail_json.is_weakness_clue_for points to current suspect"
+                );
+            }
+            return new ClueOwnershipAssessment(
+                    ClueOwnershipStatus.NOT_OWNED_BY_CURRENT_SUSPECT,
+                    "clue_detail_json.is_weakness_clue_for points to other suspect"
+            );
+        }
+
+        return new ClueOwnershipAssessment(
+                ClueOwnershipStatus.UNKNOWN,
+                "no ownership markers in clue_detail_json"
+        );
+    }
+
+    private SuspectRefEvaluation evaluateRelatedSuspects(JsonNode node, Suspect suspect) {
+        if (node == null || node.isNull() || node.isMissingNode() || !node.isArray()) {
+            return SuspectRefEvaluation.NONE;
+        }
+
+        boolean hasAny = false;
+        boolean matchesCurrent = false;
+        for (JsonNode item : node) {
+            Long value = readLong(item);
+            if (value == null || value < 0) {
+                continue;
+            }
+            hasAny = true;
+            if (matchesCurrentSuspect(value, suspect)) {
+                matchesCurrent = true;
+            }
+        }
+        return new SuspectRefEvaluation(hasAny, matchesCurrent);
+    }
+
+    private SuspectRefEvaluation evaluateSingleSuspect(JsonNode node, Suspect suspect) {
+        Long value = readLong(node);
+        if (value == null || value < 0) {
+            return SuspectRefEvaluation.NONE;
+        }
+        return new SuspectRefEvaluation(true, matchesCurrentSuspect(value, suspect));
+    }
+
+    private boolean matchesCurrentSuspect(long ref, Suspect suspect) {
+        if (ref == suspect.getId()) {
+            return true;
+        }
+        Integer displayOrder = suspect.getDisplayOrder();
+        if (displayOrder == null || displayOrder <= 0) {
+            return false;
+        }
+
+        // Some generated JSONs refer to suspect by display-order(1-based) or index(0-based).
+        return ref == displayOrder || ref == (displayOrder - 1L);
+    }
+
+    private Long readLong(JsonNode node) {
+        if (node == null || node.isNull() || node.isMissingNode()) {
+            return null;
+        }
+        if (node.canConvertToLong()) {
+            return node.asLong();
+        }
+        if (node.isTextual()) {
+            String text = node.asText("").trim();
+            if (!text.matches("^[0-9]+$")) {
+                return null;
+            }
+            return Long.parseLong(text);
+        }
+        return null;
+    }
+
+    private enum ClueOwnershipStatus {
+        NONE,
+        OWNED_BY_CURRENT_SUSPECT,
+        NOT_OWNED_BY_CURRENT_SUSPECT,
+        UNKNOWN
+    }
+
+    private record ClueOwnershipAssessment(ClueOwnershipStatus status, String reason) {
+    }
+
+    private record SuspectRefEvaluation(boolean hasAnyReference, boolean matchesCurrentSuspect) {
+        private static final SuspectRefEvaluation NONE = new SuspectRefEvaluation(false, false);
     }
 }
 

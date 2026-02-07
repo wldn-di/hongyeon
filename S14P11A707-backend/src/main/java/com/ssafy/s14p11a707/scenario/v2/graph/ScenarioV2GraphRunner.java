@@ -53,8 +53,8 @@ import org.springframework.stereotype.Component;
 @RequiredArgsConstructor
 public class ScenarioV2GraphRunner {
 
-    private static final int PASS_SCORE = 85;
-    private static final int MAX_RETRY = 3;
+    private static final int PASS_SCORE = 82;
+    private static final int MAX_RETRY = 2;
 
     private final TimelineNode timelineNode;
     private final ScenarioBaseNode scenarioBaseNode;

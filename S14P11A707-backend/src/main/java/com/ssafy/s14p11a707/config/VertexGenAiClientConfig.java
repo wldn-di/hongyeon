@@ -163,7 +163,7 @@ public class VertexGenAiClientConfig {
         GoogleGenAiChatOptions.Builder builder = GoogleGenAiChatOptions.builder()
                 .model(model)
                 .temperature(0.7)
-                .maxOutputTokens(30000);
+                .maxOutputTokens(14000);
 
         if (StringUtils.hasText(properties.thinkingLevel())) {
             String rawThinkingLevel = properties.thinkingLevel().trim();
