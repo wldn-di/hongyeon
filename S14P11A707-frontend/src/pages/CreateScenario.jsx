@@ -8,6 +8,7 @@ import { useCreateScenario } from "@/features/scenarios/hooks/useCreateScenario"
 import { useScenarioGeneration } from "@/features/scenarios/generation/ScenarioGenerationContext";
 import ScenarioGenerationStatusPanel from "@/components/ui/ScenarioGenerationStatusPanel";
 import { useAuth } from "@/contexts/AuthContext";
+import { FEATURE_FLAGS } from "@/app/featureFlags";
 
 // 장르 옵션
 const genreOptions = [
@@ -26,6 +27,31 @@ export default function CreateScenario() {
   const authLoading = state.loading;
   const { generation } = useScenarioGeneration();
   const { createScenario, isGenerating } = useCreateScenario();
+
+  if (FEATURE_FLAGS.disableScenarioCreation) {
+    return (
+      <div className="min-h-screen flex flex-col bg-background">
+        <main className="flex-1 py-12">
+          <div className="container max-w-2xl">
+            <Link href="/scenarios">
+              <button className="flex items-center gap-2 text-muted-foreground hover:text-foreground mb-6 transition-colors">
+                <ArrowLeft className="w-4 h-4" />
+                시나리오 목록으로
+              </button>
+            </Link>
+
+            <div className="bg-card/40 border border-border rounded-xl p-10 text-center">
+              <p className="text-xl font-bold mb-2">시나리오 생성 점검중</p>
+              <p className="text-muted-foreground mb-6">배포 작업으로 잠시 시나리오 생성이 비활성화되어 있습니다.</p>
+              <Button variant="outline" onClick={() => setLocation("/scenarios")}>
+                목록으로 돌아가기
+              </Button>
+            </div>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   const [formData, setFormData] = useState({
     title: "",

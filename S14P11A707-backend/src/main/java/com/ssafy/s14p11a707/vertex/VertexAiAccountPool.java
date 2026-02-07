@@ -1,5 +1,6 @@
 package com.ssafy.s14p11a707.vertex;
 
+import com.google.common.util.concurrent.RateLimiter;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import lombok.extern.slf4j.Slf4j;
@@ -9,18 +10,37 @@ public class VertexAiAccountPool {
 
     private final List<VertexAiAccount> accounts;
     private final AtomicInteger index = new AtomicInteger(0);
+    private final RateLimiter rateLimiter;
 
-    public VertexAiAccountPool(List<VertexAiAccount> accounts) {
+    public VertexAiAccountPool(List<VertexAiAccount> accounts, int rpm) {
         if (accounts == null || accounts.isEmpty()) {
             throw new IllegalArgumentException("VertexAiAccountPool requires at least one account");
         }
         this.accounts = List.copyOf(accounts);
+
+        if (rpm > 0) {
+            double permitsPerSecond = rpm / 60.0;
+            this.rateLimiter = RateLimiter.create(permitsPerSecond);
+            log.info("[VertexPool] rate limiter configured. rpm={}, permitsPerSecond={}",
+                    rpm, permitsPerSecond);
+        } else {
+            this.rateLimiter = null;
+            log.info("[VertexPool] rate limiter disabled.");
+        }
+
         log.info("[VertexPool] initialized with {} account(s): {}",
                 accounts.size(),
                 accounts.stream().map(VertexAiAccount::getName).toList());
     }
 
     public String call(String systemMessage, String userMessage) {
+        if (rateLimiter != null) {
+            double waited = rateLimiter.acquire();
+            if (waited > 0.01) {
+                log.info("[VertexPool] rate limiter waited {}s", String.format("%.2f", waited));
+            }
+        }
+
         VertexAiAccount account = nextActiveAccount();
         String reqId = "REQ-" + System.nanoTime();
 

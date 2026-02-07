@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/Button'
 import { useAuth } from '@/contexts/AuthContext'
 import { cn } from '@/lib/utils'
 import { isVisibleInAll } from '@/features/scenarios/api/scenarioMappers'
+import { FEATURE_FLAGS } from '@/app/featureFlags'
 
 /**
  * 시나리오 목록 페이지
@@ -230,9 +231,15 @@ export default function Scenarios() {
             <div className="bg-card/40 border border-border rounded-xl p-10 text-center">
               <p className="text-xl font-bold mb-2">내 시나리오가 아직 없어요</p>
               <p className="text-muted-foreground mb-6">첫 번째 사건을 만들어 볼까요?</p>
-              <Link href="/create-scenario">
-                <Button variant="neon">+ 시나리오 만들기</Button>
-              </Link>
+              {FEATURE_FLAGS.disableScenarioCreation ? (
+                <Button variant="neon" disabled>
+                  + 시나리오 생성 점검중
+                </Button>
+              ) : (
+                <Link href="/create-scenario">
+                  <Button variant="neon">+ 시나리오 만들기</Button>
+                </Link>
+              )}
             </div>
           ) : visibleScenarios.length === 0 ? (
             <div className="bg-card/40 border border-border rounded-xl p-10 text-center">

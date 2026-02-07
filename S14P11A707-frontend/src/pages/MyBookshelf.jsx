@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useLocation } from 'wouter'
 
 import { Button } from '@/components/ui/Button'
@@ -333,6 +333,8 @@ function BookShelf({ books, mode, title, onViewReport, onReplay }) {
 export default function MyBookshelf() {
   const { state, actions } = useAuth()
   const user = state.user
+  const authLoading = state.loading
+  const gateAutoOpenedRef = useRef(false)
 
   const [, setLocation] = useLocation()
   const [reportModalOpen, setReportModalOpen] = useState(false)
@@ -355,7 +357,15 @@ export default function MyBookshelf() {
     loading,
     error,
   } = useBookshelf({ enabled: !!user })
-  const authLoading = state.loading
+
+  useEffect(() => {
+    if (gateAutoOpenedRef.current) return
+    if (authLoading) return
+    if (user) return
+
+    gateAutoOpenedRef.current = true
+    actions.openLoginGate(null, { redirectTo: '/my-bookshelf' })
+  }, [actions, authLoading, user])
 
   const handleViewReport = useCallback(async (book) => {
     if (!book?.sessionId) return
@@ -410,7 +420,10 @@ export default function MyBookshelf() {
             <div className="bg-card/40 border border-border rounded-xl p-10 text-center mb-6">
               <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
               <p className="text-muted-foreground mb-6">내 수사록을 보려면 Google 로그인을 해주세요.</p>
-              <Button variant="neon" onClick={() => actions.login()}>
+              <Button
+                variant="neon"
+                onClick={() => actions.openLoginGate(null, { redirectTo: '/my-bookshelf' })}
+              >
                 구글 로그인
               </Button>
             </div>

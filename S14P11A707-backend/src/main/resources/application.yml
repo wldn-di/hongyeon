@@ -19,6 +19,9 @@ spring:
     driver-class-name: ${DB_DRIVER}
     username: ${DB_USERNAME}
     password: ${DB_PASSWORD}
+    hikari:
+      minimum-idle: 30
+      maximum-pool-size: 1000
 
   sql:
     init:
@@ -133,6 +136,8 @@ app:
     access-token: ${APP_VERTEX_ACCESS_TOKEN:}
     # 계정별 동시 AI 호출 제한
     semaphore-per-account: ${APP_VERTEX_SEMAPHORE_PER_ACCOUNT:4}
+    # 전체 풀 RPM (requests per minute) 제한 (0 이하이면 비활성화)
+    rpm: ${APP_VERTEX_RPM:4}
     # Multi-account pool
     accounts:
       - name: vertex-a

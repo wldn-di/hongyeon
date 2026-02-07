@@ -14,6 +14,7 @@ public record VertexAiPoolProperties(
         String thinkingLevel,
         boolean includeThoughts,
         int semaphorePerAccount,
+        int rpm,
         List<AccountEntry> accounts
 ) {
     public record AccountEntry(

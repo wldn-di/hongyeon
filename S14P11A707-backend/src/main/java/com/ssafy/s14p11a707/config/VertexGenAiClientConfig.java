@@ -155,7 +155,7 @@ public class VertexGenAiClientConfig {
             ));
         }
 
-        return new VertexAiAccountPool(accounts);
+        return new VertexAiAccountPool(accounts, properties.rpm());
     }
 
     private GoogleGenAiChatOptions buildVertexChatOptions(VertexAiPoolProperties properties) {
