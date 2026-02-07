@@ -9,7 +9,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.web.reactive.function.client.WebClientResponseException;
 
+import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 @Slf4j
@@ -110,6 +113,16 @@ public class SuspectChatV2Service {
             String fullResponse = aiClient.generate(context.conversationId(), systemMessage, rewrittenUserMessage);
             return parseAiResponse(fullResponse);
         } catch (Exception ex) {
+            WebClientResponseException webEx = findWebClientResponseException(ex);
+            if (webEx != null) {
+                log.warn(
+                        "suspectChatV2 AI 4xx/5xx sessionId={} suspectId={} status={} body={}",
+                        context.sessionId(),
+                        context.suspectId(),
+                        webEx.getStatusCode(),
+                        webEx.getResponseBodyAsString()
+                );
+            }
             log.warn(
                     "suspectChatV2 AI call failed sessionId={} suspectId={}",
                     context.sessionId(),
@@ -121,8 +134,8 @@ public class SuspectChatV2Service {
     }
 
     private AiResult parseAiResponse(String fullResponse) {
-        if (fullResponse == null) {
-            return new AiResult(true, "", false);
+        if (fullResponse == null || fullResponse.isBlank()) {
+            return new AiResult(false, AI_FAILURE_MESSAGE, false);
         }
 
         boolean keyTalk = false;
@@ -140,11 +153,24 @@ public class SuspectChatV2Service {
             log.warn("suspectChatV2 KEY_TALK metadata missing");
         }
 
+        if (reply.isBlank()) {
+            return new AiResult(false, AI_FAILURE_MESSAGE, false);
+        }
+
         return new AiResult(true, reply, keyTalk);
     }
 
     private long toMsSince(long startNs) {
         return (System.nanoTime() - startNs) / 1_000_000;
+    }
+
+    private WebClientResponseException findWebClientResponseException(Throwable throwable) {
+        for (Throwable t = throwable; t != null; t = t.getCause()) {
+            if (t instanceof WebClientResponseException webClientResponseException) {
+                return webClientResponseException;
+            }
+        }
+        return null;
     }
 
     /**
@@ -158,11 +184,13 @@ public class SuspectChatV2Service {
         }
 
         // 첫 대화이거나 너무 짧은 메시지는 재작성하지 않음
-        List<ChatMessage> history = chatMessageRepository
-                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
+        List<ChatMessage> history = new ArrayList<>(
+                chatMessageRepository.findTop5BySessionIdAndSuspectIdOrderByCreatedAtDesc(sessionId, suspectId)
+        );
         if (history.isEmpty() || userMessage.length() < 5) {
             return userMessage;
         }
+        Collections.reverse(history);
 
         // 맥락 의존적인 표현 패턴 확인
         boolean hasContextDependentRef = userMessage.matches(".*(그때|그거|그건|얘|걔|걔는|거기|거긴|그 사람|그분|그때문에).*");
@@ -172,11 +200,7 @@ public class SuspectChatV2Service {
 
         // 이전 대화 기록을 텍스트로 변환
         StringBuilder contextBuilder = new StringBuilder();
-        int recentCount = Math.min(5, history.size());
-        int startIndex = Math.max(0, history.size() - recentCount);
-
-        for (int i = startIndex; i < history.size(); i++) {
-            ChatMessage msg = history.get(i);
+        for (ChatMessage msg : history) {
             String role = "user".equals(msg.getRole()) ? "수사관" : "용의자";
             contextBuilder.append(String.format("%s: %s\n", role, msg.getContent()));
         }

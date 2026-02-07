@@ -11,8 +11,10 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Semaphore;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -20,6 +22,7 @@ import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.google.genai.GoogleGenAiChatModel;
 import org.springframework.ai.google.genai.GoogleGenAiChatOptions;
 import org.springframework.ai.google.genai.GoogleGenAiEmbeddingConnectionDetails;
+import org.springframework.ai.google.genai.common.GoogleGenAiThinkingLevel;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
@@ -77,6 +80,7 @@ public class VertexGenAiClientConfig {
     VertexAiAccountPool vertexAiAccountPool(VertexAiPoolProperties properties) throws IOException {
         int semaphorePerAccount = properties.semaphorePerAccount() > 0 ? properties.semaphorePerAccount() : 4;
         List<VertexAiPoolProperties.AccountEntry> entries = properties.accounts();
+        GoogleGenAiChatOptions defaultChatOptions = buildVertexChatOptions(properties);
 
         List<VertexAiAccount> accounts = new ArrayList<>();
 
@@ -97,11 +101,7 @@ public class VertexGenAiClientConfig {
 
                     GoogleGenAiChatModel chatModel = GoogleGenAiChatModel.builder()
                             .genAiClient(client)
-                            .defaultOptions(GoogleGenAiChatOptions.builder()
-                                    .model(DEFAULT_MODEL)
-                                    .temperature(0.7)
-                                    .maxOutputTokens(30000)
-                                    .build())
+                            .defaultOptions(defaultChatOptions)
                             .build();
                     var loggerAdvisor = SimpleLoggerAdvisor.builder()
                             .order(Ordered.LOWEST_PRECEDENCE - 1)
@@ -139,11 +139,7 @@ public class VertexGenAiClientConfig {
 
             GoogleGenAiChatModel chatModel = GoogleGenAiChatModel.builder()
                     .genAiClient(client)
-                    .defaultOptions(GoogleGenAiChatOptions.builder()
-                            .model(DEFAULT_MODEL)
-                            .temperature(0.7)
-                            .maxOutputTokens(30000)
-                            .build())
+                    .defaultOptions(defaultChatOptions)
                     .build();
             var loggerAdvisor = SimpleLoggerAdvisor.builder()
                     .order(Ordered.LOWEST_PRECEDENCE - 1)
@@ -160,6 +156,38 @@ public class VertexGenAiClientConfig {
         }
 
         return new VertexAiAccountPool(accounts);
+    }
+
+    private GoogleGenAiChatOptions buildVertexChatOptions(VertexAiPoolProperties properties) {
+        String model = StringUtils.hasText(properties.model()) ? properties.model() : DEFAULT_MODEL;
+        GoogleGenAiChatOptions.Builder builder = GoogleGenAiChatOptions.builder()
+                .model(model)
+                .temperature(0.7)
+                .maxOutputTokens(30000);
+
+        if (StringUtils.hasText(properties.thinkingLevel())) {
+            String rawThinkingLevel = properties.thinkingLevel().trim();
+            try {
+                GoogleGenAiThinkingLevel thinkingLevel =
+                        GoogleGenAiThinkingLevel.valueOf(rawThinkingLevel.toUpperCase(Locale.ROOT));
+                builder.thinkingLevel(thinkingLevel);
+                log.info("[VertexPool] thinking-level enabled: {}", thinkingLevel);
+            } catch (IllegalArgumentException e) {
+                log.warn(
+                        "[VertexPool] invalid app.vertex.thinking-level='{}'. allowed={}. Thinking disabled.",
+                        rawThinkingLevel,
+                        Arrays.toString(GoogleGenAiThinkingLevel.values())
+                );
+            }
+        }
+
+        if (properties.includeThoughts()) {
+            builder.includeThoughts(true);
+            log.info("[VertexPool] include-thoughts enabled");
+        }
+
+        log.info("[VertexPool] chat model={}", model);
+        return builder.build();
     }
 
     private GoogleCredentials resolveCredentials(String credentialsUri, String accessToken) throws IOException {

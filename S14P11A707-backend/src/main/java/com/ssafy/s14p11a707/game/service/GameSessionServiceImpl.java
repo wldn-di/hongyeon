@@ -399,7 +399,9 @@ public class GameSessionServiceImpl implements GameSessionService {
                 if (alibiProgression.has("level1_lie")) {
                     level1_lie = alibiProgression.get("level1_lie").asText();
                 }
-                if (alibiProgression.has("level2_partial")) {
+                if (alibiProgression.has("level2_weak")) {
+                    level2_weak = alibiProgression.get("level2_weak").asText();
+                } else if (alibiProgression.has("level2_partial")) { // backward compatibility
                     level2_weak = alibiProgression.get("level2_partial").asText();
                 }
             }
@@ -605,12 +607,15 @@ public class GameSessionServiceImpl implements GameSessionService {
                 .blockLast();
 
         String fullResponse = sb.toString();
+        boolean aiSuccess = fullResponse != null && !fullResponse.isBlank();
 
         // [KEY_TALK: true/false] 파싱
         boolean keyTalk = false;
-        String reply = fullResponse;
+        String reply = aiSuccess
+                ? fullResponse
+                : "용의자가 잠시 침묵합니다... 다시 한 번 말을 걸어보세요.";
 
-        if (fullResponse.contains("[KEY_TALK:")) {
+        if (aiSuccess && fullResponse.contains("[KEY_TALK:")) {
             int start = fullResponse.lastIndexOf("[KEY_TALK:");
             int end = fullResponse.indexOf("]", start);
             if (end != -1) {
@@ -620,7 +625,7 @@ public class GameSessionServiceImpl implements GameSessionService {
                 // 메타데이터 제거하고 실제 응답만 추출
                 reply = fullResponse.substring(0, start).trim();
             }
-        } else {
+        } else if (aiSuccess) {
             log.warn("KEY_TALK 메타데이터가 없습니다. 기본값 false 사용.");
         }
 
@@ -651,7 +656,9 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // 진행도 업데이트 (health 반영)
         int health = session.getHealth() != null ? session.getHealth() : 100;
-        health = Math.max(0, health - 5);
+        if (aiSuccess) {
+            health = Math.max(0, health - 5);
+        }
 
         session.setHealth(health);
         session.updateProgress();
@@ -1454,11 +1461,13 @@ public class GameSessionServiceImpl implements GameSessionService {
         }
 
         // 첫 대화이거나 너무 짧은 메시지는 재작성하지 않음
-        List<ChatMessage> history = chatMessageRepository
-                .findBySessionIdAndSuspectIdOrderByCreatedAtAsc(sessionId, suspectId);
+        List<ChatMessage> history = new ArrayList<>(
+                chatMessageRepository.findTop5BySessionIdAndSuspectIdOrderByCreatedAtDesc(sessionId, suspectId)
+        );
         if (history.isEmpty() || userMessage.length() < 5) {
             return userMessage;
         }
+        Collections.reverse(history);
 
         // 맥락 의존적인 표현 패턴 확인 (그때, 그거, 얘, 걔, 거기, 등)
         boolean hasContextDependentRef = userMessage.matches(".*(그때|그거|그건|얘|걔|걔는|거기|거긴|그 사람|그분|그때문에).*");
@@ -1468,11 +1477,7 @@ public class GameSessionServiceImpl implements GameSessionService {
 
         // 이전 대화 기록을 텍스트로 변환
         StringBuilder contextBuilder = new StringBuilder();
-        int recentCount = Math.min(5, history.size());  // 최근 5개 대화만 참조
-        int startIndex = Math.max(0, history.size() - recentCount);
-
-        for (int i = startIndex; i < history.size(); i++) {
-            ChatMessage msg = history.get(i);
+        for (ChatMessage msg : history) {
             String role = "user".equals(msg.getRole()) ? "수사관" : "용의자";
             contextBuilder.append(String.format("%s: %s\n", role, msg.getContent()));
         }

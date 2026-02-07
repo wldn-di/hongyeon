@@ -85,7 +85,9 @@ spring:
       chat:
         options:
           model: ${GMS_MODEL}
-          max-tokens: 2000
+          # GMS가 라우팅하는 gpt-5-mini 계열은 temperature 기본값(1)만 허용
+          temperature: 1
+          max-completion-tokens: 2000
         completions-path: ${GMS_PATH}
 
 gms:
@@ -116,6 +118,12 @@ app:
   vertex:
     # Vertex AI 기반 GenAI 연동 사용 여부
     enabled: ${APP_VERTEX_ENABLED:true}
+    # Vertex 채팅 모델 (미지정 시 spring.ai.google.genai.chat.options.model 값 사용)
+    model: ${APP_VERTEX_MODEL:${SPRING_AI_GOOGLE_GENAI_CHAT_OPTIONS_MODEL:gemini-2.5-flash}}
+    # Gemini thinking level (예: HIGH / MEDIUM / LOW)
+    thinking-level: ${APP_VERTEX_THINKING_LEVEL:}
+    # 모델 thought 반환 여부
+    include-thoughts: ${APP_VERTEX_INCLUDE_THOUGHTS:false}
     # Vertex AI 프로젝트/리전 (enabled=true일 때 필수, 레거시 fallback용)
     project-id: ${APP_VERTEX_PROJECT_ID:}
     location: ${APP_VERTEX_LOCATION:}
@@ -135,8 +143,8 @@ app:
       - name: vertex-b
         project-id: ${APP_VERTEX_B_PROJECT_ID:${APP_VERTEX_PROJECT_ID:}}
         location: ${APP_VERTEX_B_LOCATION:${APP_VERTEX_LOCATION:}}
-        credentials-uri: ${APP_VERTEX_B_CREDENTIALS_URI:}
-        access-token: ${APP_VERTEX_B_ACCESS_TOKEN:}
+        credentials-uri: ${APP_VERTEX_B_CREDENTIALS_URI:${APP_VERTEX_CREDENTIALS_URI:}}
+        access-token: ${APP_VERTEX_B_ACCESS_TOKEN:${APP_VERTEX_ACCESS_TOKEN:}}
   concurrency:
     max-scenario-generation: ${APP_CONCURRENCY_MAX_SCENARIO:10}
     max-chat-concurrent: ${APP_CONCURRENCY_MAX_CHAT:50}

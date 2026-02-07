@@ -74,7 +74,9 @@ public class SuspectChatV2ContextService {
                 if (alibiProgression.has("level1_lie")) {
                     level1Lie = alibiProgression.get("level1_lie").asText();
                 }
-                if (alibiProgression.has("level2_partial")) {
+                if (alibiProgression.has("level2_weak")) {
+                    level2Weak = alibiProgression.get("level2_weak").asText();
+                } else if (alibiProgression.has("level2_partial")) { // backward compatibility
                     level2Weak = alibiProgression.get("level2_partial").asText();
                 }
             }

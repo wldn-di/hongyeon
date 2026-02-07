@@ -2,6 +2,7 @@ package com.ssafy.s14p11a707.game.api;
 
 import com.ssafy.s14p11a707.game.dto.*;
 import com.ssafy.s14p11a707.game.service.GameSessionService;
+import com.ssafy.s14p11a707.game.v2.service.SuspectChatV2Service;
 import com.ssafy.s14p11a707.security.authorization.GameSessionAccessPolicy;
 import com.ssafy.s14p11a707.security.CurrentUserIdResolver;
 import lombok.RequiredArgsConstructor;
@@ -16,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 public class SessionApi implements SessionApiDoc {
 
     private final GameSessionService gameSessionService;
+    private final SuspectChatV2Service suspectChatV2Service;
     private final GameSessionAccessPolicy gameSessionAccessPolicy;
     private final CurrentUserIdResolver currentUserIdResolver;
 
@@ -175,7 +177,7 @@ public class SessionApi implements SessionApiDoc {
     ) {
         long userId = currentUserIdResolver.requireUserId(oidcUser);
         gameSessionAccessPolicy.assertSessionOwner(userId, sessionId);
-        return ResponseEntity.ok(gameSessionService.chatWithSuspect(sessionId, suspectId, request));
+        return ResponseEntity.ok(suspectChatV2Service.chatWithSuspect(sessionId, suspectId, request));
     }
 
     @GetMapping("/{sessionId}/suspects/{suspectId}/chats")

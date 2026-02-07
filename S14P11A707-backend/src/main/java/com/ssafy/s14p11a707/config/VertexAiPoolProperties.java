@@ -10,6 +10,9 @@ public record VertexAiPoolProperties(
         String location,
         String credentialsUri,
         String accessToken,
+        String model,
+        String thinkingLevel,
+        boolean includeThoughts,
         int semaphorePerAccount,
         List<AccountEntry> accounts
 ) {

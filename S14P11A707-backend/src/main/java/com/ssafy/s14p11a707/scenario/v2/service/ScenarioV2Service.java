@@ -48,12 +48,12 @@ public class ScenarioV2Service {
      */
     @Transactional
     public ScenarioV2CreateResponse createScenario(ScenarioV2CreateRequest request, long userId) {
+        User creator = userRepository.findByIdForUpdate(userId)
+                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
+
         if (scenarioRepository.existsByCreatorIdAndGenerationStatus(userId, Scenario.GenerationStatus.GENERATING)) {
             throw new BaseException(ErrorCode.SCENARIO_ALREADY_GENERATING);
         }
-
-        User creator = userRepository.findById(userId)
-                .orElseThrow(() -> new BaseException(ErrorCode.UNAUTHORIZED));
 
         Scenario scenario = Scenario.builder()
                 .creator(creator)
