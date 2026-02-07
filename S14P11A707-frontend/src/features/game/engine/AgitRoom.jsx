@@ -61,8 +61,14 @@ export default function AgitRoom({
 
         const shouldPause = Boolean(isDialogActive || inputFocused);
         try {
-            if (shouldPause) game.scene?.pause?.("AgitScene");
-            else game.scene?.resume?.("AgitScene");
+            const scene = game.scene?.getScene?.("AgitScene");
+            if (shouldPause) {
+                scene?.handleUiPauseStateChange?.(true);
+                game.scene?.pause?.("AgitScene");
+            } else {
+                game.scene?.resume?.("AgitScene");
+                scene?.handleUiPauseStateChange?.(false);
+            }
         } catch {}
 
         // 씬이 멈춰도 DOM 입력(폰/보드) 타이핑이 막히지 않도록 preventDefault를 풀어준다.

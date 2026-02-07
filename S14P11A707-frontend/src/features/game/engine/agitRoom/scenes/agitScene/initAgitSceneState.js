@@ -109,6 +109,8 @@ export function initAgitSceneState(scene, { enablePuzzles, enableRushers, isDial
     scene.ambElectric = null;
     scene.ambFilters = null;
     scene.ambienceFadeTween = null;
+    scene.isUiForcedPaused = false;
+    scene.uiPauseAmbienceState = null;
 
     // Elevator door overlay
     scene.elevatorDoorLeft = null;

@@ -1,6 +1,91 @@
 import Phaser from "phaser";
 
 export const lifecycleMethods = {
+    handleUiPauseStateChange(shouldPause) {
+        const next = Boolean(shouldPause);
+        if (this.isUiForcedPaused === next) return;
+        this.isUiForcedPaused = next;
+
+        if (next) {
+            this.stopTransientSfxForUiPause();
+            this.pauseAmbienceForUiPause();
+            return;
+        }
+
+        this.resumeAmbienceAfterUiPause();
+    },
+
+    stopTransientSfxForUiPause() {
+        const stopIfPlaying = (sound) => {
+            if (!sound) return;
+            try {
+                if (sound.isPlaying) sound.stop();
+            } catch {}
+        };
+
+        stopIfPlaying(this.sfxFlashlight);
+        stopIfPlaying(this.sfxNoise);
+        stopIfPlaying(this.sfxRumble);
+        stopIfPlaying(this.sfxWalk);
+        stopIfPlaying(this.sfxElevator);
+        stopIfPlaying(this.sfxWhoosh);
+        stopIfPlaying(this.sfxHit);
+
+        this.noiseStopAt = 0;
+    },
+
+    pauseAmbienceForUiPause() {
+        const snapshot = (sound) => ({
+            wasPlaying: Boolean(sound?.isPlaying),
+            wasPaused: Boolean(sound?.isPaused),
+        });
+
+        this.uiPauseAmbienceState = {
+            rumble: snapshot(this.ambRumble),
+            air: snapshot(this.ambAir),
+            electric: snapshot(this.ambElectric),
+        };
+
+        const pauseIfPlaying = (sound) => {
+            if (!sound) return;
+            try {
+                if (!sound.isPlaying) return;
+                if (typeof sound.pause === "function") {
+                    sound.pause();
+                } else {
+                    sound.stop();
+                }
+            } catch {}
+        };
+
+        pauseIfPlaying(this.ambRumble);
+        pauseIfPlaying(this.ambAir);
+        pauseIfPlaying(this.ambElectric);
+    },
+
+    resumeAmbienceAfterUiPause() {
+        const state = this.uiPauseAmbienceState;
+        this.uiPauseAmbienceState = null;
+        if (!state) return;
+
+        const resumeLoop = (sound, snapshot) => {
+            if (!sound || !snapshot?.wasPlaying) return;
+            try {
+                if (sound.isPaused && typeof sound.resume === "function") {
+                    sound.resume();
+                    return;
+                }
+                if (!sound.isPlaying) {
+                    sound.play({ loop: true, volume: sound.volume ?? 0 });
+                }
+            } catch {}
+        };
+
+        resumeLoop(this.ambRumble, state.rumble);
+        resumeLoop(this.ambAir, state.air);
+        resumeLoop(this.ambElectric, state.electric);
+    },
+
     init(data) {
         if (data.assets) {
             this.assetsDB = data.assets;
@@ -45,8 +130,11 @@ export const lifecycleMethods = {
 
     create() {
         try {
+            this.events.on("pause", () => this.handleUiPauseStateChange(true));
+            this.events.on("resume", () => this.handleUiPauseStateChange(false));
             this.events.on("shutdown", () => {
                 try {
+                    this.handleUiPauseStateChange(false);
                     this.sound.stopAll();
                 } catch {}
             });
