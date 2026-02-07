@@ -106,7 +106,7 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                 clue_detail_json 규칙(HARD):
                 - revealed_truth: 단서에서 "확인 가능한 사실"만 1문장으로 요약(120자 이내). 추론/판정 금지.
                 - discovery_script: 단서 발견 순간의 짧은 대사(120자 이내). 발견 묘사만, 추론/판정 금지.
-                - revealed_truth, discovery_script에서는 피해자/용의자 실명(예: "박서연", "김민준")을 직접 언급하지 않는다. ("누군가", "어떤 인물" 등으로 익명화)
+                - revealed_truth, discovery_script에서도 필요하면 피해자/용의자 실명을 직접 언급해도 된다.
 
                 외모 정보(appearance 필드):
                 - hair_style, hair_color, eye_color, facial_features, body_type, clothing_style, expression, distinctive_trait
@@ -331,7 +331,7 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                                 revealedTruth,
                                 name,
                                 false,
-                                false,
+                                true,
                                 120
                         );
                     }
@@ -347,7 +347,7 @@ public class CharactersCluesTruthNode implements ScenarioV2Node {
                                 discoveryScript,
                                 name,
                                 false,
-                                false,
+                                true,
                                 120
                         );
                     }
