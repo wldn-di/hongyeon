@@ -213,6 +213,9 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
       }
     }
 
+    let reconnectAttempt = 0;
+    const MAX_BACKOFF_MS = 30000;
+
     const es = new EventSource(url);
     eventSourceRef.current = es;
     sseLog("open", { url, scenarioId: expectedScenarioId });
@@ -231,6 +234,7 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
 
     es.addEventListener("open", () => {
       sseLog("open.connected", { scenarioId: expectedScenarioId });
+      reconnectAttempt = 0;
       setGeneration((prevGen) => {
         if (!prevGen?.isScenarioGenerating) return prevGen;
         if (normalizeScenarioId(prevGen.scenarioId) !== expectedScenarioId) return prevGen;
@@ -424,8 +428,10 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
         onServerErrorEvent(event);
         return;
       }
-      // 연결 오류: 즉시 실패 처리 금지. 1회 status 조회로 완료/실패 여부 판정.
-      sseLog("message", { event: "connection.error", scenarioId: expectedScenarioId });
+      // 연결 오류: 즉시 실패 처리 금지. 지수 백오프 후 status 조회로 완료/실패 여부 판정.
+      const backoffMs = Math.min(1000 * Math.pow(2, reconnectAttempt), MAX_BACKOFF_MS);
+      reconnectAttempt++;
+      sseLog("message", { event: "connection.error", scenarioId: expectedScenarioId, backoffMs, attempt: reconnectAttempt });
 
       setGeneration((prevGen) => {
         if (!prevGen?.isScenarioGenerating) return prevGen;
@@ -437,6 +443,7 @@ export function ScenarioGenerationProvider({ children, enabled = true, sseUrl })
       statusCheckInFlightRef.current = true;
 
       (async () => {
+        await new Promise((resolve) => setTimeout(resolve, backoffMs));
         try {
           const statusRes = await fetchScenarioStatus(expectedScenarioId);
           const status = normalizeStatus(

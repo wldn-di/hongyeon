@@ -2,7 +2,7 @@ import React, { useEffect } from "react";
 import { useLocation } from "wouter";
 import { AppRoutes } from "./routes";
 import { Header } from "@/components/layout/Header";
-import { Toaster } from "sonner";
+import { Toaster, toast } from "sonner";
 
 import { ScenarioGenerationProvider } from "@/features/scenarios/generation/ScenarioGenerationContext";
 import { useAuth } from "@/contexts/AuthContext"; // ✅ 추가
@@ -21,6 +21,18 @@ function AppShellInner() {
         location.startsWith("/room/") ||
         location.startsWith("/game/") ||
         location.startsWith("/tutorial");
+
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const loginError = params.get("loginError");
+        if (loginError) {
+            toast.error("로그인에 실패했습니다. 다시 시도해주세요.");
+            params.delete("loginError");
+            const nextSearch = params.toString();
+            const nextUrl = window.location.pathname + (nextSearch ? `?${nextSearch}` : "");
+            window.history.replaceState(null, "", nextUrl);
+        }
+    }, []);
 
     useEffect(() => {
         if (typeof window.gtag !== "function") return;

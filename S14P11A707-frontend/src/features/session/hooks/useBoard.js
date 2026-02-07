@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { fetchBoard } from '../api/sessionApi'
-import { fetchClues } from '../api/cluesApi'
+import { fetchBoard, fetchClues } from '../api/sessionApi'
 import { fetchScenarioSuspects } from '@/features/scenarios/api/scenariosApi'
 import {
   normalizeBoardResponse,

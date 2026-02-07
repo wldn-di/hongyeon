@@ -18,11 +18,8 @@ export const ENDPOINTS = {
   // Ranking API
   // ========================================
   rankings: {
-    top10: "/api/rankings", // 공개 (Top10)
-    me: "/api/rankings/me", // 로그인 (내 랭킹)
-    // TODO: 아래는 아직 백엔드에 api 없음
-    all: "/api/rankings/all", // (예상) 전체 랭킹
-    search: "/api/rankings/search", // (예상) 닉네임 검색
+    top10: "/api/rankings",
+    me: "/api/rankings/me",
   },
 
   // ========================================
@@ -38,7 +35,6 @@ export const ENDPOINTS = {
     rooms: (scenarioId) => `/api/scenarios/${scenarioId}/rooms`,
     rankings: (scenarioId) => `/api/scenarios/${scenarioId}/rankings`,
     status: (scenarioId) => `/api/scenarios/${scenarioId}/status`,
-    search: "/api/scenarios/search",
     topByRating: "/api/scenarios/top/rating",
     topByPlayCount: "/api/scenarios/top/play-count",
   },
@@ -61,9 +57,7 @@ export const ENDPOINTS = {
 
     // Session detail operations
     detail: (sessionId) => `/api/sessions/${sessionId}`,
-    save: (sessionId) => `/api/sessions/${sessionId}`,
     resume: (sessionId) => `/api/sessions/${sessionId}/resume`,
-    end: (sessionId) => `/api/sessions/${sessionId}/end`,
     moveFloor: (sessionId) => `/api/sessions/${sessionId}/move-floor`,
 
     // Board operations (조회/저장만)

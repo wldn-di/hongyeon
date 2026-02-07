@@ -1,12 +1,10 @@
 import { useState, useCallback } from 'react'
-import { endGame } from '../api/sessionApi'
+import { submitAnswer } from '../api/sessionApi'
 import { normalizeGameEndResponse } from '../api/sessionMappers'
 import { getErrorMessage } from '@/api/errors/errorHandler'
 
 /**
- * Submit hook - handles game ending (final answer submission)
- * Based on OpenAPI spec, submission is done via endGame endpoint
- * The backend evaluates the board state to determine the result
+ * Submit hook - handles final answer submission
  * @param {number} sessionId - Session ID
  * @returns {UseSubmitReturn}
  */
@@ -16,10 +14,10 @@ export const useSubmit = (sessionId) => {
   const [error, setError] = useState(null)
 
   /**
-   * Submit final answer (end game)
-   * The backend evaluates the current board state to calculate score and grade
+   * Submit final answer
+   * @param {Object} submitData - { culpritId, weaponClueId, locationFloor, motive }
    */
-  const submit = useCallback(async () => {
+  const submit = useCallback(async (submitData) => {
     if (!sessionId) {
       setError(new Error('세션 ID가 필요합니다.'))
       return null
@@ -29,7 +27,7 @@ export const useSubmit = (sessionId) => {
     setError(null)
 
     try {
-      const response = await endGame(sessionId)
+      const response = await submitAnswer(sessionId, submitData)
       const normalized = normalizeGameEndResponse(response)
       setSubmitResult(normalized)
       return normalized

@@ -66,46 +66,6 @@ export const fetchResume = async (sessionId) => {
 };
 
 /**
- * 게임 저장 (PATCH /api/sessions/{sessionId})
- * @param {number} sessionId
- * @param {GameSaveRequest} data - { currentFloor, visitedFloors, health, playTime }
- * @returns {Promise<GameSaveResponse>}
- * @throws {ApiError}
- */
-export const saveGame = async (sessionId, data) => {
-  try {
-    const response = await apiClient.patch(
-      ENDPOINTS.sessions.save(sessionId),
-      data,
-    );
-    return response.data;
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error);
-    }
-    throw new ApiError("게임 저장에 실패했습니다.");
-  }
-};
-
-/**
- * 게임 종료 (POST /api/sessions/{sessionId}/end)
- * @param {number} sessionId
- * @returns {Promise<GameEndResponse>}
- * @throws {ApiError}
- */
-export const endGame = async (sessionId) => {
-  try {
-    const response = await apiClient.post(ENDPOINTS.sessions.end(sessionId));
-    return response.data;
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error);
-    }
-    throw new ApiError("게임 종료에 실패했습니다.");
-  }
-};
-
-/**
  * 층 이동 (POST /api/sessions/{sessionId}/move-floor)
  * @param {number} sessionId
  * @param {number} targetFloor
@@ -356,8 +316,6 @@ export default {
   startGame,
   restartGame,
   fetchResume,
-  saveGame,
-  endGame,
   moveFloor,
   // Board (조회/저장만)
   fetchBoard,

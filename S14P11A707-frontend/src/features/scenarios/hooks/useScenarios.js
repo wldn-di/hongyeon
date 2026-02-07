@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { fetchScenarios, searchScenarios } from "../api/scenariosApi";
+import { fetchScenarios } from "../api/scenariosApi";
 import { mapScenarioListResponseFull } from "../api/scenarioMappers";
 
 /**
@@ -115,7 +115,7 @@ export function useScenarioSearch() {
     try {
       setLoading(true);
       setError(null);
-      const response = await searchScenarios(keyword.trim());
+      const response = await fetchScenarios({ keyword: keyword.trim() });
       const mapped = mapScenarioListResponseFull(response);
       setData({
         scenarios: mapped.content,

@@ -1,5 +1,5 @@
 import { useState, useCallback } from 'react'
-import { endGame } from '@/features/session/api/sessionApi'
+import { submitAnswer } from '@/features/session/api/sessionApi'
 import { toast } from 'sonner'
 
 /**
@@ -15,9 +15,10 @@ export function useGameSubmission() {
   /**
    * 게임 종료 (정답 제출)
    * @param {number} currentSessionId
+   * @param {Object} submitData - { culpritId, weaponClueId, locationFloor, motive }
    * @returns {Promise<Object>} 게임 종료 결과
    */
-  const submitGame = useCallback(async (currentSessionId) => {
+  const submitGame = useCallback(async (currentSessionId, submitData) => {
     if (!currentSessionId) {
       const err = new Error('세션 ID가 필요합니다.')
       setError(err)
@@ -29,7 +30,7 @@ export function useGameSubmission() {
       setLoading(true)
       setError(null)
 
-      const response = await endGame(currentSessionId)
+      const response = await submitAnswer(currentSessionId, submitData)
 
       setSessionId(currentSessionId)
       setResult(response)

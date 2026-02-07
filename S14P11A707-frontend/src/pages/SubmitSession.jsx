@@ -34,8 +34,13 @@ export default function SubmitSession() {
       return
     }
 
-    // Submit (end game) - backend evaluates the board state
-    const result = await submit()
+    // Submit final answer with selection data
+    const result = await submit({
+      culpritId: selection.culpritId,
+      weaponClueId: selection.weaponClueId,
+      locationFloor: selection.locationFloor,
+      motive: selection.motive || '',
+    })
 
     if (result) {
       console.log('Submit result:', result)

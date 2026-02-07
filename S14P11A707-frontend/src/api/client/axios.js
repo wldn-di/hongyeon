@@ -24,7 +24,7 @@ const getApiBaseUrl = () => {
  */
 export const apiClient = axios.create({
   baseURL: getApiBaseUrl(),
-  // timeout: 1800000,
+  timeout: 30000,
   withCredentials: true,
   headers: {
     "Content-Type": "application/json",
@@ -55,7 +55,7 @@ apiClient.interceptors.response.use(
     // 401 Unauthorized - 로그인 필요
     if (error.response?.status === 401) {
       // 로그인 페이지가 아닌 경우에만 모달 표시
-      const isLoginPage = window.location.pathname === '/login';
+      const isLoginPage = window.location.pathname === '/me';
       if (!isLoginPage) {
         showLoginRequired();
       }

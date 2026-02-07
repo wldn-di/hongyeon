@@ -69,26 +69,6 @@ export const fetchScenarios = async (params = {}) => {
 };
 
 /**
- * 시나리오 검색 (GET /api/scenarios/search?keyword=)
- * @param {string} keyword - 검색 키워드
- * @returns {Promise<ScenarioListResponse>}
- * @throws {ApiError}
- */
-export const searchScenarios = async (keyword) => {
-  try {
-    const response = await apiClient.get(ENDPOINTS.scenarios.search, {
-      params: keyword ? { keyword } : {},
-    });
-    return response.data;
-  } catch (error) {
-    if (error.response?.data) {
-      throw ApiError.fromAxiosError(error);
-    }
-    throw new ApiError("시나리오 검색에 실패했습니다.");
-  }
-};
-
-/**
  * 평점 TOP 10 (GET /api/scenarios/top/rating)
  * @returns {Promise<any>}
  * @throws {ApiError}
@@ -267,8 +247,6 @@ export const createScenario = async (data) => {
  */
 export const createScenarioV2 = async (data) => {
   try {
-    console.log("[createScenarioV2] url =", ENDPOINTS.scenariosV2.create);
-    console.log("[createScenarioV2] data =", data);
     const response = await apiClient.post(ENDPOINTS.scenariosV2.create, data);
     return response.data;
   } catch (error) {
@@ -301,7 +279,6 @@ export const deleteScenario = async (scenarioId) => {
 
 export default {
   fetchScenarios,
-  searchScenarios,
   fetchTopScenariosByRating,
   fetchTopScenariosByPlayCount,
   fetchScenarioDetail,
