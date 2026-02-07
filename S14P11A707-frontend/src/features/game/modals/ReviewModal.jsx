@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
 //TODO: 한줄리뷰 작성 여부 검증할 건지? (현재는 안 함)
 export default function ReviewModal({ isOpen, onSubmit }) {
   const [difficulty, setDifficulty] = useState('medium')
-  const [rating, setRating] = useState(3)
+  const [rating, setRating] = useState(5)
   const [review, setReview] = useState('')
 
   if (!isOpen) return null

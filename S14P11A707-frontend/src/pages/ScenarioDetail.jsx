@@ -4,7 +4,6 @@ import { useScenarioById } from '@/features/scenarios/hooks/useScenarioById'
 import { useScenarioPlayStatus } from '@/features/scenarios/hooks/useScenarioPlayStatus'
 import ScenarioDetailCard from '@/features/scenarios/components/ScenarioDetailCard'
 import { ReplayConfirmModal } from '@/components/ui/ReplayConfirmModal'
-import { showLoginRequired } from '@/components/ui/LoginRequiredModal'
 import { useAuth } from '@/contexts/AuthContext'
 
 export default function ScenarioDetail() {
@@ -12,7 +11,7 @@ export default function ScenarioDetail() {
   const [, setLocation] = useLocation()
   const scenarioId = params?.id ? parseInt(params.id, 10) : 0
 
-  const { state } = useAuth()
+  const { state, actions } = useAuth()
   const user = state.user
 
   const { scenario, loading, error } = useScenarioById(scenarioId)
@@ -24,7 +23,7 @@ export default function ScenarioDetail() {
   // 게임하기 버튼 클릭 핸들러
   const handlePlayClick = useCallback(() => {
     if (!user) {
-      showLoginRequired({ redirectTo: `/game/${scenarioId}` })
+      actions.openLoginGate(`/game/${scenarioId}`)
       return
     }
 

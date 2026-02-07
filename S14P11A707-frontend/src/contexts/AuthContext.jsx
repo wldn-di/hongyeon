@@ -1,5 +1,6 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer } from "react"
+import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from "react"
 import { alertError, alertWarning,alertInfo } from "@/components/ui/AlertModal"
+import { POST_LOGIN_REDIRECT_KEY } from "@/app/routePaths"
 
 
 const AuthContext = createContext(null)
@@ -7,6 +8,7 @@ const AuthContext = createContext(null)
 const initialState = {
   user: null,
   loading: true,
+  loginGate: { open: false, redirectTo: null },
 }
 
 function reducer(state, action) {
@@ -23,6 +25,10 @@ function reducer(state, action) {
         user: state.user ? { ...state.user, ...action.patch } : state.user,
         loading: false,
       }
+    case "OPEN_LOGIN_GATE":
+      return { ...state, loginGate: { open: true, redirectTo: action.redirectTo ?? null } }
+    case "CLOSE_LOGIN_GATE":
+      return { ...state, loginGate: { open: false, redirectTo: null } }
     default:
       return state
   }
@@ -30,6 +36,9 @@ function reducer(state, action) {
 
 export function AuthProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState)
+
+  const stateRef = useRef(state)
+  stateRef.current = state
 
   const rawBase = import.meta.env.VITE_API_BASE_URL
   const base = rawBase ? rawBase.replace(/\/$/, "") : "" // 끝 슬래시 제거로 통일
@@ -67,6 +76,16 @@ export function AuthProvider({ children }) {
     () => ({
       // 1) 로그인
       login() {
+        // 로그인 게이트에 redirectTo가 있으면 sessionStorage에 저장
+        // (OAuth 후 복귀 시 AppShell이 읽어서 해당 경로로 이동)
+        try {
+          const redirectTo = stateRef.current.loginGate.redirectTo
+          const fallback = window.location.pathname + window.location.search + window.location.hash
+          window.sessionStorage.setItem(POST_LOGIN_REDIRECT_KEY, redirectTo || fallback || "/")
+        } catch { /* ignore */ }
+
+        dispatch({ type: "CLOSE_LOGIN_GATE" })
+
         if (!base) {
           dispatch({
             type: "SET_USER",
@@ -85,6 +104,19 @@ export function AuthProvider({ children }) {
         const url = `${base}/api/auth/login`
         console.log("LOGIN URL:", url)
         window.location.href = url
+      },
+
+      // 로그인 게이트 열기 (페이지 이동 없이 로그인 모달 표시)
+      openLoginGate(redirectTo) {
+        const fallback = typeof window !== 'undefined'
+          ? window.location.pathname + window.location.search + window.location.hash
+          : null
+        dispatch({ type: "OPEN_LOGIN_GATE", redirectTo: redirectTo || fallback })
+      },
+
+      // 로그인 게이트 닫기
+      closeLoginGate() {
+        dispatch({ type: "CLOSE_LOGIN_GATE" })
       },
 
       // 2) 로그아웃
