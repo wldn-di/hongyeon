@@ -1,26 +1,54 @@
-import React, { useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { AppRoutes } from "./routes";
+import { POST_LOGIN_REDIRECT_KEY } from "./routePaths";
 import { Header } from "@/components/layout/Header";
 import { Toaster } from "sonner";
+import { Monitor } from "lucide-react";
 
 import { ScenarioGenerationProvider } from "@/features/scenarios/generation/ScenarioGenerationContext";
-import { useAuth } from "@/contexts/AuthContext"; // ✅ 추가
+import { useAuth } from "@/contexts/AuthContext";
 import { Turntable } from "@/components/ui/Turntable";
 import { Atmosphere } from "@/components/ui/Atmosphere";
 import { AlertModal } from "@/components/ui/AlertModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
 import { LoginRequiredModal } from "@/components/ui/LoginRequiredModal";
 
-const POST_LOGIN_REDIRECT_KEY = "post_login_redirect";
+function MobileBlockOverlay() {
+    return (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-[#0a0a0f]">
+            <div className="text-center px-8 max-w-sm">
+                <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-amber-900/30 border border-amber-700/50 flex items-center justify-center">
+                    <Monitor className="w-10 h-10 text-amber-500" />
+                </div>
+                <h2 className="text-xl font-bold text-amber-100 mb-3" style={{ fontFamily: 'Cinzel, serif' }}>
+                    PC 전용 게임
+                </h2>
+                <p className="text-amber-200/70 text-sm leading-relaxed mb-2">
+                    본 게임은 PC에서만 플레이 가능합니다.
+                </p>
+                <p className="text-amber-200/50 text-xs">
+                    PC 브라우저로 재접속해주세요.
+                </p>
+            </div>
+        </div>
+    );
+}
 
 function AppShellInner() {
     const [location, setLocation] = useLocation();
     const { state: auth } = useAuth();
+    const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
     const hideHeader =
         location.startsWith("/room/") ||
         location.startsWith("/game/") ||
         location.startsWith("/tutorial");
+
+    useEffect(() => {
+        const handler = () => setIsMobile(window.innerWidth < 768);
+        window.addEventListener("resize", handler);
+        return () => window.removeEventListener("resize", handler);
+    }, []);
 
     useEffect(() => {
         if (typeof window.gtag !== "function") return;
@@ -58,6 +86,10 @@ function AppShellInner() {
             setLocation(redirectTo);
         }
     }, [auth.loading, auth.user, location, setLocation]);
+
+    if (isMobile) {
+        return <MobileBlockOverlay />;
+    }
 
     return (
         <div className="dark">
