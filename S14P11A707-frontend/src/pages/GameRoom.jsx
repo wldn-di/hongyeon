@@ -532,6 +532,7 @@ export default function GameRoom() {
       if (response?.alreadyPlaying) {
         const existingSessionId = response.sessionId
         if (existingSessionId) {
+          isInitializedRef.current = false  // resumeGame이 실행될 수 있도록 리셋
           setLocation(`/room/${existingSessionId}/resume`)
           return
         }
@@ -589,19 +590,17 @@ export default function GameRoom() {
     }
     if (!resumeId) return
 
-    if (gameInitInFlightRef.current) {
-      console.log('[GameRoom] resumeGame: already initializing')
-      return
-    }
-    gameInitInFlightRef.current = true
-
-    // 이미 초기화 중이면 스킵 (ref로 동기 체크)
+    // isInitializedRef를 먼저 체크 (gameInitInFlightRef 설정 전에)
     if (isInitializedRef.current) {
       console.log('[GameRoom] resumeGame: 이미 초기화 중 - 스킵')
       return
     }
 
-    // 초기화 시작 표시
+    if (gameInitInFlightRef.current) {
+      console.log('[GameRoom] resumeGame: already initializing')
+      return
+    }
+    gameInitInFlightRef.current = true
     isInitializedRef.current = true
 
     // ✅ 이어하기 전 이전 보드 로컬스토리지 초기화 (깨진 데이터 방지)
@@ -740,9 +739,20 @@ export default function GameRoom() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resumeSessionId, activeScenarioId, scenario?.id, scenarioLoading, sessionId, gameInitializing, gameInitError, !!user])
 
-  // 시나리오 시작/변경 시 세션 초기화 (로그 추가는 initializeNewGame/resumeGame에서만)
+  // 시나리오 변경 시 세션 초기화 (로그 추가는 initializeNewGame/resumeGame에서만)
+  // ※ 이어하기(resume) 시 activeScenarioId가 null→값으로 최초 설정되는 건 "변경"이 아니므로 스킵
+  const prevScenarioIdRef = useRef(activeScenarioId)
   useEffect(() => {
+    const prevId = prevScenarioIdRef.current
+    prevScenarioIdRef.current = activeScenarioId
+
     if (!activeScenarioId) return
+
+    // 최초 설정(null → 값)은 리셋하지 않음 (이어하기 시 resume API에서 세팅)
+    if (prevId == null) return
+
+    // 같은 시나리오면 리셋하지 않음
+    if (prevId === activeScenarioId) return
 
     isInitializedRef.current = false
     setSessionId(null)
@@ -762,12 +772,10 @@ export default function GameRoom() {
     setReviewModalOpen(false)
     setReportModalOpen(false)
 
-    // 시스템 로그는 initializeNewGame/resumeGame에서 추가하므로 여기서 중복 제거
-
     // 조력자 자동 인사/알림 제거
     setChatHistories({ helper: [] })
     setPhoneNotification(null)
-  }, [activeScenarioId, scenario?.title, resetSession])
+  }, [activeScenarioId, resetSession])
 
   useEffect(() => {
   if (!discoveredEvidence?.length) return
@@ -1380,15 +1388,19 @@ export default function GameRoom() {
     )
   }
 
+  // 비로그인 시 LoginGate 자동 오픈 (페이지 이동 없음)
+  useEffect(() => {
+    if (!authLoading && !user) {
+      actions.openLoginGate()
+    }
+  }, [authLoading, user, actions])
+
   if (!user) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="bg-card/40 border border-border rounded-xl p-10 text-center">
-          <p className="text-xl font-bold mb-2">로그인이 필요합니다</p>
-          <p className="text-muted-foreground mb-6">게임을 시작하려면 Google 로그인이 필요해요.</p>
-          <Button variant="neon" onClick={() => actions.login()}>
-            구글 로그인
-          </Button>
+        <div className="text-center">
+          <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto mb-4" />
+          <p className="text-muted-foreground">로그인 후 게임이 시작됩니다.</p>
         </div>
       </div>
     )

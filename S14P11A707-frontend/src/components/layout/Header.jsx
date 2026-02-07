@@ -37,12 +37,22 @@ export function Header() {
                 시나리오
               </span>
             </Link>
-            <Link href="/my-bookshelf">
-              <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer flex items-center gap-1">
+            {user ? (
+              <Link href="/my-bookshelf">
+                <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer flex items-center gap-1">
+                  <BookOpen className="w-4 h-4" />
+                  내 수사록
+                </span>
+              </Link>
+            ) : (
+              <span
+                className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer flex items-center gap-1"
+                onClick={() => actions.openLoginGate('/my-bookshelf')}
+              >
                 <BookOpen className="w-4 h-4" />
                 내 수사록
               </span>
-            </Link>
+            )}
             <Link href="/ranking">
               <span className="text-sm uppercase tracking-wider hover:text-primary transition-colors cursor-pointer">
                 랭킹

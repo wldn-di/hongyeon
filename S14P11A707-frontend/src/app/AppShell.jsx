@@ -12,7 +12,7 @@ import { Turntable } from "@/components/ui/Turntable";
 import { Atmosphere } from "@/components/ui/Atmosphere";
 import { AlertModal } from "@/components/ui/AlertModal";
 import { ConfirmModal } from "@/components/ui/ConfirmModal";
-import { LoginRequiredModal } from "@/components/ui/LoginRequiredModal";
+import { LoginGate } from "@/components/ui/LoginGate";
 
 function MobileBlockOverlay() {
     return (
@@ -116,7 +116,7 @@ function AppShellInner() {
             <Turntable />
             <AlertModal />
             <ConfirmModal />
-            <LoginRequiredModal />
+            <LoginGate />
         </div>
     );
 }
