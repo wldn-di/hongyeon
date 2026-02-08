@@ -262,6 +262,7 @@ public class ValidateNode implements ScenarioV2Node {
         }
 
         if (suspects.isArray()) {
+            Set<String> weaknessClueNames = new HashSet<>();
             for (JsonNode suspect : suspects) {
                 JsonNode weakness = suspect.path("ai_config_json").path("secret").path("weakness_clue");
                 if (!weakness.isObject()) {
@@ -273,6 +274,8 @@ public class ValidateNode implements ScenarioV2Node {
                     issues.add("suspect.ai_config_json.secret.weakness_clue.name is missing");
                 } else if (!clueNames.isEmpty() && !clueNames.contains(weaknessName)) {
                     issues.add("suspect.ai_config_json.secret.weakness_clue.name must match one of clues[].name");
+                } else if (!weaknessClueNames.add(weaknessName)) {
+                    issues.add("duplicate suspect.ai_config_json.secret.weakness_clue.name is not allowed: " + weaknessName);
                 }
             }
         }

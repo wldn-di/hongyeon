@@ -10,6 +10,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClientResponseException;
 
 import java.util.List;
+import java.util.Locale;
+import java.util.regex.Pattern;
 
 @Slf4j
 @Service
@@ -17,6 +19,14 @@ import java.util.List;
 public class SuspectChatV2Service {
 
     private static final String AI_FAILURE_MESSAGE = "용의자가 잠시 침묵합니다... 다시 한 번 말을 걸어보세요.";
+    private static final Pattern OWNERSHIP_QUESTION_PATTERN = Pattern.compile(
+            ".*(너꺼|네꺼|니꺼|당신\\s*것|당신\\s*소유|네\\s*물건|니\\s*물건|주인|소유|누구\\s*거|누구꺼|누구\\s*것|your\\s*(item|thing|property)|is\\s*it\\s*yours|who\\s*owns).*",
+            Pattern.CASE_INSENSITIVE
+    );
+    private static final Pattern USAGE_QUESTION_PATTERN = Pattern.compile(
+            ".*(이걸로|그걸로|뭐했|무엇을 했|왜 썼|왜 사용|용도|무슨 용도|어디에 썼|어떻게 썼|used it|what did you do with|what is it for).*",
+            Pattern.CASE_INSENSITIVE
+    );
 
     private final SuspectChatV2ContextService contextService;
     private final SuspectChatV2PromptBuilder promptBuilder;
@@ -106,7 +116,8 @@ public class SuspectChatV2Service {
             );
 
             String fullResponse = aiClient.generate(context.conversationId(), systemMessage, rewrittenUserMessage);
-            return parseAiResponse(fullResponse);
+            AiResult aiResult = parseAiResponse(fullResponse);
+            return enforceClueConsistencyGuard(context, aiResult);
         } catch (Exception ex) {
             WebClientResponseException webEx = findWebClientResponseException(ex);
             if (webEx != null) {
@@ -153,6 +164,104 @@ public class SuspectChatV2Service {
         }
 
         return new AiResult(true, reply, keyTalk);
+    }
+
+    private AiResult enforceClueConsistencyGuard(SuspectChatV2Context context, AiResult aiResult) {
+        if (!aiResult.success() || context.usedClueId() == null) {
+            return aiResult;
+        }
+
+        String ownershipStatus = context.usedClueOwnershipStatus();
+        if ("OWNED_BY_CURRENT_SUSPECT".equals(ownershipStatus)
+                && isUsageQuestion(context.userMessage())
+                && containsUnfamiliarDenial(aiResult.reply())) {
+            String correctedReply = "그 물건이 제 것인 건 맞습니다. 하지만 그걸 범행에 썼다는 뜻은 아닙니다.";
+            log.warn(
+                    "suspectChatV2 owned-clue consistency guard applied. sessionId={} suspectId={} clueId={} originalReply={}",
+                    context.sessionId(),
+                    context.suspectId(),
+                    context.usedClueId(),
+                    aiResult.reply()
+            );
+            return new AiResult(aiResult.success(), correctedReply, aiResult.keyTalk());
+        }
+
+        if (!"NOT_OWNED_BY_CURRENT_SUSPECT".equals(ownershipStatus) && !"UNKNOWN".equals(ownershipStatus)) {
+            return aiResult;
+        }
+
+        if (!isOwnershipQuestion(context.userMessage()) || !containsOwnershipAdmission(aiResult.reply())) {
+            return aiResult;
+        }
+
+        String correctedReply = "NOT_OWNED_BY_CURRENT_SUSPECT".equals(ownershipStatus)
+                ? "그건 제 물건이 아닙니다. 누가 거기에 뒀는지는 저도 모릅니다."
+                : "그 물건이 제 것이라고 단정할 수는 없습니다. 최소한 제 소유라고는 말할 수 없어요.";
+
+        log.warn(
+                "suspectChatV2 ownership guard applied. sessionId={} suspectId={} clueId={} status={} originalReply={}",
+                context.sessionId(),
+                context.suspectId(),
+                context.usedClueId(),
+                ownershipStatus,
+                aiResult.reply()
+        );
+        return new AiResult(aiResult.success(), correctedReply, aiResult.keyTalk());
+    }
+
+    private boolean isUsageQuestion(String userMessage) {
+        if (userMessage == null || userMessage.isBlank()) {
+            return false;
+        }
+        return USAGE_QUESTION_PATTERN.matcher(userMessage).matches();
+    }
+
+    private boolean isOwnershipQuestion(String userMessage) {
+        if (userMessage == null || userMessage.isBlank()) {
+            return false;
+        }
+        return OWNERSHIP_QUESTION_PATTERN.matcher(userMessage).matches();
+    }
+
+    private boolean containsOwnershipAdmission(String reply) {
+        if (reply == null || reply.isBlank()) {
+            return false;
+        }
+        String normalized = reply.toLowerCase(Locale.ROOT);
+        return normalized.contains("제 것")
+                || normalized.contains("제꺼")
+                || normalized.contains("내 것")
+                || normalized.contains("내꺼")
+                || normalized.contains("제 거예요")
+                || normalized.contains("내 거예요")
+                || normalized.contains("제 물건")
+                || normalized.contains("내 물건")
+                || normalized.contains("제 소유")
+                || normalized.contains("제 태블릿")
+                || normalized.contains("맞아요 제")
+                || normalized.contains("맞습니다 제")
+                || normalized.contains("맞아요, 제")
+                || normalized.contains("맞습니다, 제")
+                || normalized.contains("yes, it's mine")
+                || normalized.contains("it's mine");
+    }
+
+    private boolean containsUnfamiliarDenial(String reply) {
+        if (reply == null || reply.isBlank()) {
+            return false;
+        }
+        String normalized = reply.toLowerCase(Locale.ROOT);
+        return normalized.contains("처음 보는")
+                || normalized.contains("처음 본")
+                || normalized.contains("모릅니다")
+                || normalized.contains("모른다")
+                || normalized.contains("쓴 적 없습니다")
+                || normalized.contains("쓴 적 없")
+                || normalized.contains("사용한 적 없습니다")
+                || normalized.contains("사용한 적 없")
+                || normalized.contains("무슨 용도인지도 모릅니다")
+                || normalized.contains("never used")
+                || normalized.contains("don't know what it is");
     }
 
     private long toMsSince(long startNs) {

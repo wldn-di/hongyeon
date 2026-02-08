@@ -152,6 +152,7 @@ public class SuspectChatV2PromptBuilder {
             case "OWNED_BY_CURRENT_SUSPECT" -> """
                     - HARD RULE: 이 단서는 당신과 직접 연관된 단서입니다. 소유를 인정할 수 있습니다.
                     - 인정 후에는 사건과 무관한 맥락(빌려줌/분실/이전 방문)으로 방어하세요.
+                    - HARD RULE: 소유를 인정한 뒤에는 같은 대화에서 "처음 본다", "모른다", "쓴 적 없다"처럼 소유/사용 사실을 정면 부정하지 마세요.
                     """;
             case "NOT_OWNED_BY_CURRENT_SUSPECT" -> """
                     - HARD RULE: 이 단서는 당신 소유가 아닙니다. 절대 "제 것"이라고 답하지 마세요.

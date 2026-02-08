@@ -3,6 +3,7 @@ package com.ssafy.s14p11a707.game.repository;
 import com.ssafy.s14p11a707.game.entity.ChatMessage;
 import com.ssafy.s14p11a707.game.entity.GameSession;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -17,6 +18,8 @@ public interface ChatMessageRepository extends JpaRepository<ChatMessage, Long> 
     List<ChatMessage> findBySessionIdAndSuspectIdOrderByCreatedAtAsc(long sessionId, long suspectId);
 
     List<ChatMessage> findTop5BySessionIdAndSuspectIdOrderByCreatedAtDesc(long sessionId, long suspectId);
+
+    Optional<ChatMessage> findFirstBySessionIdAndSuspectIdAndUsedClueIdIsNotNullOrderByCreatedAtDesc(long sessionId, long suspectId);
 
     // conversationId 형식: "session-{sessionId}-suspect-{suspectId}"
     @Query("""

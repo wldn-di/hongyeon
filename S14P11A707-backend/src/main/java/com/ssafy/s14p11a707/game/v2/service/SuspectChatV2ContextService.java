@@ -7,6 +7,7 @@ import com.ssafy.s14p11a707.game.dto.SuspectChatRequest;
 import com.ssafy.s14p11a707.game.entity.GameSession;
 import com.ssafy.s14p11a707.game.entity.SessionSuspectState;
 import com.ssafy.s14p11a707.game.entity.SessionSuspectStateId;
+import com.ssafy.s14p11a707.game.repository.ChatMessageRepository;
 import com.ssafy.s14p11a707.game.repository.GameSessionRepository;
 import com.ssafy.s14p11a707.game.repository.SessionSuspectStateRepository;
 import com.ssafy.s14p11a707.scenario.entity.Clue;
@@ -16,7 +17,11 @@ import com.ssafy.s14p11a707.scenario.entity.Victim;
 import com.ssafy.s14p11a707.scenario.repository.ClueRepository;
 import com.ssafy.s14p11a707.scenario.repository.SuspectRepository;
 import com.ssafy.s14p11a707.scenario.repository.VictimRepository;
+import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
@@ -30,11 +35,17 @@ import static com.ssafy.s14p11a707.game.entity.GameSession.Status.PLAYING;
 @RequiredArgsConstructor
 public class SuspectChatV2ContextService {
 
+    private static final Pattern CLUE_FOLLOW_UP_PATTERN = Pattern.compile(
+            ".*(이걸|이거|그거|그걸|저거|그 물건|이 물건|그 단서|이 단서|해당 단서|그 앰플|그 주사기|용도|뭐했|왜 썼|왜 사용|어디에 썼|쓴 이유).*",
+            Pattern.CASE_INSENSITIVE
+    );
+
     private final GameSessionRepository gameSessionRepository;
     private final SuspectRepository suspectRepository;
     private final VictimRepository victimRepository;
     private final ClueRepository clueRepository;
     private final SessionSuspectStateRepository sessionSuspectStateRepository;
+    private final ChatMessageRepository chatMessageRepository;
 
     @Transactional(readOnly = true)
     public SuspectChatV2Context load(long sessionId, long suspectId, SuspectChatRequest request) {
@@ -103,22 +114,41 @@ public class SuspectChatV2ContextService {
                 .orElse(1);
 
         Long usedClueId = request == null ? null : request.usedClueId();
+        String userMessage = request == null || request.message() == null ? "" : request.message().trim();
+        if (usedClueId == null && isClueFollowUpQuestion(userMessage)) {
+            usedClueId = chatMessageRepository
+                    .findFirstBySessionIdAndSuspectIdAndUsedClueIdIsNotNullOrderByCreatedAtDesc(sessionId, suspectId)
+                    .map(chatMessage -> chatMessage.getUsedClueId())
+                    .orElse(null);
+            if (usedClueId != null) {
+                log.info(
+                        "suspectChatV2 inferred usedClueId from recent history. sessionId={} suspectId={} usedClueId={} message={}",
+                        sessionId,
+                        suspectId,
+                        usedClueId,
+                        userMessage
+                );
+            }
+        }
         int promptInterrogationLevel = currentInterrogationLevel;
         if (promptInterrogationLevel < 2 && usedClueId != null && usedClueId.equals(weaknessClueId)) {
             promptInterrogationLevel = 2;
         }
 
-        String userMessage = request == null || request.message() == null ? "" : request.message().trim();
         String usedClueName = null;
         String usedClueDescription = null;
         String usedClueOwnershipStatus = ClueOwnershipStatus.NONE.name();
         String usedClueOwnershipReason = "no clue presented";
+        List<Suspect> scenarioSuspectsForOwnership = null;
         if (usedClueId != null) {
             Clue clue = clueRepository.findById(usedClueId).orElse(null);
             if (clue != null) {
                 usedClueName = clue.getName();
                 usedClueDescription = clue.getDescription();
-                ClueOwnershipAssessment ownership = assessClueOwnership(clue, suspect, weaknessClueId);
+                if (scenarioSuspectsForOwnership == null) {
+                    scenarioSuspectsForOwnership = suspectRepository.findByScenarioIdOrderByDisplayOrderAsc(session.getScenario().getId());
+                }
+                ClueOwnershipAssessment ownership = assessClueOwnership(clue, suspect, weaknessClueId, scenarioSuspectsForOwnership);
                 usedClueOwnershipStatus = ownership.status().name();
                 usedClueOwnershipReason = ownership.reason();
                 log.info(
@@ -279,20 +309,26 @@ public class SuspectChatV2ContextService {
         return contextBuilder.toString();
     }
 
-    private ClueOwnershipAssessment assessClueOwnership(Clue clue, Suspect suspect, Long weaknessClueId) {
+    private ClueOwnershipAssessment assessClueOwnership(
+            Clue clue,
+            Suspect suspect,
+            Long weaknessClueId,
+            List<Suspect> scenarioSuspects
+    ) {
         if (clue == null || suspect == null) {
             return new ClueOwnershipAssessment(ClueOwnershipStatus.UNKNOWN, "clue or suspect missing");
         }
 
-        if (weaknessClueId != null && weaknessClueId.equals(clue.getId())) {
-            return new ClueOwnershipAssessment(
-                    ClueOwnershipStatus.OWNED_BY_CURRENT_SUSPECT,
-                    "used clue matches suspect weakness_clue.id"
-            );
-        }
+        List<Suspect> candidates = (scenarioSuspects == null || scenarioSuspects.isEmpty())
+                ? List.of(suspect)
+                : scenarioSuspects;
 
         JsonNode detail = clue.getClueDetailJson();
-        SuspectRefEvaluation related = evaluateRelatedSuspects(detail == null ? null : detail.path("related_suspect_ids"), suspect);
+        SuspectRefEvaluation related = evaluateRelatedSuspects(
+                detail == null ? null : detail.path("related_suspect_ids"),
+                suspect,
+                candidates
+        );
         if (related.hasAnyReference()) {
             if (related.matchesCurrentSuspect()) {
                 return new ClueOwnershipAssessment(
@@ -306,7 +342,11 @@ public class SuspectChatV2ContextService {
             );
         }
 
-        SuspectRefEvaluation weaknessFor = evaluateSingleSuspect(detail == null ? null : detail.path("is_weakness_clue_for"), suspect);
+        SuspectRefEvaluation weaknessFor = evaluateSingleSuspect(
+                detail == null ? null : detail.path("is_weakness_clue_for"),
+                suspect,
+                candidates
+        );
         if (weaknessFor.hasAnyReference()) {
             if (weaknessFor.matchesCurrentSuspect()) {
                 return new ClueOwnershipAssessment(
@@ -320,51 +360,96 @@ public class SuspectChatV2ContextService {
             );
         }
 
+        if (weaknessClueId != null && weaknessClueId.equals(clue.getId())) {
+            long duplicatedOwners = countWeaknessClueOwners(candidates, clue.getId());
+            if (duplicatedOwners > 1) {
+                return new ClueOwnershipAssessment(
+                        ClueOwnershipStatus.UNKNOWN,
+                        "weakness_clue.id is duplicated across suspects; ownership ambiguous"
+                );
+            }
+            return new ClueOwnershipAssessment(
+                    ClueOwnershipStatus.OWNED_BY_CURRENT_SUSPECT,
+                    "used clue matches suspect weakness_clue.id (fallback)"
+            );
+        }
+
         return new ClueOwnershipAssessment(
                 ClueOwnershipStatus.UNKNOWN,
                 "no ownership markers in clue_detail_json"
         );
     }
 
-    private SuspectRefEvaluation evaluateRelatedSuspects(JsonNode node, Suspect suspect) {
+    private SuspectRefEvaluation evaluateRelatedSuspects(JsonNode node, Suspect suspect, List<Suspect> scenarioSuspects) {
         if (node == null || node.isNull() || node.isMissingNode() || !node.isArray()) {
             return SuspectRefEvaluation.NONE;
         }
 
-        boolean hasAny = false;
-        boolean matchesCurrent = false;
+        List<Long> refs = new ArrayList<>();
         for (JsonNode item : node) {
             Long value = readLong(item);
             if (value == null || value < 0) {
                 continue;
             }
-            hasAny = true;
-            if (matchesCurrentSuspect(value, suspect)) {
+            refs.add(value);
+        }
+        if (refs.isEmpty()) {
+            return SuspectRefEvaluation.NONE;
+        }
+
+        ReferenceMode mode = detectReferenceMode(refs, scenarioSuspects);
+        boolean matchesCurrent = false;
+        for (Long ref : refs) {
+            if (matchesCurrentSuspect(ref, suspect, mode)) {
                 matchesCurrent = true;
+                break;
             }
         }
-        return new SuspectRefEvaluation(hasAny, matchesCurrent);
+        return new SuspectRefEvaluation(true, matchesCurrent);
     }
 
-    private SuspectRefEvaluation evaluateSingleSuspect(JsonNode node, Suspect suspect) {
+    private SuspectRefEvaluation evaluateSingleSuspect(JsonNode node, Suspect suspect, List<Suspect> scenarioSuspects) {
         Long value = readLong(node);
         if (value == null || value < 0) {
             return SuspectRefEvaluation.NONE;
         }
-        return new SuspectRefEvaluation(true, matchesCurrentSuspect(value, suspect));
+
+        ReferenceMode mode = detectReferenceMode(List.of(value), scenarioSuspects);
+        return new SuspectRefEvaluation(true, matchesCurrentSuspect(value, suspect, mode));
     }
 
-    private boolean matchesCurrentSuspect(long ref, Suspect suspect) {
-        if (ref == suspect.getId()) {
-            return true;
-        }
-        Integer displayOrder = suspect.getDisplayOrder();
-        if (displayOrder == null || displayOrder <= 0) {
-            return false;
+    private ReferenceMode detectReferenceMode(List<Long> refs, List<Suspect> scenarioSuspects) {
+        Set<Long> suspectIds = new HashSet<>();
+        for (Suspect scenarioSuspect : scenarioSuspects) {
+            suspectIds.add(scenarioSuspect.getId());
         }
 
-        // Some generated JSONs refer to suspect by display-order(1-based) or index(0-based).
-        return ref == displayOrder || ref == (displayOrder - 1L);
+        for (Long ref : refs) {
+            if (suspectIds.contains(ref)) {
+                return ReferenceMode.SUSPECT_ID;
+            }
+        }
+        for (Long ref : refs) {
+            if (ref == 0L) {
+                return ReferenceMode.ZERO_BASED_DISPLAY_ORDER;
+            }
+        }
+
+        return ReferenceMode.ONE_BASED_DISPLAY_ORDER;
+    }
+
+    private boolean matchesCurrentSuspect(long ref, Suspect suspect, ReferenceMode mode) {
+        return switch (mode) {
+            case SUSPECT_ID -> ref == suspect.getId();
+            case ZERO_BASED_DISPLAY_ORDER -> {
+                Integer displayOrder = suspect.getDisplayOrder();
+                yield displayOrder != null && displayOrder > 0 && ref == (displayOrder - 1L);
+            }
+            case ONE_BASED_DISPLAY_ORDER -> {
+                Integer displayOrder = suspect.getDisplayOrder();
+                yield displayOrder != null && displayOrder > 0 && ref == displayOrder;
+            }
+        };
     }
 
     private Long readLong(JsonNode node) {
@@ -384,11 +469,39 @@ public class SuspectChatV2ContextService {
         return null;
     }
 
+    private long countWeaknessClueOwners(List<Suspect> suspects, long clueId) {
+        long count = 0L;
+        for (Suspect candidate : suspects) {
+            JsonNode candidateAiConfig = candidate.getAiConfigJson();
+            JsonNode candidateWeaknessIdNode = candidateAiConfig == null
+                    ? null
+                    : candidateAiConfig.path("secret").path("weakness_clue").path("id");
+            Long candidateWeaknessId = readLong(candidateWeaknessIdNode);
+            if (candidateWeaknessId != null && candidateWeaknessId == clueId) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    private boolean isClueFollowUpQuestion(String userMessage) {
+        if (userMessage == null || userMessage.isBlank()) {
+            return false;
+        }
+        return CLUE_FOLLOW_UP_PATTERN.matcher(userMessage).matches();
+    }
+
     private enum ClueOwnershipStatus {
         NONE,
         OWNED_BY_CURRENT_SUSPECT,
         NOT_OWNED_BY_CURRENT_SUSPECT,
         UNKNOWN
+    }
+
+    private enum ReferenceMode {
+        SUSPECT_ID,
+        ZERO_BASED_DISPLAY_ORDER,
+        ONE_BASED_DISPLAY_ORDER
     }
 
     private record ClueOwnershipAssessment(ClueOwnershipStatus status, String reason) {
