@@ -150,6 +150,10 @@ export function initAgitSceneState(scene, { enablePuzzles, enableRushers, isDial
     scene.elevatorGlows = [];
     scene.elevatorGlowPulseSeed = Math.random() * 1000;
     scene.uiBeepCooldownUntil = 0;
+    scene.uiBeepActiveUntil = 0;
+    scene.uiBeepLastKey = "";
+    scene.uiBeepLastAt = 0;
+    scene.activeUiBeeps = [];
 
     scene.flashDust = null;
     scene.flashDustEmitter = null;

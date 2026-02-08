@@ -358,7 +358,10 @@ export const elevatorMethods = {
         }
     
         this.playUiBeep(920, 0.06, 0.1);
-        if (this.sfxElevator) this.sfxElevator.play({ rate: Phaser.Math.FloatBetween(0.98, 1.02) });
+        if (this.sfxElevator) {
+            if (this.sfxElevator.isPlaying) this.sfxElevator.stop();
+            this.sfxElevator.play({ rate: Phaser.Math.FloatBetween(0.98, 1.02) });
+        }
     
         this.closeElevatorDoors(() => {
             if (cam) {

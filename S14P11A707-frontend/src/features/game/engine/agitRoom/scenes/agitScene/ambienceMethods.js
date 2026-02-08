@@ -262,13 +262,50 @@ export const ambienceMethods = {
         this.applyRoomAmbienceAudioProfile(roomType);
     },
 
+    stopUiBeeps() {
+        if (!Array.isArray(this.activeUiBeeps) || this.activeUiBeeps.length === 0) {
+            this.activeUiBeeps = [];
+            this.uiBeepActiveUntil = 0;
+            return;
+        }
+
+        this.activeUiBeeps.forEach((entry) => {
+            if (!entry) return;
+            try {
+                if (entry.osc) entry.osc.stop();
+            } catch {}
+            try {
+                if (entry.osc) entry.osc.disconnect();
+            } catch {}
+            try {
+                if (entry.gain) entry.gain.disconnect();
+            } catch {}
+        });
+
+        this.activeUiBeeps = [];
+        this.uiBeepActiveUntil = 0;
+    },
+
     playUiBeep(freq = 820, duration = 0.07, volume = 0.1) {
         const ctx = this.sound?.context;
         if (!ctx) return;
     
         const now = ctx.currentTime;
+
+        const minGapSec = 0.12;
+        const sameToneBlockSec = 0.26;
+        const signature = `${Math.round(freq)}:${Math.round(duration * 1000)}:${Math.round(volume * 1000)}`;
+
         if (this.uiBeepCooldownUntil && now < this.uiBeepCooldownUntil) return;
-        this.uiBeepCooldownUntil = now + 0.04;
+        if (this.uiBeepActiveUntil && now < this.uiBeepActiveUntil) return;
+        if (this.uiBeepLastKey === signature && this.uiBeepLastAt && now - this.uiBeepLastAt < sameToneBlockSec) return;
+
+        this.stopUiBeeps?.();
+
+        this.uiBeepCooldownUntil = now + minGapSec;
+        this.uiBeepActiveUntil = now + duration + 0.03;
+        this.uiBeepLastKey = signature;
+        this.uiBeepLastAt = now;
     
         const osc = ctx.createOscillator();
         const gain = ctx.createGain();
@@ -281,6 +318,14 @@ export const ambienceMethods = {
         gain.connect(ctx.destination);
         osc.start(now);
         osc.stop(now + duration + 0.02);
+
+        this.activeUiBeeps = Array.isArray(this.activeUiBeeps) ? this.activeUiBeeps : [];
+        this.activeUiBeeps.push({ osc, gain });
+
+        osc.onended = () => {
+            if (!Array.isArray(this.activeUiBeeps)) return;
+            this.activeUiBeeps = this.activeUiBeeps.filter((entry) => entry?.osc !== osc);
+        };
     },
 
 };

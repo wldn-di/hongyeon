@@ -30,6 +30,7 @@ export const lifecycleMethods = {
         stopIfPlaying(this.sfxElevator);
         stopIfPlaying(this.sfxWhoosh);
         stopIfPlaying(this.sfxHit);
+        this.stopUiBeeps?.();
 
         this.noiseStopAt = 0;
     },
@@ -135,6 +136,7 @@ export const lifecycleMethods = {
             this.events.on("shutdown", () => {
                 try {
                     this.handleUiPauseStateChange(false);
+                    this.stopUiBeeps?.();
                     this.sound.stopAll();
                 } catch {}
             });
