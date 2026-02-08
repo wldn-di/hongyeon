@@ -367,8 +367,13 @@ export default function GameRoom() {
 
     const SIDE_PANEL_WIDTH_PX = 288
 
-  const isUiPaused = phoneOpen || boardPanelOpen
-  const pauseLabel = phoneOpen && boardPanelOpen ? '휴대폰 · 추리보드' : phoneOpen ? '휴대폰' : '추리보드'
+  const submitFlowPaused = submitAnswerOpen || isSubmitting || gradingModal.open || resultAnnounceModal.open
+  const isUiPaused = phoneOpen || boardPanelOpen || submitFlowPaused
+  const pauseLabel = [
+    phoneOpen ? '휴대폰' : null,
+    boardPanelOpen ? '추리보드' : null,
+    submitFlowPaused ? '정답 제출' : null,
+  ].filter(Boolean).join(' · ') || 'UI'
 
   // 보드 로컬스토리지 초기화 함수
   const clearBoardLocalStorage = useCallback((scenarioId, sessId) => {
